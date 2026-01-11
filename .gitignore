@@ -1,0 +1,17 @@
+# Node / Next.js
+node_modules/
+.next/
+out/
+dist/
+
+# Env files
+.env
+.env.*
+
+# Local data
+uploads/
+storage/
+
+# OS
+.DS_Store
+
