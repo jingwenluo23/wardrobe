@@ -1,7 +1,40 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import Link from "next/link";
-import { type ChangeEvent, type FormEvent, useMemo, useState } from "react";
+import {
+  type ChangeEvent,
+  type FormEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+import type { DraftMesh } from "@/lib/garment-mesh";
+
+type DraftPipelineStatus = "processing" | "ready" | "failed";
+type DraftStageStatus = "pending" | "active" | "done";
+
+type DraftStage = {
+  id: string;
+  label: string;
+  status: DraftStageStatus;
+};
+
+type ApiDraft = {
+  id: string;
+  name: string;
+  category: string;
+  color: string;
+  status: DraftPipelineStatus;
+  progress: number;
+  currentStage: string;
+  createdAt: string;
+  photos: Array<{ url: string; role?: "front" | "back" | "side" }>;
+  stages: DraftStage[];
+  mesh?: DraftMesh;
+  error?: string;
+};
 
 type WardrobeItem = {
   name: string;
@@ -13,13 +46,21 @@ type WardrobeItem = {
   shape: string;
   imageUrls?: string[];
   modelStatus?: string;
-  modelConfidence?: number;
+  draftId?: string;
+  pipelineStatus?: DraftPipelineStatus;
+  progress?: number;
+  stages?: DraftStage[];
+  mesh?: DraftMesh;
 };
 
 type UploadPhoto = {
+  file: File;
   name: string;
   url: string;
+  role: UploadRole;
 };
+
+type UploadRole = "front" | "back" | "side";
 
 const categoryNames = [
   "All clothes",
@@ -31,96 +72,38 @@ const categoryNames = [
   "Accessories",
 ];
 
-const clothes: WardrobeItem[] = [
-  {
-    name: "Ivory linen shirt",
-    category: "Top",
-    color: "Ivory",
-    status: "Uploaded",
-    worn: "2 days ago",
-    background: "bg-[#f3eee3]",
-    shape: "bg-[#2f4f4a]",
-  },
-  {
-    name: "White ribbed tee",
-    category: "Top",
-    color: "White",
-    status: "Uploaded",
-    worn: "Yesterday",
-    background: "bg-[#f7f5ee]",
-    shape: "bg-[#d8d2c5]",
-  },
-  {
-    name: "Charcoal pleated trouser",
-    category: "Bottom",
-    color: "Charcoal",
-    status: "Uploaded",
-    worn: "Last week",
-    background: "bg-[#34363a]",
-    shape: "bg-[#b36f49]",
-  },
-  {
-    name: "Washed straight denim",
-    category: "Bottom",
-    color: "Blue",
-    status: "Uploaded",
-    worn: "4 days ago",
-    background: "bg-[#8aa2b5]",
-    shape: "bg-[#263d52]",
-  },
-  {
-    name: "Sage overshirt",
-    category: "Outerwear",
-    color: "Sage",
-    status: "Uploaded",
-    worn: "Today",
-    background: "bg-[#8ea890]",
-    shape: "bg-[#f0c56a]",
-  },
-  {
-    name: "Navy chore jacket",
-    category: "Outerwear",
-    color: "Navy",
-    status: "Uploaded",
-    worn: "9 days ago",
-    background: "bg-[#26364b]",
-    shape: "bg-[#d8a460]",
-  },
-  {
-    name: "Cream crew socks",
-    category: "Socks",
-    color: "Cream",
-    status: "Uploaded",
-    worn: "Unused",
-    background: "bg-[#efe5d0]",
-    shape: "bg-[#b7a27c]",
-  },
-  {
-    name: "Black leather loafer",
-    category: "Shoes",
-    color: "Black",
-    status: "Uploaded",
-    worn: "3 days ago",
-    background: "bg-[#1f1f1f]",
-    shape: "bg-[#d7dad1]",
-  },
-  {
-    name: "Canvas sneaker",
-    category: "Shoes",
-    color: "Oat",
-    status: "Uploaded",
-    worn: "Last week",
-    background: "bg-[#ded4c0]",
-    shape: "bg-[#4e625f]",
-  },
-];
+const clothes: WardrobeItem[] = [];
 
 const reconstructionStages = [
-  "Align photos",
-  "Find garment edges",
-  "Build mesh draft",
-  "Project fabric texture",
+  "Extract garment region",
+  "Build standard base mesh",
+  "Fit neutral garment proportions",
+  "Project garment texture",
 ];
+
+const templateLabels: Record<string, string> = {
+  "top-standard-tee": "Standard T-shirt",
+  "top-fitted": "Fitted top",
+  "outerwear-boxy": "Boxy outerwear",
+  "bottom-straight": "Straight bottom",
+  "shoe-low": "Low shoe",
+};
+
+function garmentPhotoLabel(role: UploadRole) {
+  if (role === "front") {
+    return "Front";
+  }
+  if (role === "back") {
+    return "Back";
+  }
+  return "Side";
+}
+
+const uploadRoles: UploadRole[] = ["front", "back", "side"];
+
+const GarmentMeshViewer = dynamic(() => import("./garment-mesh-viewer"), {
+  ssr: false,
+});
 
 function categoryMatches(categoryName: string, itemCategory: string) {
   if (categoryName === "All clothes") {
@@ -132,24 +115,93 @@ function categoryMatches(categoryName: string, itemCategory: string) {
 
   return (
     normalizedCategory === normalizedItem ||
-    normalizedCategory === `${normalizedItem}s`
+    normalizedCategory === normalizedItem + "s"
   );
 }
 
-function estimateDraftModel(photoCount: number) {
+function draftToWardrobeItem(draft: ApiDraft): WardrobeItem {
   return {
-    confidence: Math.min(92, 48 + photoCount * 11),
-    status: photoCount >= 4 ? "3D draft ready" : "3D draft",
+    name: draft.name,
+    category: draft.category,
+    color: draft.color,
+    status:
+      draft.status === "ready"
+        ? "Mesh ready"
+        : draft.status === "failed"
+          ? "Failed"
+          : "Processing",
+    worn: "Just uploaded",
+    background: "bg-[#e8e2d3]",
+    shape: "bg-[#243f3a]",
+    imageUrls: draft.photos.map((photo) => photo.url),
+    modelStatus: draft.currentStage,
+    draftId: draft.id,
+    pipelineStatus: draft.status,
+    progress: draft.progress,
+    stages: draft.stages,
+    mesh: draft.mesh,
   };
 }
 
 export default function OutfitsPage() {
   const [selectedCategory, setSelectedCategory] = useState("All clothes");
-  const [wardrobeItems, setWardrobeItems] = useState(clothes);
+  const [draftItems, setDraftItems] = useState<WardrobeItem[]>([]);
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [itemName, setItemName] = useState("");
   const [itemCategory, setItemCategory] = useState("Tops");
-  const [uploadPhotos, setUploadPhotos] = useState<UploadPhoto[]>([]);
+  const [uploadPhotos, setUploadPhotos] = useState<
+    Partial<Record<UploadRole, UploadPhoto>>
+  >({});
+  const [selectedDraftItem, setSelectedDraftItem] =
+    useState<WardrobeItem | null>(null);
+  const [selectedReferenceIndex, setSelectedReferenceIndex] = useState(0);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [deletingDraftId, setDeletingDraftId] = useState<string | null>(null);
+  const [uploadError, setUploadError] = useState("");
+
+  const loadDrafts = useCallback(async () => {
+    const response = await fetch("/api/drafts", { cache: "no-store" });
+    if (!response.ok) {
+      return;
+    }
+    const payload = (await response.json()) as { drafts: ApiDraft[] };
+    const items = payload.drafts.map(draftToWardrobeItem);
+    setDraftItems(items);
+    setSelectedDraftItem((currentItem) => {
+      if (!currentItem?.draftId) {
+        return currentItem;
+      }
+      return items.find((item) => item.draftId === currentItem.draftId) ?? currentItem;
+    });
+  }, []);
+
+  useEffect(() => {
+    void loadDrafts();
+  }, [loadDrafts]);
+
+  useEffect(() => {
+    setSelectedReferenceIndex(0);
+  }, [selectedDraftItem?.draftId]);
+
+  useEffect(() => {
+    const hasProcessingDraft = draftItems.some(
+      (item) => item.pipelineStatus === "processing",
+    );
+    if (!hasProcessingDraft) {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      void loadDrafts();
+    }, 900);
+
+    return () => window.clearInterval(intervalId);
+  }, [draftItems, loadDrafts]);
+
+  const wardrobeItems = useMemo(
+    () => [...draftItems, ...clothes],
+    [draftItems],
+  );
 
   const categories = useMemo(
     () =>
@@ -172,64 +224,179 @@ export default function OutfitsPage() {
     [selectedCategory, wardrobeItems],
   );
 
-  function handlePhotoUpload(event: ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(event.target.files ?? []).slice(0, 6);
-    const photoDrafts = files.map((file) => ({
+  const orderedUploadPhotos = useMemo(
+    () =>
+      uploadRoles.flatMap((role) => {
+        const photo = uploadPhotos[role];
+        return photo ? [photo] : [];
+      }),
+    [uploadPhotos],
+  );
+
+  const hasRequiredUploadPhotos = Boolean(uploadPhotos.front && uploadPhotos.back);
+
+  function handlePhotoUpload(
+    role: UploadRole,
+    event: ChangeEvent<HTMLInputElement>,
+  ) {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    const nextPhoto = {
+      file,
       name: file.name,
       url: URL.createObjectURL(file),
-    }));
+      role,
+    };
 
-    setUploadPhotos((currentPhotos) =>
-      [...currentPhotos, ...photoDrafts].slice(0, 6),
-    );
+    setUploadPhotos((currentPhotos) => {
+      const currentPhoto = currentPhotos[role];
+      if (currentPhoto) {
+        URL.revokeObjectURL(currentPhoto.url);
+      }
+      return {
+        ...currentPhotos,
+        [role]: nextPhoto,
+      };
+    });
     event.target.value = "";
+  }
+
+  function removeUploadPhoto(role: UploadRole) {
+    setUploadPhotos((currentPhotos) => {
+      const currentPhoto = currentPhotos[role];
+      if (!currentPhoto) {
+        return currentPhotos;
+      }
+
+      URL.revokeObjectURL(currentPhoto.url);
+      return Object.fromEntries(
+        Object.entries(currentPhotos).filter(([currentRole]) => currentRole !== role),
+      ) as Partial<Record<UploadRole, UploadPhoto>>;
+    });
+  }
+
+  function clearUploadPhotos() {
+    setUploadPhotos((currentPhotos) => {
+      Object.values(currentPhotos).forEach((photo) => {
+        if (photo) {
+          URL.revokeObjectURL(photo.url);
+        }
+      });
+      return {};
+    });
   }
 
   function resetUploadForm() {
     setItemName("");
     setItemCategory("Tops");
-    setUploadPhotos([]);
+    setUploadError("");
+    clearUploadPhotos();
   }
 
   function closeUploadPrompt() {
+    if (isSubmitting) {
+      return;
+    }
     setIsUploadOpen(false);
     resetUploadForm();
   }
 
-  function handleGenerateModel(event: FormEvent<HTMLFormElement>) {
+  async function handleGenerateModel(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    if (!itemName.trim() || uploadPhotos.length < 2) {
+    if (!itemName.trim() || !hasRequiredUploadPhotos || isSubmitting) {
       return;
     }
 
-    const draftModel = estimateDraftModel(uploadPhotos.length);
-    const normalizedCategory =
-      itemCategory === "Tops"
-        ? "Top"
-        : itemCategory === "Bottoms"
-          ? "Bottom"
-          : itemCategory;
+    setIsSubmitting(true);
+    setUploadError("");
 
-    setWardrobeItems((currentItems) => [
-      {
-        name: itemName.trim(),
-        category: normalizedCategory,
-        color: "From photos",
-        status: draftModel.status,
-        worn: "Just uploaded",
-        background: "bg-[#e8e2d3]",
-        shape: "bg-[#243f3a]",
-        imageUrls: uploadPhotos.map((photo) => photo.url),
-        modelStatus: draftModel.status,
-        modelConfidence: draftModel.confidence,
-      },
-      ...currentItems,
-    ]);
-    setSelectedCategory("All clothes");
-    setIsUploadOpen(false);
-    resetUploadForm();
+    const formData = new FormData();
+    formData.append("name", itemName.trim());
+    formData.append("category", itemCategory);
+    if (uploadPhotos.front) {
+      formData.append("frontPhoto", uploadPhotos.front.file);
+    }
+    if (uploadPhotos.back) {
+      formData.append("backPhoto", uploadPhotos.back.file);
+    }
+    if (uploadPhotos.side) {
+      formData.append("sidePhoto", uploadPhotos.side.file);
+    }
+
+    try {
+      const response = await fetch("/api/drafts", {
+        method: "POST",
+        body: formData,
+      });
+      const payload = (await response.json()) as { draft?: ApiDraft; error?: string };
+
+      if (!response.ok || !payload.draft) {
+        throw new Error(payload.error ?? "Unable to create the preview.");
+      }
+
+      const item = draftToWardrobeItem(payload.draft);
+      setDraftItems((currentItems) => [
+        item,
+        ...currentItems.filter((currentItem) => currentItem.draftId !== item.draftId),
+      ]);
+      setSelectedCategory("All clothes");
+      setIsUploadOpen(false);
+      resetUploadForm();
+    } catch (error) {
+      setUploadError(
+        error instanceof Error ? error.message : "Unable to create the preview.",
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   }
+
+  async function handleDeleteDraft(item: WardrobeItem) {
+    if (!item.draftId || deletingDraftId) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      'Delete "' + item.name + '" from the uploaded clothes library?',
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    setDeletingDraftId(item.draftId);
+
+    try {
+      const response = await fetch("/api/drafts/" + item.draftId, {
+        method: "DELETE",
+      });
+      const payload = (await response.json()) as { error?: string };
+
+      if (!response.ok) {
+        throw new Error(payload.error ?? "Unable to delete the uploaded item.");
+      }
+
+      setDraftItems((currentItems) =>
+        currentItems.filter((currentItem) => currentItem.draftId !== item.draftId),
+      );
+      setSelectedDraftItem((currentItem) =>
+        currentItem?.draftId === item.draftId ? null : currentItem,
+      );
+    } catch (error) {
+      window.alert(
+        error instanceof Error
+          ? error.message
+          : "Unable to delete the uploaded item.",
+      );
+    } finally {
+      setDeletingDraftId(null);
+    }
+  }
+
+  const selectedDraftViewCount = selectedDraftItem?.imageUrls?.length ?? 0;
 
   return (
     <main className="min-h-screen bg-[#f8f7f2] text-[#232421]">
@@ -260,6 +427,12 @@ export default function OutfitsPage() {
             >
               Outfits
             </Link>
+            <Link
+              className="rounded-lg px-3 py-2 hover:bg-white hover:text-[#232421]"
+              href="/settings"
+            >
+              Settings
+            </Link>
           </nav>
 
           <div className="mt-10">
@@ -271,11 +444,12 @@ export default function OutfitsPage() {
                 <button
                   type="button"
                   onClick={() => setSelectedCategory(category.name)}
-                  className={`flex items-center justify-between rounded-lg px-3 py-2 text-left text-sm font-semibold ${
-                    selectedCategory === category.name
+                  className={
+                    "flex items-center justify-between rounded-lg px-3 py-2 text-left text-sm font-semibold " +
+                    (selectedCategory === category.name
                       ? "bg-white text-[#232421] shadow-sm ring-1 ring-[#e5dfd1]"
-                      : "text-[#625c54] hover:bg-white"
-                  }`}
+                      : "text-[#625c54] hover:bg-white")
+                  }
                   key={category.name}
                 >
                   <span>{category.name}</span>
@@ -298,8 +472,8 @@ export default function OutfitsPage() {
                 Uploaded clothes
               </h2>
               <p className="mt-3 max-w-2xl text-[#625c54]">
-                Browse uploaded wardrobe pieces by category before combining
-                them into an outfit.
+                Upload a few garment photos and the app fits them onto a known
+                garment template to generate a quick 3D mesh preview.
               </p>
             </div>
             <button
@@ -311,18 +485,38 @@ export default function OutfitsPage() {
             </button>
           </header>
 
-          <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            {visibleClothes.map((item) => (
+          {visibleClothes.length === 0 ? (
+            <section className="rounded-lg border border-dashed border-[#d8d1c3] bg-white/70 p-10 text-center shadow-sm">
+              <p className="text-sm font-medium uppercase tracking-[0.16em] text-[#857e73]">
+                Uploaded clothes
+              </p>
+              <h3 className="mt-2 text-2xl font-semibold text-[#232421]">
+                Your library is empty
+              </h3>
+              <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-[#625c54]">
+                The wardrobe starts at 0 items and only keeps the clothes you upload.
+              </p>
+            </section>
+          ) : (
+            <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              {visibleClothes.map((item) => (
               <article
-                className="rounded-lg bg-white p-4 shadow-sm ring-1 ring-[#e5dfd1]"
-                key={item.name}
+                className={
+                  "rounded-lg bg-white p-4 shadow-sm ring-1 ring-[#e5dfd1]" +
+                  (item.modelStatus ? " cursor-pointer transition hover:-translate-y-0.5" : "")
+                }
+                key={item.draftId ?? item.name}
+                onClick={item.modelStatus ? () => setSelectedDraftItem(item) : undefined}
               >
                 <div
-                  className={`relative h-52 overflow-hidden rounded-md ${item.background}`}
+                  className={"relative h-52 overflow-hidden rounded-md " + item.background}
                   style={
                     item.imageUrls?.[0]
                       ? {
-                          backgroundImage: `linear-gradient(to bottom, rgba(35, 36, 33, 0.08), rgba(35, 36, 33, 0.2)), url(${item.imageUrls[0]})`,
+                          backgroundImage:
+                            "linear-gradient(to bottom, rgba(35, 36, 33, 0.08), rgba(35, 36, 33, 0.2)), url(" +
+                            item.imageUrls[0] +
+                            ")",
                           backgroundPosition: "center",
                           backgroundSize: "cover",
                         }
@@ -336,18 +530,26 @@ export default function OutfitsPage() {
                   ) : (
                     <>
                       <div
-                        className={`absolute left-1/2 top-8 h-28 w-20 -translate-x-1/2 rounded-t-full ${item.shape} opacity-90`}
+                        className={
+                          "absolute left-1/2 top-8 h-28 w-20 -translate-x-1/2 rounded-t-full opacity-90 " +
+                          item.shape
+                        }
                       />
                       <div className="absolute bottom-6 left-8 right-8 h-7 rounded-full bg-white/45" />
                     </>
                   )}
-                  {item.modelStatus ? (
-                    <div className="absolute right-4 top-4 h-24 w-20 rounded-lg bg-white/85 p-2 shadow-sm">
-                      <div className="mx-auto h-14 w-10 rounded-t-full bg-[#243f3a] shadow-[8px_8px_0_#b36f49] [transform:perspective(120px)_rotateY(-24deg)]" />
-                      <p className="mt-2 text-center text-[10px] font-semibold uppercase tracking-[0.12em] text-[#625c54]">
-                        3D draft
-                      </p>
-                    </div>
+                  {item.draftId ? (
+                    <button
+                      className="absolute right-3 top-3 rounded-full bg-white/92 px-3 py-1 text-[11px] font-semibold text-[#8f321f] shadow-sm ring-1 ring-[#e5dfd1] transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
+                      disabled={deletingDraftId === item.draftId}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        void handleDeleteDraft(item);
+                      }}
+                      type="button"
+                    >
+                      {deletingDraftId === item.draftId ? "Deleting..." : "Delete"}
+                    </button>
                   ) : null}
                 </div>
                 <div className="mt-4 flex items-start justify-between gap-4">
@@ -379,23 +581,37 @@ export default function OutfitsPage() {
                     </p>
                   </div>
                 </div>
-                {item.modelConfidence ? (
+                {item.modelStatus ? (
                   <div className="mt-3 rounded-lg border border-[#d8d1c3] bg-[#fbfaf6] p-3">
-                    <div className="flex justify-between text-xs font-semibold text-[#625c54]">
-                      <span>3D model confidence</span>
-                      <span>{item.modelConfidence}%</span>
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#857e73]">
+                          Mesh preview
+                        </p>
+                        <p className="mt-1 text-sm font-semibold text-[#232421]">
+                          {item.modelStatus}
+                        </p>
+                      </div>
+                      <button
+                        className="rounded-lg bg-[#243f3a] px-3 py-2 text-xs font-semibold text-white transition hover:bg-[#1c332f]"
+                        onClick={() => setSelectedDraftItem(item)}
+                        type="button"
+                      >
+                        View
+                      </button>
                     </div>
-                    <div className="mt-2 h-2 rounded-full bg-[#e7e1d2]">
+                    <div className="mt-3 h-2 rounded-full bg-[#e7e1d2]">
                       <div
-                        className="h-2 rounded-full bg-[#243f3a]"
-                        style={{ width: `${item.modelConfidence}%` }}
+                        className="h-2 rounded-full bg-[#243f3a] transition-all"
+                        style={{ width: String(item.progress ?? 0) + "%" }}
                       />
                     </div>
                   </div>
                 ) : null}
               </article>
             ))}
-          </section>
+            </section>
+          )}
         </div>
       </section>
 
@@ -415,7 +631,8 @@ export default function OutfitsPage() {
                 </h2>
               </div>
               <button
-                className="rounded-lg border border-[#d8d1c3] px-3 py-2 text-sm font-semibold hover:bg-white"
+                className="rounded-lg border border-[#d8d1c3] px-3 py-2 text-sm font-semibold hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={isSubmitting}
                 onClick={closeUploadPrompt}
                 type="button"
               >
@@ -452,56 +669,137 @@ export default function OutfitsPage() {
                   </label>
                 </div>
 
-                <label className="grid min-h-44 cursor-pointer place-items-center rounded-lg border border-dashed border-[#bdb5a5] bg-white p-5 text-center transition hover:border-[#243f3a]">
-                  <span className="text-base font-semibold text-[#232421]">
-                    Upload front, back, and side photos
-                  </span>
-                  <span className="mt-1 text-sm text-[#746d64]">
-                    Select at least two images to start a 3D draft.
-                  </span>
-                  <input
-                    accept="image/*"
-                    className="sr-only"
-                    multiple
-                    onChange={handlePhotoUpload}
-                    type="file"
-                  />
-                </label>
+                <div className="rounded-lg border border-[#d8d1c3] bg-white p-4">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className="text-base font-semibold text-[#232421]">
+                        Upload garment photos
+                      </p>
+                      <p className="mt-1 text-sm text-[#746d64]">
+                        Front and back are required. Side is optional and helps refine depth.
+                      </p>
+                    </div>
+                    <div className="rounded-full bg-[#f8f7f2] px-3 py-1 text-xs font-semibold text-[#625c54]">
+                      Required: Front + Back
+                    </div>
+                  </div>
 
-                {uploadPhotos.length > 0 ? (
+                  <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                    {uploadRoles.map((role) => {
+                      const photo = uploadPhotos[role];
+                      const isRequired = role !== "side";
+
+                      return (
+                        <div
+                          className="rounded-lg border border-dashed border-[#bdb5a5] bg-[#fbfaf6] p-3"
+                          key={role}
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <p className="text-sm font-semibold text-[#232421]">
+                              {garmentPhotoLabel(role)}
+                            </p>
+                            <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#857e73]">
+                              {isRequired ? "Required" : "Optional"}
+                            </span>
+                          </div>
+
+                          <label className="mt-3 grid min-h-40 cursor-pointer place-items-center overflow-hidden rounded-lg border border-dashed border-[#cfc6b4] bg-white text-center transition hover:border-[#243f3a]">
+                            {photo ? (
+                              <div
+                                className="relative h-full min-h-40 w-full bg-[#e8e2d3]"
+                                style={{
+                                  backgroundImage: "url(" + photo.url + ")",
+                                  backgroundPosition: "center",
+                                  backgroundSize: "cover",
+                                }}
+                              >
+                                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-[#232421]/70 to-transparent p-3 text-left text-xs font-semibold text-white">
+                                  Replace {garmentPhotoLabel(role).toLowerCase()} photo
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="px-4">
+                                <p className="text-sm font-semibold text-[#232421]">
+                                  Add {garmentPhotoLabel(role).toLowerCase()} photo
+                                </p>
+                                <p className="mt-1 text-xs leading-5 text-[#857e73]">
+                                  {role === "front"
+                                    ? "Flat front view of the garment."
+                                    : role === "back"
+                                      ? "Flat back view of the garment."
+                                      : "Optional side profile for depth fitting."}
+                                </p>
+                              </div>
+                            )}
+                            <input
+                              accept="image/*"
+                              className="sr-only"
+                              onChange={(event) => handlePhotoUpload(role, event)}
+                              type="file"
+                            />
+                          </label>
+
+                          <div className="mt-3 flex items-center justify-between gap-3">
+                            <p className="truncate text-xs text-[#746d64]">
+                              {photo ? photo.name : "No file selected"}
+                            </p>
+                            {photo ? (
+                              <button
+                                className="rounded-lg border border-[#d8d1c3] px-2 py-1 text-xs font-semibold text-[#625c54] transition hover:bg-white"
+                                onClick={() => removeUploadPhoto(role)}
+                                type="button"
+                              >
+                                Remove
+                              </button>
+                            ) : null}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {orderedUploadPhotos.length > 0 ? (
                   <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                    {uploadPhotos.map((photo, index) => (
+                    {orderedUploadPhotos.map((photo) => (
                       <div
                         className="relative h-32 overflow-hidden rounded-lg bg-[#e8e2d3]"
-                        key={`${photo.name}-${index}`}
+                        key={photo.role}
                         style={{
-                          backgroundImage: `url(${photo.url})`,
+                          backgroundImage: "url(" + photo.url + ")",
                           backgroundPosition: "center",
                           backgroundSize: "cover",
                         }}
                       >
                         <span className="absolute bottom-2 left-2 rounded-full bg-white/90 px-2 py-1 text-[11px] font-semibold text-[#625c54]">
-                          View {index + 1}
+                          {garmentPhotoLabel(photo.role)}
                         </span>
                       </div>
                     ))}
                   </div>
                 ) : null}
+
+                {uploadError ? (
+                  <p className="rounded-lg border border-[#c66b52] bg-[#fff3ef] px-3 py-2 text-sm font-semibold text-[#8f321f]">
+                    {uploadError}
+                  </p>
+                ) : null}
               </div>
 
               <aside className="rounded-lg border border-[#d8d1c3] bg-white p-4">
                 <p className="text-sm font-medium uppercase tracking-[0.16em] text-[#857e73]">
-                  3D pipeline
+                  Mesh build
                 </p>
                 <div className="mt-4 grid gap-3">
                   {reconstructionStages.map((stage, index) => (
                     <div className="flex items-center gap-3" key={stage}>
                       <span
-                        className={`grid h-8 w-8 place-items-center rounded-full text-xs font-bold ${
-                          uploadPhotos.length >= 2
+                        className={
+                          "grid h-8 w-8 place-items-center rounded-full text-xs font-bold " +
+                          (hasRequiredUploadPhotos
                             ? "bg-[#243f3a] text-white"
-                            : "bg-[#ede7d8] text-[#746d64]"
-                        }`}
+                            : "bg-[#ede7d8] text-[#746d64]")
+                        }
                       >
                         {index + 1}
                       </span>
@@ -517,7 +815,11 @@ export default function OutfitsPage() {
                     <div className="mx-auto h-20 w-14 rounded-t-full bg-[#243f3a] shadow-[10px_10px_0_#b36f49] [transform:perspective(140px)_rotateY(-24deg)]" />
                   </div>
                   <p className="mt-3 text-center text-sm font-semibold text-[#625c54]">
-                    Preview model
+                    Standard mesh first
+                  </p>
+                  <p className="mt-2 text-center text-xs leading-5 text-[#857e73]">
+                    Shirt drafts now start from a neutral T-shirt blockout
+                    before texture and photo details are applied.
                   </p>
                 </div>
               </aside>
@@ -525,7 +827,8 @@ export default function OutfitsPage() {
 
             <div className="mt-5 flex flex-col-reverse justify-end gap-3 border-t border-[#dad5c8] pt-4 sm:flex-row">
               <button
-                className="rounded-lg border border-[#d8d1c3] px-4 py-3 text-sm font-semibold hover:bg-white"
+                className="rounded-lg border border-[#d8d1c3] px-4 py-3 text-sm font-semibold hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={isSubmitting}
                 onClick={closeUploadPrompt}
                 type="button"
               >
@@ -533,13 +836,154 @@ export default function OutfitsPage() {
               </button>
               <button
                 className="rounded-lg bg-[#243f3a] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#1c332f] disabled:cursor-not-allowed disabled:bg-[#a6a096]"
-                disabled={!itemName.trim() || uploadPhotos.length < 2}
+                disabled={!itemName.trim() || !hasRequiredUploadPhotos || isSubmitting}
                 type="submit"
               >
-                Generate 3D draft
+                {isSubmitting ? "Creating..." : "Create 3D mesh"}
               </button>
             </div>
           </form>
+        </div>
+      ) : null}
+
+      {selectedDraftItem ? (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-[#232421]/60 p-4">
+          <div className="max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded-lg bg-[#f8f7f2] p-5 shadow-2xl">
+            <div className="flex items-start justify-between gap-4 border-b border-[#dad5c8] pb-4">
+              <div>
+                <p className="text-sm font-medium uppercase tracking-[0.18em] text-[#857e73]">
+                  3D garment mesh
+                </p>
+                <h2 className="mt-1 text-3xl font-semibold">
+                  {selectedDraftItem.name}
+                </h2>
+              </div>
+              <button
+                className="rounded-lg border border-[#d8d1c3] px-3 py-2 text-sm font-semibold hover:bg-white"
+                onClick={() => setSelectedDraftItem(null)}
+                type="button"
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="mt-5 grid gap-5 lg:grid-cols-[1fr_320px]">
+              <div className="rounded-lg bg-[#ede7d8] p-6">
+                {selectedDraftItem.mesh ? (
+                  <GarmentMeshViewer
+                    className="min-h-[560px] overflow-hidden rounded-lg border border-[#d8d1c3]"
+                    key={
+                      selectedDraftItem.mesh.assetUrl +
+                      ":" +
+                      selectedDraftItem.mesh.generatedAt
+                    }
+                    mesh={selectedDraftItem.mesh}
+                  />
+                ) : (
+                  <div className="grid min-h-[560px] place-items-center rounded-lg border border-[#d8d1c3] bg-[#f8f7f2] p-4 text-sm font-semibold text-[#625c54]">
+                    Building the mesh...
+                  </div>
+                )}
+
+                <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-[#625c54]">
+                  <div>
+                    Drag to orbit the 3D mesh. Scroll to zoom. The view now auto-fits on open.
+                  </div>
+                  <div className="rounded-full bg-white px-3 py-1 font-semibold text-[#243f3a] shadow-sm ring-1 ring-[#e5dfd1]">
+                    {selectedDraftViewCount === 0
+                      ? "0 / 0"
+                      : String(selectedReferenceIndex + 1) +
+                        " / " +
+                        String(selectedDraftViewCount)}
+                  </div>
+                </div>
+                <p className="mt-3 text-sm leading-6 text-[#625c54]">
+                  The preview starts from a neutral garment base. Uploaded
+                  photos are used afterward for garment extraction, texture, and
+                  detail fitting without reproducing a person&apos;s face.
+                </p>
+                {selectedDraftItem.mesh ? (
+                  <div className="mt-4 grid gap-3 rounded-lg bg-white/70 p-4 text-sm text-[#4f4a43] ring-1 ring-[#e2dccf] sm:grid-cols-4">
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#857e73]">
+                        Shape base
+                      </p>
+                      <p className="mt-1 font-semibold text-[#232421]">
+                        {templateLabels[selectedDraftItem.mesh.template] ??
+                          selectedDraftItem.mesh.template}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#857e73]">
+                        Extraction quality
+                      </p>
+                      <p className="mt-1 font-semibold text-[#232421]">
+                        {Math.round(
+                          selectedDraftItem.mesh.segmentation.confidence * 100,
+                        )}
+                        %
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#857e73]">
+                        Surface texture
+                      </p>
+                      <p className="mt-1 font-semibold text-[#232421]">
+                        {selectedDraftItem.mesh.extractedTextureUrl
+                          ? "Extracted garment"
+                          : "Full reference"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#857e73]">
+                        Approx. size
+                      </p>
+                      <p className="mt-1 font-semibold text-[#232421]">
+                        {selectedDraftItem.mesh.bounds.width.toFixed(2)} x{" "}
+                        {selectedDraftItem.mesh.bounds.height.toFixed(2)} x{" "}
+                        {selectedDraftItem.mesh.bounds.depth.toFixed(2)}
+                      </p>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+
+              <aside className="rounded-lg border border-[#d8d1c3] bg-white p-4">
+                <p className="text-sm font-medium uppercase tracking-[0.16em] text-[#857e73]">
+                  Reference captures
+                </p>
+                <p className="mt-2 text-xs leading-5 text-[#746d64]">
+                  These photos now guide detail extraction after the base mesh
+                  is built. The render uses the isolated garment texture, not
+                  the full image.
+                </p>
+                <div className="mt-4 grid grid-cols-2 gap-3">
+                  {selectedDraftItem.imageUrls?.map((url, index) => (
+                    <button
+                      className={
+                        "relative h-28 overflow-hidden rounded-lg bg-[#e8e2d3] text-left ring-2 transition " +
+                        (selectedReferenceIndex === index
+                          ? "ring-[#243f3a]"
+                          : "ring-transparent hover:ring-[#d8d1c3]")
+                      }
+                      key={selectedDraftItem.name + "-view-" + String(index)}
+                      onClick={() => setSelectedReferenceIndex(index)}
+                      style={{
+                        backgroundImage: "url(" + url + ")",
+                        backgroundPosition: "center",
+                        backgroundSize: "cover",
+                      }}
+                      type="button"
+                    >
+                      <span className="absolute bottom-2 left-2 rounded-full bg-white/90 px-2 py-1 text-[11px] font-semibold text-[#625c54]">
+                        View {index + 1}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </aside>
+            </div>
+          </div>
         </div>
       ) : null}
     </main>

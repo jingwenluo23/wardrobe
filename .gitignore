@@ -11,6 +11,8 @@ dist/
 # Local data
 uploads/
 storage/
+.wardrobe-data/
+web/my-app/.wardrobe-data/
 
 # OS
 .DS_Store

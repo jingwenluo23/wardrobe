@@ -69,6 +69,12 @@ export default function Home() {
               >
                 Outfits
               </Link>
+              <Link
+                className="rounded-lg px-3 py-2 hover:bg-white hover:text-[#232421]"
+                href="/settings"
+              >
+                Settings
+              </Link>
             </nav>
           </div>
 
