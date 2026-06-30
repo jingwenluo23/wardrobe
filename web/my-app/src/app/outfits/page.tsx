@@ -175,6 +175,30 @@ export default function OutfitsPage() {
     });
   }, []);
 
+  const refreshDraftItem = useCallback(
+    async (draftId: string) => {
+      const response = await fetch("/api/drafts/" + draftId, { cache: "no-store" });
+      if (!response.ok) {
+        return null;
+      }
+
+      const payload = (await response.json()) as { draft?: ApiDraft };
+      if (!payload.draft) {
+        return null;
+      }
+
+      const nextItem = draftToWardrobeItem(payload.draft);
+      setDraftItems((currentItems) =>
+        currentItems.map((item) => (item.draftId === draftId ? nextItem : item)),
+      );
+      setSelectedDraftItem((currentItem) =>
+        currentItem?.draftId === draftId ? nextItem : currentItem,
+      );
+      return nextItem;
+    },
+    [],
+  );
+
   useEffect(() => {
     void loadDrafts();
   }, [loadDrafts]);
@@ -398,6 +422,13 @@ export default function OutfitsPage() {
 
   const selectedDraftViewCount = selectedDraftItem?.imageUrls?.length ?? 0;
 
+  async function handleOpenDraft(item: WardrobeItem) {
+    setSelectedDraftItem(item);
+    if (item.draftId) {
+      await refreshDraftItem(item.draftId);
+    }
+  }
+
   return (
     <main className="min-h-screen bg-[#f8f7f2] text-[#232421]">
       <section className="mx-auto grid min-h-screen w-full max-w-7xl grid-cols-1 gap-8 px-5 py-6 sm:px-8 lg:grid-cols-[280px_1fr] lg:px-10">
@@ -506,7 +537,7 @@ export default function OutfitsPage() {
                   (item.modelStatus ? " cursor-pointer transition hover:-translate-y-0.5" : "")
                 }
                 key={item.draftId ?? item.name}
-                onClick={item.modelStatus ? () => setSelectedDraftItem(item) : undefined}
+                onClick={item.modelStatus ? () => void handleOpenDraft(item) : undefined}
               >
                 <div
                   className={"relative h-52 overflow-hidden rounded-md " + item.background}
@@ -899,8 +930,9 @@ export default function OutfitsPage() {
                 </div>
                 <p className="mt-3 text-sm leading-6 text-[#625c54]">
                   The preview starts from a neutral garment base. Uploaded
-                  photos are used afterward for garment extraction, texture, and
-                  detail fitting without reproducing a person&apos;s face.
+                  photos are kept as fitting references until a real garment
+                  extraction texture is available, so the mesh never projects a
+                  full person photo onto the shirt.
                 </p>
                 {selectedDraftItem.mesh ? (
                   <div className="mt-4 grid gap-3 rounded-lg bg-white/70 p-4 text-sm text-[#4f4a43] ring-1 ring-[#e2dccf] sm:grid-cols-4">
@@ -931,7 +963,7 @@ export default function OutfitsPage() {
                       <p className="mt-1 font-semibold text-[#232421]">
                         {selectedDraftItem.mesh.extractedTextureUrl
                           ? "Extracted garment"
-                          : "Full reference"}
+                          : "Neutral preview"}
                       </p>
                     </div>
                     <div>
@@ -953,9 +985,9 @@ export default function OutfitsPage() {
                   Reference captures
                 </p>
                 <p className="mt-2 text-xs leading-5 text-[#746d64]">
-                  These photos now guide detail extraction after the base mesh
-                  is built. The render uses the isolated garment texture, not
-                  the full image.
+                  These photos guide the fit and future texture extraction. The
+                  current render stays neutral unless an isolated garment
+                  texture has actually been generated.
                 </p>
                 <div className="mt-4 grid grid-cols-2 gap-3">
                   {selectedDraftItem.imageUrls?.map((url, index) => (

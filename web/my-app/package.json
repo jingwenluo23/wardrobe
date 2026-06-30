@@ -6,6 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "cad:refresh": "node ./scripts/refresh_tshirt_asset.mjs",
     "lint": "eslint"
   },
   "dependencies": {
