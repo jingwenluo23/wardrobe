@@ -7,6 +7,7 @@ const nextConfig: NextConfig = {
     "@huggingface/transformers",
     "onnxruntime-node",
     "sharp",
+    "better-sqlite3",
   ],
   turbopack: {
     root: process.cwd(),

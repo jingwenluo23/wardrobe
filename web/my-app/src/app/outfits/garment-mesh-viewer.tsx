@@ -6,7 +6,7 @@ import { useEffect, useMemo } from "react";
 import * as THREE from "three";
 
 import type { DraftMesh } from "@/lib/garment-mesh";
-import { buildTeeGeometry } from "./tee-geometry";
+import { buildGarmentGeometry } from "./garment-blocks";
 
 type GarmentMeshViewerProps = {
   mesh: DraftMesh;
@@ -41,7 +41,10 @@ function fabricMaterial(color: string, map: THREE.Texture | null) {
 }
 
 function TeeModel({ mesh }: { mesh: DraftMesh }) {
-  const geometry = useMemo(() => buildTeeGeometry(mesh.params), [mesh.params]);
+  const geometry = useMemo(
+    () => buildGarmentGeometry(mesh.params, mesh.features),
+    [mesh.params, mesh.features],
+  );
 
   // Geometry groups: 0 = front panel, 1 = back panel, 2 = sleeves/collar.
   // The extracted front photo maps to the front, the back photo to the back,

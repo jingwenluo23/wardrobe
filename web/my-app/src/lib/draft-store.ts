@@ -1,7 +1,11 @@
-// In-memory store for uploaded garment drafts and their (simulated) mesh
-// reconstruction pipeline. State resets when the dev server restarts, which is
-// fine for local previewing — there is no external database to wire up.
+// SQLite-backed store for uploaded garment drafts and their (simulated)
+// mesh reconstruction pipeline. Drafts persist across dev-server restarts in
+// data/wardrobe.db (gitignored).
 
+import fs from "node:fs";
+import path from "node:path";
+
+import Database from "better-sqlite3";
 import sharp from "sharp";
 
 import {
@@ -13,11 +17,15 @@ import {
 } from "./garment-segmentation";
 import {
   boundsFromParams,
-  defaultTeeParams,
   type DraftMesh,
+  type GarmentFeatures,
   type GarmentParams,
-  type GarmentTemplate,
 } from "./garment-mesh";
+import {
+  GARMENT_TEMPLATE_VERSION,
+  resolveTemplate,
+  templateLabel,
+} from "./garment-templates";
 
 export type DraftPipelineStatus = "processing" | "ready" | "failed";
 export type DraftStageStatus = "pending" | "active" | "done";
@@ -57,7 +65,9 @@ type StoredDraft = {
   createdAtMs: number;
   photos: DraftPhoto[];
   params: GarmentParams;
-  template: GarmentTemplate;
+  features: GarmentFeatures;
+  templateId: string;
+  templateVersion: number;
   segmentationConfidence: number;
   extractedTextureUrl?: string;
   extractedBackTextureUrl?: string;
@@ -76,53 +86,88 @@ const STAGE_LABELS = [
 // Total time for the simulated pipeline to reach "ready".
 const PIPELINE_MS = 3600;
 
-// Use a module-level singleton that survives Next.js hot reloads in dev.
+// SQLite handle as a module-level singleton that survives Next.js hot
+// reloads in dev.
 const globalForDrafts = globalThis as unknown as {
-  __wardrobeDrafts?: Map<string, StoredDraft>;
+  __wardrobeDb?: Database.Database;
 };
 
-const drafts: Map<string, StoredDraft> =
-  globalForDrafts.__wardrobeDrafts ?? new Map();
-globalForDrafts.__wardrobeDrafts = drafts;
+function getDb(): Database.Database {
+  if (!globalForDrafts.__wardrobeDb) {
+    const dataDir = path.join(process.cwd(), "data");
+    fs.mkdirSync(dataDir, { recursive: true });
+    const db = new Database(path.join(dataDir, "wardrobe.db"));
+    db.pragma("journal_mode = WAL");
+    db.exec(
+      "CREATE TABLE IF NOT EXISTS drafts (" +
+        "id TEXT PRIMARY KEY," +
+        "created_at INTEGER NOT NULL," +
+        "name TEXT NOT NULL," +
+        "category TEXT NOT NULL," +
+        "template_id TEXT NOT NULL," +
+        "template_version INTEGER NOT NULL," +
+        "color TEXT NOT NULL," +
+        "confidence REAL NOT NULL," +
+        "extraction_ready INTEGER NOT NULL," +
+        "params_json TEXT NOT NULL," +
+        "features_json TEXT NOT NULL," +
+        "photos_json TEXT NOT NULL," +
+        "front_texture TEXT," +
+        "back_texture TEXT," +
+        "fabric_texture TEXT" +
+        ")",
+    );
+    // Recover drafts whose background extraction was lost to a server
+    // restart: surface them as ready with whatever they have.
+    db.prepare(
+      "UPDATE drafts SET extraction_ready = 1 " +
+        "WHERE extraction_ready = 0 AND created_at < ?",
+    ).run(Date.now() - 60_000);
+    globalForDrafts.__wardrobeDb = db;
+  }
+  return globalForDrafts.__wardrobeDb;
+}
+
+type DraftRow = {
+  id: string;
+  created_at: number;
+  name: string;
+  category: string;
+  template_id: string;
+  template_version: number;
+  color: string;
+  confidence: number;
+  extraction_ready: number;
+  params_json: string;
+  features_json: string;
+  photos_json: string;
+  front_texture: string | null;
+  back_texture: string | null;
+  fabric_texture: string | null;
+};
+
+function rowToStored(row: DraftRow): StoredDraft {
+  return {
+    id: row.id,
+    name: row.name,
+    category: row.category,
+    color: row.color,
+    createdAtMs: row.created_at,
+    photos: JSON.parse(row.photos_json) as DraftPhoto[],
+    params: JSON.parse(row.params_json) as GarmentParams,
+    features: JSON.parse(row.features_json) as GarmentFeatures,
+    templateId: row.template_id,
+    templateVersion: row.template_version,
+    segmentationConfidence: row.confidence,
+    extractedTextureUrl: row.front_texture ?? undefined,
+    extractedBackTextureUrl: row.back_texture ?? undefined,
+    fabricTextureUrl: row.fabric_texture ?? undefined,
+    extractionReady: row.extraction_ready === 1,
+  };
+}
 
 function createId() {
   return "draft_" + Math.random().toString(36).slice(2, 10);
-}
-
-function templateForCategory(category: string): GarmentTemplate {
-  const normalized = category.toLowerCase();
-  if (normalized.startsWith("outer")) {
-    return "outerwear-boxy";
-  }
-  if (normalized.startsWith("bottom")) {
-    return "bottom-straight";
-  }
-  if (normalized.startsWith("shoe")) {
-    return "shoe-low";
-  }
-  return "top-standard-tee";
-}
-
-function paramsForTemplate(template: GarmentTemplate): GarmentParams {
-  switch (template) {
-    case "outerwear-boxy":
-      return {
-        ...defaultTeeParams,
-        bodyWidth: 62,
-        bodyDepth: 24,
-        sleeveLength: 30,
-        armholeDepth: 26,
-      };
-    case "top-fitted":
-      return {
-        ...defaultTeeParams,
-        bodyWidth: 48,
-        bodyDepth: 16,
-        neckWidthFront: 17,
-      };
-    default:
-      return { ...defaultTeeParams };
-  }
 }
 
 const MASK_SIZE = 96;
@@ -337,13 +382,15 @@ async function fileToDataUrl(file: File): Promise<{
 export async function createDraft(input: {
   name: string;
   category: string;
+  templateId?: string | null;
   frontPhoto: File;
   backPhoto: File;
   sidePhoto?: File | null;
 }): Promise<ApiDraft> {
   const id = createId();
-  const template = templateForCategory(input.category);
-  const params = paramsForTemplate(template);
+  const template = resolveTemplate(input.templateId, input.category);
+  const params = { ...template.params };
+  const features = { ...template.features };
 
   const front = await fileToDataUrl(input.frontPhoto);
   const back = await fileToDataUrl(input.backPhoto);
@@ -376,17 +423,45 @@ export async function createDraft(input: {
     createdAtMs: Date.now(),
     photos,
     params,
-    template,
+    features,
+    templateId: template.id,
+    templateVersion: GARMENT_TEMPLATE_VERSION,
     segmentationConfidence: 0.8,
     extractionReady: false,
   };
 
-  drafts.set(id, stored);
+  getDb()
+    .prepare(
+      "INSERT INTO drafts (id, created_at, name, category, template_id, " +
+        "template_version, color, confidence, extraction_ready, params_json, " +
+        "features_json, photos_json) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+    )
+    .run(
+      stored.id,
+      stored.createdAtMs,
+      stored.name,
+      stored.category,
+      stored.templateId,
+      stored.templateVersion,
+      stored.color,
+      stored.segmentationConfidence,
+      0,
+      JSON.stringify(stored.params),
+      JSON.stringify(stored.features),
+      JSON.stringify(stored.photos),
+    );
 
   // Extraction runs in the background so the upload request returns right
   // away; the outfit card's progress bar covers the wait and the mesh flips
   // to ready once both the timer and the extraction are done.
   void (async () => {
+    let update: {
+      color?: string;
+      front?: string;
+      back?: string;
+      fabric?: string;
+      confidence?: number;
+    } = {};
     try {
       // Preferred path: ML clothes segmentation (SegFormer). Falls back to
       // the colour-heuristic extractor when the model is unavailable.
@@ -396,23 +471,47 @@ export async function createDraft(input: {
       const frontResult = frontSeg ?? (await analyzePhoto(front.buffer));
       const backResult = backSeg ?? (await analyzePhoto(back.buffer));
 
-      stored.color = frontResult.color;
-      stored.extractedTextureUrl = frontResult.textureUrl;
-      stored.extractedBackTextureUrl = backResult.textureUrl;
-      stored.fabricTextureUrl = frontResult.fabricTextureUrl;
-      // Model-based extraction is far more reliable than the heuristic;
-      // extra reference views nudge confidence up either way.
-      stored.segmentationConfidence = Math.min(
-        0.99,
-        (usedModel ? 0.93 : 0.78) + photos.length * 0.02,
-      );
+      update = {
+        color: frontResult.color,
+        front: frontResult.textureUrl,
+        back: backResult.textureUrl,
+        fabric: frontResult.fabricTextureUrl,
+        // Model-based extraction is far more reliable than the heuristic;
+        // extra reference views nudge confidence up either way.
+        confidence: Math.min(
+          0.99,
+          (usedModel ? 0.93 : 0.78) + photos.length * 0.02,
+        ),
+      };
     } catch (error) {
       console.warn(
         "[draft-store] extraction failed, keeping plain colour:",
         error instanceof Error ? error.message : error,
       );
     } finally {
-      stored.extractionReady = true;
+      try {
+        getDb()
+          .prepare(
+            "UPDATE drafts SET extraction_ready = 1, " +
+              "color = COALESCE(?, color), " +
+              "confidence = COALESCE(?, confidence), " +
+              "front_texture = ?, back_texture = ?, fabric_texture = ? " +
+              "WHERE id = ?",
+          )
+          .run(
+            update.color ?? null,
+            update.confidence ?? null,
+            update.front ?? null,
+            update.back ?? null,
+            update.fabric ?? null,
+            id,
+          );
+      } catch (error) {
+        console.warn(
+          "[draft-store] failed to persist extraction:",
+          error instanceof Error ? error.message : error,
+        );
+      }
     }
   })();
 
@@ -449,10 +548,13 @@ function serializeDraft(stored: StoredDraft): ApiDraft {
 
   const mesh: DraftMesh | undefined = isReady
     ? {
-        assetUrl: "mem://" + stored.id,
+        assetUrl: "db://" + stored.id,
         generatedAt: stored.createdAtMs + PIPELINE_MS,
-        template: stored.template,
+        template: stored.templateId,
+        templateLabel: templateLabel(stored.templateId),
+        templateVersion: stored.templateVersion,
         params: stored.params,
+        features: stored.features,
         segmentation: { confidence: stored.segmentationConfidence },
         extractedTextureUrl: stored.extractedTextureUrl,
         extractedBackTextureUrl: stored.extractedBackTextureUrl,
@@ -478,11 +580,13 @@ function serializeDraft(stored: StoredDraft): ApiDraft {
 }
 
 export function listDrafts(): ApiDraft[] {
-  return Array.from(drafts.values())
-    .sort((a, b) => b.createdAtMs - a.createdAtMs)
-    .map(serializeDraft);
+  const rows = getDb()
+    .prepare("SELECT * FROM drafts ORDER BY created_at DESC")
+    .all() as DraftRow[];
+  return rows.map((row) => serializeDraft(rowToStored(row)));
 }
 
 export function deleteDraft(id: string): boolean {
-  return drafts.delete(id);
+  const result = getDb().prepare("DELETE FROM drafts WHERE id = ?").run(id);
+  return result.changes > 0;
 }

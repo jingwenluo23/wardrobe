@@ -11,6 +11,7 @@ import {
   useState,
 } from "react";
 import type { DraftMesh } from "@/lib/garment-mesh";
+import { templatesForCategory } from "@/lib/garment-templates";
 
 type DraftPipelineStatus = "processing" | "ready" | "failed";
 type DraftStageStatus = "pending" | "active" | "done";
@@ -81,14 +82,6 @@ const reconstructionStages = [
   "Project garment texture",
 ];
 
-const templateLabels: Record<string, string> = {
-  "top-standard-tee": "Standard T-shirt",
-  "top-fitted": "Fitted top",
-  "outerwear-boxy": "Boxy outerwear",
-  "bottom-straight": "Straight bottom",
-  "shoe-low": "Low shoe",
-};
-
 function garmentPhotoLabel(role: UploadRole) {
   if (role === "front") {
     return "Front";
@@ -149,6 +142,9 @@ export default function OutfitsPage() {
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [itemName, setItemName] = useState("");
   const [itemCategory, setItemCategory] = useState("Tops");
+  const [itemTemplateId, setItemTemplateId] = useState(
+    () => templatesForCategory("Tops")[0].id,
+  );
   const [uploadPhotos, setUploadPhotos] = useState<
     Partial<Record<UploadRole, UploadPhoto>>
   >({});
@@ -292,6 +288,7 @@ export default function OutfitsPage() {
   function resetUploadForm() {
     setItemName("");
     setItemCategory("Tops");
+    setItemTemplateId(templatesForCategory("Tops")[0].id);
     setUploadError("");
     clearUploadPhotos();
   }
@@ -317,6 +314,7 @@ export default function OutfitsPage() {
     const formData = new FormData();
     formData.append("name", itemName.trim());
     formData.append("category", itemCategory);
+    formData.append("templateId", itemTemplateId);
     if (uploadPhotos.front) {
       formData.append("frontPhoto", uploadPhotos.front.file);
     }
@@ -657,7 +655,11 @@ export default function OutfitsPage() {
                     Category
                     <select
                       className="rounded-lg border border-[#d8d1c3] bg-white px-3 py-3 text-base font-medium text-[#232421] outline-none focus:border-[#243f3a]"
-                      onChange={(event) => setItemCategory(event.target.value)}
+                      onChange={(event) => {
+                        const category = event.target.value;
+                        setItemCategory(category);
+                        setItemTemplateId(templatesForCategory(category)[0].id);
+                      }}
                       value={itemCategory}
                     >
                       {categoryNames
@@ -665,6 +667,20 @@ export default function OutfitsPage() {
                         .map((category) => (
                           <option key={category}>{category}</option>
                         ))}
+                    </select>
+                  </label>
+                  <label className="grid gap-2 text-sm font-semibold text-[#625c54] sm:col-span-2">
+                    Garment type
+                    <select
+                      className="rounded-lg border border-[#d8d1c3] bg-white px-3 py-3 text-base font-medium text-[#232421] outline-none focus:border-[#243f3a]"
+                      onChange={(event) => setItemTemplateId(event.target.value)}
+                      value={itemTemplateId}
+                    >
+                      {templatesForCategory(itemCategory).map((template) => (
+                        <option key={template.id} value={template.id}>
+                          {template.label}
+                        </option>
+                      ))}
                     </select>
                   </label>
                 </div>
@@ -909,7 +925,7 @@ export default function OutfitsPage() {
                         Shape base
                       </p>
                       <p className="mt-1 font-semibold text-[#232421]">
-                        {templateLabels[selectedDraftItem.mesh.template] ??
+                        {selectedDraftItem.mesh.templateLabel ??
                           selectedDraftItem.mesh.template}
                       </p>
                     </div>

@@ -22,6 +22,7 @@ export async function POST(request: Request) {
 
   const name = String(formData.get("name") ?? "").trim();
   const category = String(formData.get("category") ?? "Tops").trim();
+  const templateId = String(formData.get("templateId") ?? "").trim() || null;
   const frontPhoto = formData.get("frontPhoto");
   const backPhoto = formData.get("backPhoto");
   const sidePhoto = formData.get("sidePhoto");
@@ -44,6 +45,7 @@ export async function POST(request: Request) {
     const draft = await createDraft({
       name,
       category: category || "Tops",
+      templateId,
       frontPhoto,
       backPhoto,
       sidePhoto: sidePhoto instanceof File ? sidePhoto : null,

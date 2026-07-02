@@ -4,12 +4,34 @@
 // *parameters* that drive the parametric construction live here so the API
 // layer and the viewer agree on a single source of truth.
 
-export type GarmentTemplate =
-  | "top-standard-tee"
-  | "top-fitted"
-  | "outerwear-boxy"
-  | "bottom-straight"
-  | "shoe-low";
+/**
+ * Template ids come from the registry in `garment-templates.ts`; kept as a
+ * string so adding a template never requires touching this type.
+ */
+export type GarmentTemplate = string;
+
+/**
+ * Feature toggles layered on top of the numeric params. Each clothing type
+ * in the registry is just a params + features preset — the geometry blocks
+ * read these to decide which trims to build.
+ */
+export type GarmentFeatures = {
+  /** Neck opening finish: ribbed crew band or an attached hood. */
+  neckFinish: "band" | "hood";
+  /** Ribbed sweatshirt-style band at the bottom hem. */
+  hemBand: boolean;
+  /** Sleeve-end finish: raw edge or a snug ribbed cuff. */
+  cuff: "raw" | "ribbed";
+  /** Sleeve width at the opening relative to the root (1 = straight tube). */
+  sleeveTaper: number;
+};
+
+export const defaultTeeFeatures: GarmentFeatures = {
+  neckFinish: "band",
+  hemBand: false,
+  cuff: "raw",
+  sleeveTaper: 1,
+};
 
 /**
  * Live-editable construction parameters for the parametric t-shirt.
@@ -64,8 +86,14 @@ export type DraftMesh = {
   assetUrl: string;
   generatedAt: number;
   template: GarmentTemplate;
+  /** Human-readable template name for the viewer info panel. */
+  templateLabel?: string;
+  /** Registry version the draft was built with (for future migrations). */
+  templateVersion?: number;
   /** Parametric controls that fully describe the garment geometry. */
   params: GarmentParams;
+  /** Feature toggles (trims) layered on the params. */
+  features?: GarmentFeatures;
   /** Garment extraction metadata derived from the uploaded photos. */
   segmentation: {
     confidence: number;
