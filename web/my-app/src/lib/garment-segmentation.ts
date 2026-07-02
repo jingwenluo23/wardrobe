@@ -80,6 +80,94 @@ export type ExtractionResult = {
   textureUrl: string;
 };
 
+/** In-place binary erosion (4-neighbourhood), `iterations` pixels deep. */
+function erodeMask(
+  mask: Uint8Array,
+  width: number,
+  height: number,
+  iterations: number,
+) {
+  for (let iter = 0; iter < iterations; iter += 1) {
+    const source = mask.slice();
+    for (let y = 0; y < height; y += 1) {
+      for (let x = 0; x < width; x += 1) {
+        const i = y * width + x;
+        if (!source[i]) {
+          continue;
+        }
+        const atEdge = x === 0 || x === width - 1 || y === 0 || y === height - 1;
+        if (
+          atEdge ||
+          !source[i - 1] ||
+          !source[i + 1] ||
+          !source[i - width] ||
+          !source[i + width]
+        ) {
+          mask[i] = 0;
+        }
+      }
+    }
+  }
+}
+
+/** Keep only the largest 4-connected component of the mask, in place. */
+function keepLargestComponent(mask: Uint8Array, width: number, height: number) {
+  const labels = new Int32Array(width * height).fill(-1);
+  const sizes: number[] = [];
+  const stack: number[] = [];
+  for (let start = 0; start < mask.length; start += 1) {
+    if (!mask[start] || labels[start] !== -1) {
+      continue;
+    }
+    const label = sizes.length;
+    let size = 0;
+    stack.push(start);
+    labels[start] = label;
+    while (stack.length > 0) {
+      const i = stack.pop() as number;
+      size += 1;
+      const x = i % width;
+      const neighbors = [
+        x > 0 ? i - 1 : -1,
+        x < width - 1 ? i + 1 : -1,
+        i - width,
+        i + width,
+      ];
+      for (const n of neighbors) {
+        if (n >= 0 && n < mask.length && mask[n] && labels[n] === -1) {
+          labels[n] = label;
+          stack.push(n);
+        }
+      }
+    }
+    sizes.push(size);
+  }
+  if (sizes.length <= 1) {
+    return;
+  }
+  const largest = sizes.indexOf(Math.max(...sizes));
+  for (let i = 0; i < mask.length; i += 1) {
+    if (mask[i] && labels[i] !== largest) {
+      mask[i] = 0;
+    }
+  }
+}
+
+/** Classic RGB skin-tone test, the last guard against skin on the texture. */
+function isSkinTone(r: number, g: number, b: number) {
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  return (
+    r > 95 &&
+    g > 40 &&
+    b > 20 &&
+    max - min > 15 &&
+    Math.abs(r - g) > 15 &&
+    r > g &&
+    r > b
+  );
+}
+
 const INFER_SIZE = 768;
 const TILE = 512;
 
@@ -131,6 +219,14 @@ export async function segmentGarment(
     if (maskCount < width * height * 0.02) {
       return null;
     }
+
+    // Clean the mask:
+    // 1. Erode a few pixels so boundary bleed (arm skin hugging the side
+    //    seam, background halos) cannot reach the texture.
+    // 2. Keep only the largest connected component, dropping stray
+    //    misclassified blobs (photo captions, hands near the hem).
+    erodeMask(mask, width, height, 2);
+    keepLargestComponent(mask, width, height);
 
     // Torso-aware crop: the mesh's front/back panels only span the torso
     // (side seam to side seam), but the garment mask includes the sleeves.
@@ -208,10 +304,13 @@ export async function segmentGarment(
         const sx = minX + Math.min(boxW - 1, Math.floor((tx / TILE) * boxW));
         const si = sy * width + sx;
         const ti = (ty * TILE + tx) * 3;
-        if (mask[si]) {
-          tileRaw[ti] = data[si * 3];
-          tileRaw[ti + 1] = data[si * 3 + 1];
-          tileRaw[ti + 2] = data[si * 3 + 2];
+        const r = data[si * 3];
+        const g = data[si * 3 + 1];
+        const b = data[si * 3 + 2];
+        if (mask[si] && !isSkinTone(r, g, b)) {
+          tileRaw[ti] = r;
+          tileRaw[ti + 1] = g;
+          tileRaw[ti + 2] = b;
         } else {
           tileRaw[ti] = gr;
           tileRaw[ti + 1] = gg;
