@@ -94,11 +94,16 @@ export function buildTeeGeometry(params: GarmentParams): THREE.BufferGeometry {
       // Crew neckline: superellipse blend -> flat-bottomed U at the centre
       // that turns up smoothly into the shoulder line.
       const t = s / neckFrac;
-      const f = Math.pow(1 - Math.pow(t, 2.4), 0.75);
+      const f = Math.pow(1 - Math.pow(t, 2.2), 0.8);
       return neckShoulderY - neckDrop * f;
     }
-    // Shoulder: straight sloped seam from neck edge to shoulder point.
-    return neckShoulderY - Math.tan(slopeRad) * (s * shoulderX - neckHalf);
+    // Shoulder: sloped seam from neck edge to shoulder point with a gentle
+    // convex roll so the shoulder reads as soft fabric, not a straight bar.
+    const t = (s - neckFrac) / (1 - neckFrac);
+    const roll = 0.45 * SCALE * Math.sin(Math.PI * t);
+    return (
+      neckShoulderY - Math.tan(slopeRad) * (s * shoulderX - neckHalf) + roll
+    );
   };
 
   const positions: number[] = [];
@@ -153,10 +158,11 @@ export function buildTeeGeometry(params: GarmentParams): THREE.BufferGeometry {
         const b = a + 1;
         const d = a + panelStride;
         const e = d + 1;
+        // Wound so face normals point outward (+z for front, -z for back).
         if (front) {
-          indices.push(a, d, b, b, d, e);
-        } else {
           indices.push(a, b, d, b, e, d);
+        } else {
+          indices.push(a, d, b, b, d, e);
         }
       }
     }
@@ -168,19 +174,37 @@ export function buildTeeGeometry(params: GarmentParams): THREE.BufferGeometry {
 
   // --- Shoulder seam -----------------------------------------------------
   // Bridge the front and back top edges between the neck edge and the
-  // shoulder point, leaving the neckline open.
+  // shoulder point through a slightly raised midline, so the seam is a soft
+  // rounded roll rather than a flat crease. The neckline stays open.
   const topRow = ROWS * panelStride;
+  const seamRise = 0.5 * SCALE;
+  const shoulderMid: Record<number, number> = {};
+  for (let c = 0; c <= COLS; c += 1) {
+    if (Math.abs(c / COLS - 0.5) * 2 < neckFrac) {
+      continue;
+    }
+    const fi = (frontBase + topRow + c) * 3;
+    const bi = (backBase + topRow + c) * 3;
+    shoulderMid[c] = pushVertex(
+      (positions[fi] + positions[bi]) / 2,
+      (positions[fi + 1] + positions[bi + 1]) / 2 + seamRise,
+      (positions[fi + 2] + positions[bi + 2]) / 2,
+      c / COLS,
+      1,
+    );
+  }
   for (let c = 0; c < COLS; c += 1) {
-    const s0 = Math.abs(c / COLS - 0.5) * 2;
-    const s1 = Math.abs((c + 1) / COLS - 0.5) * 2;
-    if (Math.min(s0, s1) < neckFrac) {
+    const m0 = shoulderMid[c];
+    const m1 = shoulderMid[c + 1];
+    if (m0 === undefined || m1 === undefined) {
       continue;
     }
     const f0 = frontBase + topRow + c;
     const f1 = frontBase + topRow + c + 1;
     const b0 = backBase + topRow + c;
     const b1 = backBase + topRow + c + 1;
-    indices.push(f0, b0, f1, f1, b0, b1);
+    indices.push(f0, f1, m0, f1, m1, m0);
+    indices.push(m0, m1, b0, m1, b1, b0);
   }
 
   // --- Neckband ------------------------------------------------------------
@@ -215,8 +239,8 @@ export function buildTeeGeometry(params: GarmentParams): THREE.BufferGeometry {
         .reduce((acc, p) => acc.add(p), new THREE.Vector3())
         .multiplyScalar(1 / loopCount);
 
-      const bandH = 1.8 * SCALE; // band height (cm)
-      const bandIn = 0.9 * SCALE; // how far the band turns inward (cm)
+      const bandH = 1.25 * SCALE; // band height (cm)
+      const bandIn = 1.1 * SCALE; // how far the band turns inward (cm)
       const rings: number[][] = [[], [], []];
       for (let j = 0; j < loopCount; j += 1) {
         const p = loop[j];
@@ -230,12 +254,12 @@ export function buildTeeGeometry(params: GarmentParams): THREE.BufferGeometry {
         }
         const mid = p
           .clone()
-          .addScaledVector(inward, bandIn * 0.35)
-          .add(new THREE.Vector3(0, bandH * 0.95, 0));
+          .addScaledVector(inward, bandIn * 0.4)
+          .add(new THREE.Vector3(0, bandH * 0.9, 0));
         const inner = p
           .clone()
           .addScaledVector(inward, bandIn)
-          .add(new THREE.Vector3(0, bandH * 0.55, 0));
+          .add(new THREE.Vector3(0, bandH * 0.35, 0));
         rings[0].push(pushVertex(p.x, p.y, p.z, j / loopCount, 0));
         rings[1].push(pushVertex(mid.x, mid.y, mid.z, j / loopCount, 0.5));
         rings[2].push(pushVertex(inner.x, inner.y, inner.z, j / loopCount, 1));
@@ -247,7 +271,8 @@ export function buildTeeGeometry(params: GarmentParams): THREE.BufferGeometry {
           const b = rings[ring][jn];
           const d = rings[ring + 1][j];
           const e = rings[ring + 1][jn];
-          indices.push(a, d, b, b, d, e);
+          // Wound so the band's outer face points up and outward.
+          indices.push(a, b, d, b, e, d);
         }
       }
     }

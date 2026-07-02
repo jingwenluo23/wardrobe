@@ -35,18 +35,30 @@ function TeeModel({ mesh }: { mesh: DraftMesh }) {
   }, [geometry, texture]);
 
   return (
-    <mesh geometry={geometry} castShadow receiveShadow>
-      <meshPhysicalMaterial
-        color={mesh.color}
-        map={texture ?? undefined}
-        roughness={0.88}
-        metalness={0}
-        sheen={0.55}
-        sheenColor="#ffffff"
-        sheenRoughness={0.9}
-        side={THREE.DoubleSide}
-      />
-    </mesh>
+    <group>
+      {/* Outside: printed/textured fabric. */}
+      <mesh geometry={geometry} castShadow receiveShadow>
+        <meshPhysicalMaterial
+          color={mesh.color}
+          map={texture ?? undefined}
+          roughness={0.88}
+          metalness={0}
+          sheen={0.55}
+          sheenColor="#ffffff"
+          sheenRoughness={0.9}
+          side={THREE.FrontSide}
+        />
+      </mesh>
+      {/* Inside: plain fabric, slightly shaded — prints stay outside only. */}
+      <mesh geometry={geometry}>
+        <meshPhysicalMaterial
+          color={new THREE.Color(mesh.color).multiplyScalar(0.82)}
+          roughness={0.95}
+          metalness={0}
+          side={THREE.BackSide}
+        />
+      </mesh>
+    </group>
   );
 }
 
