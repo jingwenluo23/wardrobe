@@ -128,9 +128,23 @@ async function analyzePhoto(buffer: Buffer): Promise<{
   const color =
     "#" + toHex(r?.mean ?? 180) + toHex(g?.mean ?? 180) + toHex(b?.mean ?? 180);
 
+  // Crop the chest band of the photo (centre-horizontal, upper-middle
+  // vertically) so the texture picks up fabric rather than the wearer's
+  // face or the background.
+  const meta = await sharp(buffer).rotate().metadata();
+  const srcW = meta.width ?? 512;
+  const srcH = meta.height ?? 512;
+  const cropW = Math.max(16, Math.round(srcW * 0.36));
+  const cropH = Math.max(16, Math.round(srcH * 0.26));
   const tile = await sharp(buffer)
     .rotate()
-    .resize(256, 256, { fit: "cover", position: "centre" })
+    .extract({
+      left: Math.round((srcW - cropW) / 2),
+      top: Math.round(srcH * 0.38),
+      width: cropW,
+      height: Math.min(cropH, srcH - Math.round(srcH * 0.38)),
+    })
+    .resize(256, 256, { fit: "cover" })
     .jpeg({ quality: 72 })
     .toBuffer();
   const textureUrl = "data:image/jpeg;base64," + tile.toString("base64");

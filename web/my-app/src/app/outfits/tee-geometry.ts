@@ -1,14 +1,17 @@
 // Parametric, CAD-style construction of a t-shirt mesh.
 //
-// Instead of a single blobby primitive, the body is lofted from a 2D pattern:
-//   * the neckline is a smooth Bezier-like dip (cosine blend, G1 continuous),
-//   * the shoulder is a sloped line (not a hard angle),
-//   * the armhole is a smooth-step curve, and
-//   * the cross-section is elliptical so the torso has real front/back depth.
-// Front and back panels share their side seams (so the torso is a closed
-// tube), the shoulders are bridged, and two short cap sleeves are lofted onto
-// the armholes. The result reads as a manufacturable tee with smooth, natural
-// transitions rather than a sharp-edged box.
+// The body follows a real 2D pattern (see the garment CAD reference):
+//   * front/back panels with a smooth Bezier-like neckline dip,
+//   * a sloped shoulder line ending at the shoulder point,
+//   * an armhole CURVE carved into the panel's side edge — the panel width
+//     shrinks from the underarm up to the shoulder point, exactly like the
+//     concave armhole on a flat pattern,
+//   * an elliptical cross-section that opens up around the armhole so the
+//     front and back edges separate to form a real arm opening.
+// Each sleeve is then lofted FROM the armhole boundary curve itself (its root
+// ring reuses the armhole edge vertices), tapering to a circular cuff. That
+// keeps a smooth, seam-true transition from shoulder to sleeve with no
+// floating cylinders.
 
 import * as THREE from "three";
 
@@ -18,17 +21,17 @@ import type { GarmentParams } from "@/lib/garment-mesh";
 const SCALE = 0.04;
 
 // Grid resolution. Higher = smoother curves.
-const COLS = 48; // columns across the body width
-const ROWS = 28; // rows from hem to shoulder
-const SLEEVE_RINGS = 10; // segments along each sleeve
-const SLEEVE_SEG = 24; // points around each sleeve ring
+const COLS = 64; // columns across the body width
+const ROWS = 44; // rows from hem to shoulder
+const SLEEVE_RINGS = 12; // rings along each sleeve
 
 const clamp = (value: number, min: number, max: number) =>
   Math.min(max, Math.max(min, value));
 
-const smoothstep = (t: number) => t * t * (3 - 2 * t);
-
-type Vec3 = [number, number, number];
+const smoothstep = (t: number) => {
+  const c = clamp(t, 0, 1);
+  return c * c * (3 - 2 * c);
+};
 
 /**
  * Build a parametric t-shirt BufferGeometry from CAD-style parameters.
@@ -39,62 +42,96 @@ export function buildTeeGeometry(params: GarmentParams): THREE.BufferGeometry {
   const depth = (params.bodyDepth / 2) * SCALE;
 
   const hemY = -length / 2;
-  const shoulderY = length / 2;
+  const neckShoulderY = length / 2; // highest point: shoulder line at the neck
 
   const slopeRad = (params.shoulderSlope * Math.PI) / 180;
   const armDepth = params.armholeDepth * SCALE;
   const neckDropF = params.neckDropFront * SCALE;
   const neckDropB = params.neckDropBack * SCALE;
+  const neckHalf = clamp(
+    (params.neckWidthFront / 2) * SCALE,
+    halfW * 0.15,
+    halfW * 0.6,
+  );
 
-  // Neckline half-width as a fraction of the half body width.
-  const sNeck = clamp(params.neckWidthFront / params.bodyWidth, 0.12, 0.6);
-  // Where the shoulder ends and the armhole begins (fraction of half width).
-  const sShoulder = 0.9;
+  // Shoulder point: end of the shoulder seam, start of the armhole curve.
+  const shoulderX = Math.max(neckHalf + halfW * 0.12, halfW * 0.8);
+  const shoulderPtY =
+    neckShoulderY - Math.tan(slopeRad) * (shoulderX - neckHalf);
+  // Underarm point: bottom of the armhole curve, on the side seam.
+  const underarmY = shoulderPtY - armDepth;
 
-  // Top edge of a panel as a function of the lateral position s in [0, 1],
-  // where 0 is the centre-front and 1 is the side seam / underarm.
+  // Panel half-width as a function of height. Below the underarm this is the
+  // (slightly tapered) side seam; above it, the concave armhole curve pulls
+  // the edge inward until it reaches the shoulder point.
+  const widthAt = (y: number) => {
+    if (y <= underarmY) {
+      // Gentle A-line: a touch wider at the hem than at the chest.
+      const t = (y - hemY) / (underarmY - hemY);
+      return halfW * (1.03 - 0.03 * smoothstep(t));
+    }
+    const t = clamp((y - underarmY) / (shoulderPtY - underarmY), 0, 1);
+    return halfW - (halfW - shoulderX) * smoothstep(t);
+  };
+
+  // Front/back separation along the armhole edge: zero at the underarm and
+  // at the shoulder point, widest in the middle, so the opening reads as a
+  // smooth oval when seen from the side.
+  const maxOpen = depth * 0.85;
+  const armholeGap = (y: number) => {
+    if (y <= underarmY || y >= shoulderPtY) {
+      return 0;
+    }
+    const t = (y - underarmY) / (shoulderPtY - underarmY);
+    return maxOpen * Math.sin(Math.PI * t);
+  };
+
+  // Top edge of a panel as a function of lateral position s in [0, 1]
+  // (0 = centre front, 1 = shoulder point).
+  const neckFrac = neckHalf / shoulderX;
   const topEdgeY = (s: number, neckDrop: number) => {
-    if (s <= sNeck) {
-      // Neckline: cosine blend -> deepest at centre, flush with the shoulder
-      // line at the neck edge. Smooth (G1) join, like a Bezier neckline.
-      const f = (1 + Math.cos((Math.PI * s) / sNeck)) / 2;
-      return shoulderY - neckDrop * f;
+    if (s <= neckFrac) {
+      // Neckline: cosine blend -> deepest at centre, meets the shoulder line
+      // tangentially at the neck edge (G1 continuous, like a Bezier).
+      const f = (1 + Math.cos((Math.PI * s) / neckFrac)) / 2;
+      return neckShoulderY - neckDrop * f;
     }
-    if (s <= sShoulder) {
-      // Shoulder: a gentle downward slope defined by the slope angle.
-      const drop = Math.tan(slopeRad) * (s - sNeck) * halfW;
-      return shoulderY - drop;
-    }
-    // Armhole: smooth-step down to the underarm point at the side seam.
-    const yShoulder = shoulderY - Math.tan(slopeRad) * (sShoulder - sNeck) * halfW;
-    const t = (s - sShoulder) / (1 - sShoulder);
-    return yShoulder - armDepth * smoothstep(t);
+    // Shoulder: straight sloped seam from neck edge to shoulder point.
+    return neckShoulderY - Math.tan(slopeRad) * (s * shoulderX - neckHalf);
   };
 
   const positions: number[] = [];
   const uvs: number[] = [];
   const indices: number[] = [];
 
+  const pushVertex = (x: number, y: number, z: number, u: number, v: number) => {
+    positions.push(x, y, z);
+    uvs.push(u, v);
+    return positions.length / 3 - 1;
+  };
+
   // --- Body panels (front + back) ---------------------------------------
-  // Each panel is a (COLS+1) x (ROWS+1) grid. We remember the base vertex
-  // offset of each panel so we can stitch shoulders and sleeves afterwards.
   const panelStride = COLS + 1;
 
   const buildPanel = (front: boolean): number => {
     const base = positions.length / 3;
+    const neckDrop = front ? neckDropF : neckDropB;
     for (let r = 0; r <= ROWS; r += 1) {
       const v = r / ROWS;
       for (let c = 0; c <= COLS; c += 1) {
         const u = c / COLS;
         const s = Math.abs(u - 0.5) * 2;
-        const x = (u - 0.5) * 2 * halfW;
-        const topY = topEdgeY(s, front ? neckDropF : neckDropB);
+        const topY = topEdgeY(s, neckDrop);
         const y = hemY + v * (topY - hemY);
-        // Elliptical cross-section: zero at the side seams, max at centre.
-        const zMag = depth * Math.sin(Math.PI * u);
-        const z = front ? zMag : -zMag;
-        positions.push(x, y, z);
-        uvs.push(front ? u : 1 - u, v);
+        const w = widthAt(y);
+        const x = Math.sign(u - 0.5 || 1) * s * w;
+        // Elliptical cross-section, blended into the armhole gap near the
+        // side edge so the front/back separate around the arm opening.
+        const zEllipse = depth * Math.sqrt(Math.max(0, 1 - s * s));
+        const mix = smoothstep((s - 0.78) / 0.22);
+        const gap = armholeGap(y);
+        const z = (front ? 1 : -1) * (zEllipse + (gap - zEllipse) * mix);
+        pushVertex(x, y, z, front ? u : 1 - u, v);
       }
     }
     for (let r = 0; r < ROWS; r += 1) {
@@ -106,7 +143,6 @@ export function buildTeeGeometry(params: GarmentParams): THREE.BufferGeometry {
         if (front) {
           indices.push(a, d, b, b, d, e);
         } else {
-          // Reverse winding so the back faces outward.
           indices.push(a, b, d, b, e, d);
         }
       }
@@ -117,20 +153,14 @@ export function buildTeeGeometry(params: GarmentParams): THREE.BufferGeometry {
   const frontBase = buildPanel(true);
   const backBase = buildPanel(false);
 
-  // --- Shoulder bridge ---------------------------------------------------
-  // Connect the front and back top edges across the shoulder seam region
-  // (between the neck edge and the shoulder point), leaving the neckline and
-  // the armholes open.
+  // --- Shoulder seam -----------------------------------------------------
+  // Bridge the front and back top edges between the neck edge and the
+  // shoulder point, leaving the neckline open.
   const topRow = ROWS * panelStride;
   for (let c = 0; c < COLS; c += 1) {
-    const u0 = c / COLS;
-    const u1 = (c + 1) / COLS;
-    const s0 = Math.abs(u0 - 0.5) * 2;
-    const s1 = Math.abs(u1 - 0.5) * 2;
-    // Only bridge where both columns sit on the shoulder seam.
-    const onShoulder =
-      s0 >= sNeck && s0 <= sShoulder && s1 >= sNeck && s1 <= sShoulder;
-    if (!onShoulder) {
+    const s0 = Math.abs(c / COLS - 0.5) * 2;
+    const s1 = Math.abs((c + 1) / COLS - 0.5) * 2;
+    if (Math.min(s0, s1) < neckFrac) {
       continue;
     }
     const f0 = frontBase + topRow + c;
@@ -140,44 +170,95 @@ export function buildTeeGeometry(params: GarmentParams): THREE.BufferGeometry {
     indices.push(f0, b0, f1, f1, b0, b1);
   }
 
-  // --- Cap sleeves -------------------------------------------------------
+  // --- Sleeves lofted from the armhole boundary --------------------------
+  // The armhole boundary is the panels' side-edge column above the underarm:
+  // front edge going up, back edge coming down — a closed oval loop. The
+  // sleeve's root ring reuses those exact positions, so the sleeve grows out
+  // of the armhole with no gap or overlap.
   const sleeveLen = params.sleeveLength * SCALE;
-  const yShoulder = shoulderY - Math.tan(slopeRad) * (sShoulder - sNeck) * halfW;
-  const openMag = (params.sleeveOpening / 2) * SCALE;
+  const cuffRadius = Math.max((params.sleeveOpening / 2) * SCALE, 0.05);
+  const droopRad = slopeRad + (24 * Math.PI) / 180;
 
-  const buildSleeve = (sign: number) => {
-    const sideX = sign * sShoulder * halfW;
-    // Loft a tapered tube from the armhole ring (facing outward along x) to a
-    // slightly lower, narrower cuff ring.
+  const buildSleeve = (side: 1 | -1) => {
+    const sideCol = side > 0 ? COLS : 0;
+
+    // Collect armhole edge rows (side column, from underarm to shoulder).
+    const edgeRows: number[] = [];
+    for (let r = 0; r <= ROWS; r += 1) {
+      const idx = (frontBase + r * panelStride + sideCol) * 3;
+      const y = positions[idx + 1];
+      if (y >= underarmY - 1e-6) {
+        edgeRows.push(r);
+      }
+    }
+    if (edgeRows.length < 2) {
+      return;
+    }
+
+    const readVec = (base: number, r: number) => {
+      const idx = (base + r * panelStride + sideCol) * 3;
+      return new THREE.Vector3(
+        positions[idx],
+        positions[idx + 1],
+        positions[idx + 2],
+      );
+    };
+
+    // Root loop: front edge bottom->top, then back edge top->bottom.
+    const loop: THREE.Vector3[] = [];
+    for (const r of edgeRows) {
+      loop.push(readVec(frontBase, r));
+    }
+    for (let i = edgeRows.length - 1; i >= 0; i -= 1) {
+      loop.push(readVec(backBase, edgeRows[i]));
+    }
+
+    const loopCount = loop.length;
+    const centroid = loop
+      .reduce((acc, p) => acc.add(p), new THREE.Vector3())
+      .multiplyScalar(1 / loopCount);
+
+    // Sleeve axis: outward and drooping down, in the XY plane.
+    const axis = new THREE.Vector3(
+      side * Math.cos(droopRad),
+      -Math.sin(droopRad),
+      0,
+    );
+    // Local frame perpendicular to the axis, for the circular cuff.
+    const e2 = new THREE.Vector3(0, 0, 1);
+    const e1 = new THREE.Vector3().crossVectors(e2, axis).normalize();
+
+    const cuffCenter = centroid.clone().addScaledVector(axis, sleeveLen);
+
+    // Map each loop point to an angle around the axis so the cuff circle
+    // keeps the same vertex ordering (no twist along the sleeve).
+    const cuffPoints = loop.map((p) => {
+      const offset = p.clone().sub(centroid);
+      const a = Math.atan2(offset.dot(e2), offset.dot(e1));
+      return cuffCenter
+        .clone()
+        .addScaledVector(e1, Math.cos(a) * cuffRadius)
+        .addScaledVector(e2, Math.sin(a) * cuffRadius);
+    });
+
+    // Loft rings from the armhole loop to the cuff.
     const ringStart = positions.length / 3;
     for (let i = 0; i <= SLEEVE_RINGS; i += 1) {
       const t = i / SLEEVE_RINGS;
-      // Centre of this ring: travels outward in x and droops down in y.
-      const cx = sideX + sign * sleeveLen * t;
-      const cy = yShoulder - armDepth * 0.35 - sleeveLen * 0.35 * t;
-      const cz = 0;
-      // Radii ease from armhole opening to the cuff.
-      const ry = (armDepth * 0.6) * (1 - 0.25 * t);
-      const rz = depth * (1.05 - 0.3 * t);
-      for (let j = 0; j <= SLEEVE_SEG; j += 1) {
-        const a = (j / SLEEVE_SEG) * Math.PI * 2;
-        const y = cy + Math.cos(a) * ry;
-        const z = cz + Math.sin(a) * rz;
-        // Slight cap rise so the sleeve head blends into the shoulder.
-        const x = cx + Math.sin(t * Math.PI) * 0.04 * sign;
-        positions.push(x, y, z);
-        uvs.push(j / SLEEVE_SEG, t);
-        void openMag;
+      const blend = smoothstep(t);
+      for (let j = 0; j < loopCount; j += 1) {
+        const p = loop[j].clone().lerp(cuffPoints[j], blend);
+        pushVertex(p.x, p.y, p.z, j / loopCount, t);
       }
     }
-    const seg = SLEEVE_SEG + 1;
     for (let i = 0; i < SLEEVE_RINGS; i += 1) {
-      for (let j = 0; j < SLEEVE_SEG; j += 1) {
-        const a = ringStart + i * seg + j;
-        const b = a + 1;
-        const d = a + seg;
-        const e = d + 1;
-        if (sign > 0) {
+      for (let j = 0; j < loopCount; j += 1) {
+        const jn = (j + 1) % loopCount;
+        const a = ringStart + i * loopCount + j;
+        const b = ringStart + i * loopCount + jn;
+        const d = ringStart + (i + 1) * loopCount + j;
+        const e = ringStart + (i + 1) * loopCount + jn;
+        if (side > 0) {
           indices.push(a, d, b, b, d, e);
         } else {
           indices.push(a, b, d, b, e, d);
@@ -200,13 +281,4 @@ export function buildTeeGeometry(params: GarmentParams): THREE.BufferGeometry {
   geometry.computeBoundingBox();
   geometry.computeBoundingSphere();
   return geometry;
-}
-
-export function teeBoundingSize(geometry: THREE.BufferGeometry): Vec3 {
-  const box = geometry.boundingBox ?? new THREE.Box3();
-  return [
-    box.max.x - box.min.x,
-    box.max.y - box.min.y,
-    box.max.z - box.min.z,
-  ];
 }
