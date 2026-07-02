@@ -91,9 +91,10 @@ export function buildTeeGeometry(params: GarmentParams): THREE.BufferGeometry {
   const neckFrac = neckHalf / shoulderX;
   const topEdgeY = (s: number, neckDrop: number) => {
     if (s <= neckFrac) {
-      // Neckline: cosine blend -> deepest at centre, meets the shoulder line
-      // tangentially at the neck edge (G1 continuous, like a Bezier).
-      const f = (1 + Math.cos((Math.PI * s) / neckFrac)) / 2;
+      // Crew neckline: superellipse blend -> flat-bottomed U at the centre
+      // that turns up smoothly into the shoulder line.
+      const t = s / neckFrac;
+      const f = Math.pow(1 - Math.pow(t, 2.4), 0.75);
       return neckShoulderY - neckDrop * f;
     }
     // Shoulder: straight sloped seam from neck edge to shoulder point.
@@ -116,6 +117,9 @@ export function buildTeeGeometry(params: GarmentParams): THREE.BufferGeometry {
   const buildPanel = (front: boolean): number => {
     const base = positions.length / 3;
     const neckDrop = front ? neckDropF : neckDropB;
+    // The front panel sits slightly fuller than the back, like a real torso.
+    const panelDepth = depth * (front ? 1.05 : 0.88);
+    const foldPhase = front ? 0.4 : 2.1;
     for (let r = 0; r <= ROWS; r += 1) {
       const v = r / ROWS;
       for (let c = 0; c <= COLS; c += 1) {
@@ -127,10 +131,19 @@ export function buildTeeGeometry(params: GarmentParams): THREE.BufferGeometry {
         const x = Math.sign(u - 0.5 || 1) * s * w;
         // Elliptical cross-section, blended into the armhole gap near the
         // side edge so the front/back separate around the arm opening.
-        const zEllipse = depth * Math.sqrt(Math.max(0, 1 - s * s));
+        const zEllipse = panelDepth * Math.sqrt(Math.max(0, 1 - s * s));
         const mix = smoothstep((s - 0.78) / 0.22);
         const gap = armholeGap(y);
-        const z = (front ? 1 : -1) * (zEllipse + (gap - zEllipse) * mix);
+        // Soft vertical drape folds: strongest toward the hem, fading to
+        // nothing at the shoulders and at the side seams.
+        const fold =
+          depth *
+          0.055 *
+          (0.55 * Math.sin(u * Math.PI * 8 + foldPhase) +
+            0.45 * Math.sin(u * Math.PI * 3.2 + 1.3)) *
+          (zEllipse / panelDepth) *
+          smoothstep((0.9 - v) / 0.9);
+        const z = (front ? 1 : -1) * (zEllipse + (gap - zEllipse) * mix + fold);
         pushVertex(x, y, z, front ? u : 1 - u, v);
       }
     }
@@ -168,6 +181,76 @@ export function buildTeeGeometry(params: GarmentParams): THREE.BufferGeometry {
     const b0 = backBase + topRow + c;
     const b1 = backBase + topRow + c + 1;
     indices.push(f0, b0, f1, f1, b0, b1);
+  }
+
+  // --- Neckband ------------------------------------------------------------
+  // A folded rib collar following the neck opening: outer ring on the raw
+  // neckline edge, rising and turning slightly inward, like a sewn-on band.
+  {
+    const neckCols: number[] = [];
+    for (let c = 0; c <= COLS; c += 1) {
+      if (Math.abs(c / COLS - 0.5) * 2 <= neckFrac + 1e-9) {
+        neckCols.push(c);
+      }
+    }
+    if (neckCols.length >= 2) {
+      const readTop = (base: number, c: number) => {
+        const idx = (base + topRow + c) * 3;
+        return new THREE.Vector3(
+          positions[idx],
+          positions[idx + 1],
+          positions[idx + 2],
+        );
+      };
+      // Closed loop: front neckline left->right, back neckline right->left.
+      const loop: THREE.Vector3[] = [];
+      for (const c of neckCols) {
+        loop.push(readTop(frontBase, c));
+      }
+      for (let i = neckCols.length - 1; i >= 0; i -= 1) {
+        loop.push(readTop(backBase, neckCols[i]));
+      }
+      const loopCount = loop.length;
+      const centroid = loop
+        .reduce((acc, p) => acc.add(p), new THREE.Vector3())
+        .multiplyScalar(1 / loopCount);
+
+      const bandH = 1.8 * SCALE; // band height (cm)
+      const bandIn = 0.9 * SCALE; // how far the band turns inward (cm)
+      const rings: number[][] = [[], [], []];
+      for (let j = 0; j < loopCount; j += 1) {
+        const p = loop[j];
+        const inward = new THREE.Vector3(
+          centroid.x - p.x,
+          0,
+          centroid.z - p.z,
+        );
+        if (inward.lengthSq() > 1e-10) {
+          inward.normalize();
+        }
+        const mid = p
+          .clone()
+          .addScaledVector(inward, bandIn * 0.35)
+          .add(new THREE.Vector3(0, bandH * 0.95, 0));
+        const inner = p
+          .clone()
+          .addScaledVector(inward, bandIn)
+          .add(new THREE.Vector3(0, bandH * 0.55, 0));
+        rings[0].push(pushVertex(p.x, p.y, p.z, j / loopCount, 0));
+        rings[1].push(pushVertex(mid.x, mid.y, mid.z, j / loopCount, 0.5));
+        rings[2].push(pushVertex(inner.x, inner.y, inner.z, j / loopCount, 1));
+      }
+      for (let ring = 0; ring < 2; ring += 1) {
+        for (let j = 0; j < loopCount; j += 1) {
+          const jn = (j + 1) % loopCount;
+          const a = rings[ring][j];
+          const b = rings[ring][jn];
+          const d = rings[ring + 1][j];
+          const e = rings[ring + 1][jn];
+          indices.push(a, d, b, b, d, e);
+        }
+      }
+    }
   }
 
   // --- Sleeves lofted from the armhole boundary --------------------------
@@ -235,10 +318,12 @@ export function buildTeeGeometry(params: GarmentParams): THREE.BufferGeometry {
     const cuffPoints = loop.map((p) => {
       const offset = p.clone().sub(centroid);
       const a = Math.atan2(offset.dot(e2), offset.dot(e1));
+      // Slightly elliptical cuff (flatter front-to-back), like a relaxed
+      // sleeve rather than a rigid pipe.
       return cuffCenter
         .clone()
         .addScaledVector(e1, Math.cos(a) * cuffRadius)
-        .addScaledVector(e2, Math.sin(a) * cuffRadius);
+        .addScaledVector(e2, Math.sin(a) * cuffRadius * 0.82);
     });
 
     // Loft rings from the armhole loop to the cuff.
