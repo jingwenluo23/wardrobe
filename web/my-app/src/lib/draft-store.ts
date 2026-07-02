@@ -4,7 +4,12 @@
 
 import sharp from "sharp";
 
-import { segmentGarment } from "./garment-segmentation";
+import {
+  inpaintTile,
+  pickFabricSwatch,
+  rgbToHex,
+  segmentGarment,
+} from "./garment-segmentation";
 import {
   boundsFromParams,
   defaultTeeParams,
@@ -55,6 +60,7 @@ type StoredDraft = {
   segmentationConfidence: number;
   extractedTextureUrl?: string;
   extractedBackTextureUrl?: string;
+  fabricTextureUrl?: string;
   /** False while the background extraction task is still running. */
   extractionReady: boolean;
 };
@@ -123,6 +129,7 @@ const MASK_SIZE = 96;
 async function analyzePhoto(buffer: Buffer): Promise<{
   color: string;
   textureUrl: string;
+  fabricTextureUrl?: string;
 }> {
   // Colour-based garment extraction:
   // 1. Sample the garment colour from the chest area (centre-horizontal,
@@ -166,9 +173,6 @@ async function analyzePhoto(buffer: Buffer): Promise<{
   const gr = median(rs);
   const gg = median(gs);
   const gb = median(bs);
-  const toHex = (value: number) =>
-    Math.round(value).toString(16).padStart(2, "0");
-  const color = "#" + toHex(gr) + toHex(gg) + toHex(gb);
 
   // Mask pixels close to the garment colour. The crop is then restricted to
   // torso columns (tall mask columns) so the sleeves don't stretch the
@@ -287,6 +291,7 @@ async function analyzePhoto(buffer: Buffer): Promise<{
     );
   };
 
+  const keep = new Uint8Array(TILE * TILE);
   for (let y = 0; y < TILE; y += 1) {
     const { left, right } = spans[y];
     const paintAll =
@@ -294,28 +299,44 @@ async function analyzePhoto(buffer: Buffer): Promise<{
     for (let x = 0; x < TILE; x += 1) {
       const i = (y * TILE + x) * 3;
       if (
-        paintAll ||
-        x < left ||
-        x > right ||
-        isSkin(tileRaw[i], tileRaw[i + 1], tileRaw[i + 2])
+        !paintAll &&
+        x >= left &&
+        x <= right &&
+        !isSkin(tileRaw[i], tileRaw[i + 1], tileRaw[i + 2])
       ) {
-        tileRaw[i] = gr;
-        tileRaw[i + 1] = gg;
-        tileRaw[i + 2] = gb;
+        keep[y * TILE + x] = 1;
       }
     }
   }
+  // Fill removed regions from the surrounding fabric instead of a flat
+  // colour, so they blend into the shirt's real shading.
+  inpaintTile(tileRaw, keep, TILE, [gr, gg, gb]);
 
-  const tile = await sharp(tileRaw, {
-    raw: { width: TILE, height: TILE, channels: 3 },
-  })
-    // Gentle local contrast so prints stay clearly visible on the mesh.
-    .clahe({ width: 128, height: 128, maxSlope: 2 })
-    .jpeg({ quality: 78 })
-    .toBuffer();
-  const textureUrl = "data:image/jpeg;base64," + tile.toString("base64");
+  // Plain fabric swatch for the sleeves/collar; its mean becomes the base
+  // colour so untextured parts match the torso's real shading.
+  const { swatch, swatchSize, mean } = pickFabricSwatch(tileRaw, TILE);
 
-  return { color, textureUrl };
+  const [tile, fabricTile] = await Promise.all([
+    sharp(tileRaw, { raw: { width: TILE, height: TILE, channels: 3 } })
+      // Gentle local contrast so prints stay clearly visible on the mesh.
+      .clahe({ width: 128, height: 128, maxSlope: 2 })
+      .jpeg({ quality: 78 })
+      .toBuffer(),
+    sharp(swatch, {
+      raw: { width: swatchSize, height: swatchSize, channels: 3 },
+    })
+      .resize(256, 256, { fit: "fill" })
+      .blur(1.2)
+      .jpeg({ quality: 75 })
+      .toBuffer(),
+  ]);
+
+  return {
+    color: rgbToHex(mean[0], mean[1], mean[2]),
+    textureUrl: "data:image/jpeg;base64," + tile.toString("base64"),
+    fabricTextureUrl:
+      "data:image/jpeg;base64," + fabricTile.toString("base64"),
+  };
 }
 
 async function fileToDataUrl(file: File): Promise<{
@@ -393,6 +414,7 @@ export async function createDraft(input: {
       stored.color = frontResult.color;
       stored.extractedTextureUrl = frontResult.textureUrl;
       stored.extractedBackTextureUrl = backResult.textureUrl;
+      stored.fabricTextureUrl = frontResult.fabricTextureUrl;
       // Model-based extraction is far more reliable than the heuristic;
       // extra reference views nudge confidence up either way.
       stored.segmentationConfidence = Math.min(
@@ -449,6 +471,7 @@ function serializeDraft(stored: StoredDraft): ApiDraft {
         segmentation: { confidence: stored.segmentationConfidence },
         extractedTextureUrl: stored.extractedTextureUrl,
         extractedBackTextureUrl: stored.extractedBackTextureUrl,
+        fabricTextureUrl: stored.fabricTextureUrl,
         color: stored.color,
         bounds: boundsFromParams(stored.params),
       }

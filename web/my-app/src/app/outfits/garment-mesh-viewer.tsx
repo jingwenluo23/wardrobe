@@ -49,12 +49,24 @@ function TeeModel({ mesh }: { mesh: DraftMesh }) {
   const materials = useMemo(() => {
     const frontTexture = loadTexture(mesh.extractedTextureUrl);
     const backTexture = loadTexture(mesh.extractedBackTextureUrl) ?? frontTexture;
+    // Sleeves/collar use a plain fabric swatch sampled from the photo, so
+    // their shading matches the torso's real fabric instead of a flat tint.
+    const fabricTexture = loadTexture(mesh.fabricTextureUrl);
+    if (fabricTexture) {
+      fabricTexture.wrapS = THREE.RepeatWrapping;
+      fabricTexture.wrapT = THREE.RepeatWrapping;
+    }
     return [
       fabricMaterial(mesh.color, frontTexture),
       fabricMaterial(mesh.color, backTexture),
-      fabricMaterial(mesh.color, null),
+      fabricMaterial(mesh.color, fabricTexture),
     ];
-  }, [mesh.color, mesh.extractedTextureUrl, mesh.extractedBackTextureUrl]);
+  }, [
+    mesh.color,
+    mesh.extractedTextureUrl,
+    mesh.extractedBackTextureUrl,
+    mesh.fabricTextureUrl,
+  ]);
 
   const innerMaterial = useMemo(
     () =>

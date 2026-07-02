@@ -78,7 +78,127 @@ function getSegmenter(): Promise<Segmenter | null> {
 export type ExtractionResult = {
   color: string;
   textureUrl: string;
+  /** Plain fabric swatch (no print) for sleeves/collar, from the photo. */
+  fabricTextureUrl?: string;
 };
+
+/**
+ * Fill non-garment tile pixels with nearby fabric instead of a flat colour,
+ * so painted regions (neck opening, seams) blend into the shirt's real
+ * shading rather than reading as a ghost collar or patch.
+ */
+export function inpaintTile(
+  tileRaw: Buffer,
+  keep: Uint8Array,
+  size: number,
+  fallback: [number, number, number],
+) {
+  // Vertical pass: fill from the nearest kept pixel above/below, then a
+  // horizontal pass for columns with no fabric at all.
+  for (let x = 0; x < size; x += 1) {
+    let lastY = -1;
+    for (let y = 0; y < size; y += 1) {
+      if (keep[y * size + x]) {
+        if (lastY === -1 && y > 0) {
+          // Backfill the run above the first kept pixel.
+          for (let fy = 0; fy < y; fy += 1) {
+            const ti = (fy * size + x) * 3;
+            const si = (y * size + x) * 3;
+            tileRaw[ti] = tileRaw[si];
+            tileRaw[ti + 1] = tileRaw[si + 1];
+            tileRaw[ti + 2] = tileRaw[si + 2];
+          }
+        }
+        lastY = y;
+      } else if (lastY !== -1) {
+        const ti = (y * size + x) * 3;
+        const si = (lastY * size + x) * 3;
+        tileRaw[ti] = tileRaw[si];
+        tileRaw[ti + 1] = tileRaw[si + 1];
+        tileRaw[ti + 2] = tileRaw[si + 2];
+      }
+    }
+    if (lastY === -1) {
+      // Whole column empty: mark for the horizontal pass via fallback.
+      for (let y = 0; y < size; y += 1) {
+        const ti = (y * size + x) * 3;
+        tileRaw[ti] = fallback[0];
+        tileRaw[ti + 1] = fallback[1];
+        tileRaw[ti + 2] = fallback[2];
+      }
+    }
+  }
+}
+
+/**
+ * Pick the most uniform block of the tile (lowest colour variance = plain
+ * fabric, no print) to use as the sleeve/collar swatch, and return its mean
+ * colour as the garment base colour.
+ */
+export function pickFabricSwatch(
+  tileRaw: Buffer,
+  size: number,
+): { swatch: Buffer; swatchSize: number; mean: [number, number, number] } {
+  const block = 64;
+  const stride = 32;
+  let best = { score: Infinity, x: 0, y: 0 };
+  for (let by = size * 0.1; by + block <= size * 0.9; by += stride) {
+    for (let bx = size * 0.1; bx + block <= size * 0.9; bx += stride) {
+      const sum = [0, 0, 0];
+      const sumSq = [0, 0, 0];
+      for (let y = 0; y < block; y += 4) {
+        for (let x = 0; x < block; x += 4) {
+          const i = ((Math.floor(by) + y) * size + Math.floor(bx) + x) * 3;
+          for (let c = 0; c < 3; c += 1) {
+            sum[c] += tileRaw[i + c];
+            sumSq[c] += tileRaw[i + c] * tileRaw[i + c];
+          }
+        }
+      }
+      const n = (block / 4) * (block / 4);
+      const variance =
+        sumSq[0] / n - (sum[0] / n) ** 2 +
+        (sumSq[1] / n - (sum[1] / n) ** 2) +
+        (sumSq[2] / n - (sum[2] / n) ** 2);
+      if (variance < best.score) {
+        best = { score: variance, x: Math.floor(bx), y: Math.floor(by) };
+      }
+    }
+  }
+
+  const swatch = Buffer.alloc(block * block * 3);
+  const sums: [number, number, number] = [0, 0, 0];
+  for (let y = 0; y < block; y += 1) {
+    for (let x = 0; x < block; x += 1) {
+      const si = ((best.y + y) * size + best.x + x) * 3;
+      const ti = (y * block + x) * 3;
+      swatch[ti] = tileRaw[si];
+      swatch[ti + 1] = tileRaw[si + 1];
+      swatch[ti + 2] = tileRaw[si + 2];
+      sums[0] += tileRaw[si];
+      sums[1] += tileRaw[si + 1];
+      sums[2] += tileRaw[si + 2];
+    }
+  }
+  const n = block * block;
+  return {
+    swatch,
+    swatchSize: block,
+    mean: [
+      Math.round(sums[0] / n),
+      Math.round(sums[1] / n),
+      Math.round(sums[2] / n),
+    ],
+  };
+}
+
+export function rgbToHex(r: number, g: number, b: number) {
+  const toHex = (value: number) =>
+    Math.max(0, Math.min(255, Math.round(value)))
+      .toString(16)
+      .padStart(2, "0");
+  return "#" + toHex(r) + toHex(g) + toHex(b);
+}
 
 /** In-place binary erosion (4-neighbourhood), `iterations` pixels deep. */
 function erodeMask(
@@ -291,13 +411,12 @@ export async function segmentGarment(
     const gr = median(rs);
     const gg = median(gs);
     const gb = median(bs);
-    const toHex = (value: number) =>
-      Math.round(value).toString(16).padStart(2, "0");
-    const color = "#" + toHex(gr) + toHex(gg) + toHex(gb);
 
     // Build the texture tile: sample the bounding box into a TILE x TILE
-    // image; pixels outside the garment mask become plain fabric colour.
+    // image, then inpaint non-garment pixels (neck opening, seams, skin)
+    // from the surrounding fabric so no ghost collar or flat patches appear.
     const tileRaw = Buffer.alloc(TILE * TILE * 3);
+    const keep = new Uint8Array(TILE * TILE);
     for (let ty = 0; ty < TILE; ty += 1) {
       const sy = minY + Math.min(boxH - 1, Math.floor((ty / TILE) * boxH));
       for (let tx = 0; tx < TILE; tx += 1) {
@@ -307,30 +426,42 @@ export async function segmentGarment(
         const r = data[si * 3];
         const g = data[si * 3 + 1];
         const b = data[si * 3 + 2];
+        tileRaw[ti] = r;
+        tileRaw[ti + 1] = g;
+        tileRaw[ti + 2] = b;
         if (mask[si] && !isSkinTone(r, g, b)) {
-          tileRaw[ti] = r;
-          tileRaw[ti + 1] = g;
-          tileRaw[ti + 2] = b;
-        } else {
-          tileRaw[ti] = gr;
-          tileRaw[ti + 1] = gg;
-          tileRaw[ti + 2] = gb;
+          keep[ty * TILE + tx] = 1;
         }
       }
     }
+    inpaintTile(tileRaw, keep, TILE, [gr, gg, gb]);
 
-    const tile = await sharp(tileRaw, {
-      raw: { width: TILE, height: TILE, channels: 3 },
-    })
-      // Gentle local contrast so washed/tonal prints stay clearly visible
-      // on the mesh instead of sinking into the fabric colour.
-      .clahe({ width: 128, height: 128, maxSlope: 2 })
-      .jpeg({ quality: 80 })
-      .toBuffer();
+    // Plain fabric swatch for the sleeves/collar, and the base colour from
+    // it — so untextured parts match the torso's real shading, not a median.
+    const { swatch, swatchSize, mean } = pickFabricSwatch(tileRaw, TILE);
+    const fabricColor = rgbToHex(mean[0], mean[1], mean[2]);
+
+    const [tile, fabricTile] = await Promise.all([
+      sharp(tileRaw, { raw: { width: TILE, height: TILE, channels: 3 } })
+        // Gentle local contrast so washed/tonal prints stay clearly visible
+        // on the mesh instead of sinking into the fabric colour.
+        .clahe({ width: 128, height: 128, maxSlope: 2 })
+        .jpeg({ quality: 80 })
+        .toBuffer(),
+      sharp(swatch, {
+        raw: { width: swatchSize, height: swatchSize, channels: 3 },
+      })
+        .resize(256, 256, { fit: "fill" })
+        .blur(1.2)
+        .jpeg({ quality: 75 })
+        .toBuffer(),
+    ]);
 
     return {
-      color,
+      color: fabricColor,
       textureUrl: "data:image/jpeg;base64," + tile.toString("base64"),
+      fabricTextureUrl:
+        "data:image/jpeg;base64," + fabricTile.toString("base64"),
     };
   } catch (error) {
     console.warn(

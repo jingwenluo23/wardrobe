@@ -74,6 +74,8 @@ export type DraftMesh = {
   extractedTextureUrl?: string;
   /** Optional isolated garment texture (data URL) for the back panel. */
   extractedBackTextureUrl?: string;
+  /** Plain fabric swatch (data URL) for sleeves/collar, from the photo. */
+  fabricTextureUrl?: string;
   /** Dominant garment colour as a hex string, sampled from the photos. */
   color: string;
   bounds: GarmentBounds;
