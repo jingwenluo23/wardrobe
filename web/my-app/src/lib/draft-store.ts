@@ -199,10 +199,70 @@ async function analyzePhoto(buffer: Buffer): Promise<{
     }
   }
 
-  const tile = await sharp(buffer)
+  // Crop to the garment box, then paint over anything that is not garment:
+  // for each row, everything outside the leftmost..rightmost garment span
+  // becomes plain fabric colour, and rows whose garment span is too narrow
+  // (the head/neck poking above the collar, arms below the sleeves) are
+  // filled entirely. Pixels between the span edges are kept, so prints and
+  // graphics survive even though their colours differ from the base fabric.
+  const TILE = 512;
+  const tileRaw = await sharp(buffer)
     .rotate()
     .extract(region)
-    .resize(512, 512, { fit: "fill" })
+    .resize(TILE, TILE, { fit: "fill" })
+    .removeAlpha()
+    .raw()
+    .toBuffer();
+
+  const spans: Array<{ left: number; right: number }> = [];
+  for (let y = 0; y < TILE; y += 1) {
+    let left = -1;
+    let right = -1;
+    for (let x = 0; x < TILE; x += 1) {
+      const i = (y * TILE + x) * 3;
+      const dist =
+        Math.abs(tileRaw[i] - gr) +
+        Math.abs(tileRaw[i + 1] - gg) +
+        Math.abs(tileRaw[i + 2] - gb);
+      if (dist < 110) {
+        if (left === -1) {
+          left = x;
+        }
+        right = x;
+      }
+    }
+    spans.push({ left, right });
+  }
+
+  // The garment's top edge is its shoulders — the widest structure in the
+  // photo. A head/neck poking above the collar (even hair whose colour is
+  // close to the fabric) is far narrower, so everything above the first
+  // shoulder-wide row gets painted out entirely.
+  let shoulderRow = 0;
+  while (
+    shoulderRow < TILE &&
+    spans[shoulderRow].right - spans[shoulderRow].left < TILE * 0.55
+  ) {
+    shoulderRow += 1;
+  }
+
+  for (let y = 0; y < TILE; y += 1) {
+    const { left, right } = spans[y];
+    const paintAll =
+      y < shoulderRow || left === -1 || right - left < TILE * 0.3;
+    for (let x = 0; x < TILE; x += 1) {
+      if (paintAll || x < left || x > right) {
+        const i = (y * TILE + x) * 3;
+        tileRaw[i] = gr;
+        tileRaw[i + 1] = gg;
+        tileRaw[i + 2] = gb;
+      }
+    }
+  }
+
+  const tile = await sharp(tileRaw, {
+    raw: { width: TILE, height: TILE, channels: 3 },
+  })
     .jpeg({ quality: 78 })
     .toBuffer();
   const textureUrl = "data:image/jpeg;base64," + tile.toString("base64");
