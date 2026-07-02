@@ -89,14 +89,18 @@ export function buildTeeGeometry(params: GarmentParams): THREE.BufferGeometry {
   // at the shoulder point, widest in the middle, so the opening reads as a
   // smooth oval when seen from the side.
   // Keep the opening shallow: a real armhole is much flatter front-to-back
-  // than the torso (total opening depth ~= body depth / 2).
+  // than the torso (total opening depth ~= body depth / 2). The gap does NOT
+  // close fully at the shoulder point - a real sleeve cap stays rounded
+  // there instead of pinching to a crease.
   const maxOpen = depth * 0.5;
   const armholeGap = (y: number) => {
-    if (y <= underarmY || y >= shoulderPtY) {
+    if (y <= underarmY) {
       return 0;
     }
-    const t = (y - underarmY) / (shoulderPtY - underarmY);
-    return maxOpen * Math.pow(Math.sin(Math.PI * t), 0.8);
+    const t = Math.min(1, (y - underarmY) / (shoulderPtY - underarmY));
+    const dome = Math.pow(Math.sin(Math.PI * t), 0.8);
+    const capRound = smoothstep(Math.min(1, t * 3));
+    return maxOpen * (0.72 * dome + 0.28 * capRound);
   };
 
   // Top edge of a panel as a function of lateral position s in [0, 1]
@@ -112,10 +116,16 @@ export function buildTeeGeometry(params: GarmentParams): THREE.BufferGeometry {
     }
     // Shoulder: sloped seam from neck edge to shoulder point with a gentle
     // convex roll so the shoulder reads as soft fabric, not a straight bar.
+    // The outermost stretch dips down in a fillet so the shoulder tip rounds
+    // over into the sleeve cap instead of ending in a pinch.
     const t = (s - neckFrac) / (1 - neckFrac);
     const roll = 0.45 * SCALE * Math.sin(Math.PI * t);
+    const fillet = 0.7 * SCALE * smoothstep((s - 0.88) / 0.12);
     return (
-      neckShoulderY - Math.tan(slopeRad) * (s * shoulderX - neckHalf) + roll
+      neckShoulderY -
+      Math.tan(slopeRad) * (s * shoulderX - neckHalf) +
+      roll -
+      fillet
     );
   };
 

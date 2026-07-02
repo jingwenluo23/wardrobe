@@ -6,6 +6,7 @@ import sharp from "sharp";
 
 import {
   inpaintTile,
+  isSkinTone,
   pickFabricSwatch,
   rgbToHex,
   segmentGarment,
@@ -275,22 +276,6 @@ async function analyzePhoto(buffer: Buffer): Promise<{
     shoulderRow += 1;
   }
 
-  // Classic RGB skin-tone test: catches faces/necks/hands that survive the
-  // span rules (e.g. a chin overlapping the shoulder line).
-  const isSkin = (r: number, g: number, b: number) => {
-    const max = Math.max(r, g, b);
-    const min = Math.min(r, g, b);
-    return (
-      r > 95 &&
-      g > 40 &&
-      b > 20 &&
-      max - min > 15 &&
-      Math.abs(r - g) > 15 &&
-      r > g &&
-      r > b
-    );
-  };
-
   const keep = new Uint8Array(TILE * TILE);
   for (let y = 0; y < TILE; y += 1) {
     const { left, right } = spans[y];
@@ -302,7 +287,7 @@ async function analyzePhoto(buffer: Buffer): Promise<{
         !paintAll &&
         x >= left &&
         x <= right &&
-        !isSkin(tileRaw[i], tileRaw[i + 1], tileRaw[i + 2])
+        !isSkinTone(tileRaw[i], tileRaw[i + 1], tileRaw[i + 2])
       ) {
         keep[y * TILE + x] = 1;
       }

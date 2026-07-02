@@ -214,8 +214,17 @@ export function warpGarmentTile(input: {
   maxX: number;
   tileSize: number;
   exclude?: (r: number, g: number, b: number) => boolean;
+  /** Optional higher-resolution copy of the photo for sharper sampling. */
+  hiData?: Buffer | Uint8Array;
+  hiWidth?: number;
+  hiHeight?: number;
 }): { tileRaw: Buffer; keep: Uint8Array } {
   const { data, mask, width, height, minX, maxX, tileSize, exclude } = input;
+  const hiData = input.hiData ?? data;
+  const hiWidth = input.hiWidth ?? width;
+  const hiHeight = input.hiHeight ?? height;
+  const scaleX = hiWidth / width;
+  const scaleY = hiHeight / height;
 
   // Per-row garment edges, restricted to torso columns so sleeves are not
   // mistaken for the side seams.
@@ -329,10 +338,14 @@ export function warpGarmentTile(input: {
       }
       const sxi = clampInt(Math.round(sx), 0, width - 1);
       const si = sy * width + sxi;
+      // Colour from the high-res copy; mask/keep from the inference-res grid.
+      const hx = clampInt(Math.round(sx * scaleX), 0, hiWidth - 1);
+      const hy = clampInt(Math.round(sy * scaleY), 0, hiHeight - 1);
+      const hi = hy * hiWidth + hx;
       const ti = (ty * tileSize + tx) * 3;
-      const r = data[si * 3];
-      const g = data[si * 3 + 1];
-      const bch = data[si * 3 + 2];
+      const r = hiData[hi * 3];
+      const g = hiData[hi * 3 + 1];
+      const bch = hiData[hi * 3 + 2];
       tileRaw[ti] = r;
       tileRaw[ti + 1] = g;
       tileRaw[ti + 2] = bch;
@@ -430,8 +443,13 @@ function keepLargestComponent(mask: Uint8Array, width: number, height: number) {
   }
 }
 
-/** Classic RGB skin-tone test, the last guard against skin on the texture. */
-function isSkinTone(r: number, g: number, b: number) {
+/**
+ * RGB skin-tone test, the last guard against skin on the texture.
+ * Tightened so warm print colours survive: real skin always has green above
+ * blue (pink/magenta prints have blue above green) and only moderate
+ * saturation (vivid reds/oranges in graphics exceed it).
+ */
+export function isSkinTone(r: number, g: number, b: number) {
   const max = Math.max(r, g, b);
   const min = Math.min(r, g, b);
   return (
@@ -441,11 +459,14 @@ function isSkinTone(r: number, g: number, b: number) {
     max - min > 15 &&
     Math.abs(r - g) > 15 &&
     r > g &&
-    r > b
+    r > b &&
+    g > b &&
+    max - min < max * 0.62
   );
 }
 
 const INFER_SIZE = 768;
+const HI_SIZE = 1536;
 const TILE = 512;
 
 /**
@@ -471,6 +492,15 @@ export async function segmentGarment(
       .toBuffer({ resolveWithObject: true });
     const width = info.width;
     const height = info.height;
+
+    // Higher-resolution copy for texture sampling: inference runs at 768,
+    // but sampling colours from it blurs prints on large photos.
+    const { data: hiData, info: hiInfo } = await sharp(buffer)
+      .rotate()
+      .resize(HI_SIZE, HI_SIZE, { fit: "inside", withoutEnlargement: true })
+      .removeAlpha()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
 
     const { RawImage } = await import("@huggingface/transformers");
     const image = new RawImage(new Uint8ClampedArray(data), width, height, 3);
@@ -579,6 +609,9 @@ export async function segmentGarment(
       maxX,
       tileSize: TILE,
       exclude: isSkinTone,
+      hiData,
+      hiWidth: hiInfo.width,
+      hiHeight: hiInfo.height,
     });
     inpaintTile(tileRaw, keep, TILE, [gr, gg, gb]);
 
@@ -592,7 +625,7 @@ export async function segmentGarment(
         // Gentle local contrast so washed/tonal prints stay clearly visible
         // on the mesh instead of sinking into the fabric colour.
         .clahe({ width: 128, height: 128, maxSlope: 2 })
-        .jpeg({ quality: 80 })
+        .jpeg({ quality: 86 })
         .toBuffer(),
       sharp(swatch, {
         raw: { width: swatchSize, height: swatchSize, channels: 3 },
