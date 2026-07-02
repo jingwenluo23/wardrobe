@@ -300,7 +300,6 @@ export function buildTeeGeometry(params: GarmentParams): THREE.BufferGeometry {
   // sleeve's root ring reuses those exact positions, so the sleeve grows out
   // of the armhole with no gap or overlap.
   const sleeveLen = params.sleeveLength * SCALE;
-  const cuffRadius = Math.max((params.sleeveOpening / 2) * SCALE, 0.05);
   const droopRad = slopeRad + (24 * Math.PI) / 180;
 
   const buildSleeve = (side: 1 | -1) => {
@@ -352,42 +351,36 @@ export function buildTeeGeometry(params: GarmentParams): THREE.BufferGeometry {
     const e2 = new THREE.Vector3(0, 0, 1);
     const e1 = new THREE.Vector3().crossVectors(e2, axis).normalize();
 
-    // Average radius of the armhole root ring, measured in the plane
-    // perpendicular to the sleeve axis.
-    const avgRootRadius =
-      loop.reduce((acc, p) => {
-        const offset = p.clone().sub(centroid);
-        return acc + Math.hypot(offset.dot(e1), offset.dot(e2));
-      }, 0) / loopCount;
-    // The sleeve must taper: never let the cuff exceed ~80% of the root.
-    const cuffR = Math.min(cuffRadius, avgRootRadius * 0.8);
-
-    // Map each loop point to an angle around the axis so the ring vertex
-    // ordering stays consistent along the sleeve (no twist). Offsets are
-    // relative to the ring centre so travel and shape can blend separately.
+    // Straight sleeve: every ring keeps the root ring's shape and size, so
+    // the sleeve is a uniform tube from the armhole to the opening. The
+    // pointed top of the armhole oval is softened along the way so the
+    // sleeve cap rounds off instead of carrying a hard ridge.
     const rootOffsets = loop.map((p) => p.clone().sub(centroid));
-    const cuffOffsets = rootOffsets.map((offset) => {
+    const avgRootRadius =
+      rootOffsets.reduce(
+        (acc, offset) => acc + Math.hypot(offset.dot(e1), offset.dot(e2)),
+        0,
+      ) / loopCount;
+    const softOffsets = rootOffsets.map((offset) => {
+      const r = Math.hypot(offset.dot(e1), offset.dot(e2));
       const a = Math.atan2(offset.dot(e2), offset.dot(e1));
-      // Slightly elliptical cuff (flatter front-to-back), like a relaxed
-      // sleeve rather than a rigid pipe.
+      // Pull extreme radii 35% toward the mean: same overall width, softer
+      // corners.
+      const rs = r + (avgRootRadius - r) * 0.35;
       return new THREE.Vector3()
-        .addScaledVector(e1, Math.cos(a) * cuffR)
-        .addScaledVector(e2, Math.sin(a) * cuffR * 0.82);
+        .addScaledVector(e1, Math.cos(a) * rs)
+        .addScaledVector(e2, Math.sin(a) * rs);
     });
 
-    // Loft rings from the armhole loop to the cuff. The centre travels
-    // linearly along the axis, while the cross-section morphs to the round
-    // cuff early (within ~55% of the length) so the sleeve reads as a fabric
-    // tube with a shaped cap, not a long pointed cone.
     const ringStart = positions.length / 3;
     for (let i = 0; i <= SLEEVE_RINGS; i += 1) {
       const t = i / SLEEVE_RINGS;
-      const shapeBlend = smoothstep(Math.min(1, t / 0.55));
+      const soften = smoothstep(Math.min(1, t / 0.5));
       const ringCenter = centroid.clone().addScaledVector(axis, sleeveLen * t);
       for (let j = 0; j < loopCount; j += 1) {
         const p = ringCenter
           .clone()
-          .add(rootOffsets[j].clone().lerp(cuffOffsets[j], shapeBlend));
+          .add(rootOffsets[j].clone().lerp(softOffsets[j], soften));
         pushVertex(p.x, p.y, p.z, j / loopCount, t);
       }
     }

@@ -247,13 +247,34 @@ async function analyzePhoto(buffer: Buffer): Promise<{
     shoulderRow += 1;
   }
 
+  // Classic RGB skin-tone test: catches faces/necks/hands that survive the
+  // span rules (e.g. a chin overlapping the shoulder line).
+  const isSkin = (r: number, g: number, b: number) => {
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    return (
+      r > 95 &&
+      g > 40 &&
+      b > 20 &&
+      max - min > 15 &&
+      Math.abs(r - g) > 15 &&
+      r > g &&
+      r > b
+    );
+  };
+
   for (let y = 0; y < TILE; y += 1) {
     const { left, right } = spans[y];
     const paintAll =
       y < shoulderRow || left === -1 || right - left < TILE * 0.3;
     for (let x = 0; x < TILE; x += 1) {
-      if (paintAll || x < left || x > right) {
-        const i = (y * TILE + x) * 3;
+      const i = (y * TILE + x) * 3;
+      if (
+        paintAll ||
+        x < left ||
+        x > right ||
+        isSkin(tileRaw[i], tileRaw[i + 1], tileRaw[i + 2])
+      ) {
         tileRaw[i] = gr;
         tileRaw[i + 1] = gg;
         tileRaw[i + 2] = gb;
