@@ -74,6 +74,17 @@ export function buildTeeGeometry(params: GarmentParams): THREE.BufferGeometry {
     return halfW - (halfW - shoulderX) * smoothstep(t);
   };
 
+  // Vertical depth taper: the torso keeps full depth up to the chest, then
+  // front and back draw together toward the shoulder seam, so the shoulder
+  // reads as a narrow rounded ridge from above instead of a flat deck.
+  const depthTaper = (y: number) => {
+    if (y <= underarmY) {
+      return 1;
+    }
+    const t = (y - underarmY) / (neckShoulderY - underarmY);
+    return 1 - 0.68 * smoothstep(t);
+  };
+
   // Front/back separation along the armhole edge: zero at the underarm and
   // at the shoulder point, widest in the middle, so the opening reads as a
   // smooth oval when seen from the side.
@@ -136,7 +147,8 @@ export function buildTeeGeometry(params: GarmentParams): THREE.BufferGeometry {
         const x = Math.sign(u - 0.5 || 1) * s * w;
         // Elliptical cross-section, blended into the armhole gap near the
         // side edge so the front/back separate around the arm opening.
-        const zEllipse = panelDepth * Math.sqrt(Math.max(0, 1 - s * s));
+        const zEllipse =
+          panelDepth * depthTaper(y) * Math.sqrt(Math.max(0, 1 - s * s));
         const mix = smoothstep((s - 0.78) / 0.22);
         const gap = armholeGap(y);
         // Soft vertical drape folds: strongest toward the hem, fading to
@@ -177,7 +189,7 @@ export function buildTeeGeometry(params: GarmentParams): THREE.BufferGeometry {
   // shoulder point through a slightly raised midline, so the seam is a soft
   // rounded roll rather than a flat crease. The neckline stays open.
   const topRow = ROWS * panelStride;
-  const seamRise = 0.5 * SCALE;
+  const seamRise = 0.75 * SCALE;
   const shoulderMid: Record<number, number> = {};
   for (let c = 0; c <= COLS; c += 1) {
     if (Math.abs(c / COLS - 0.5) * 2 < neckFrac) {
