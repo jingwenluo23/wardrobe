@@ -192,6 +192,163 @@ export function pickFabricSwatch(
   };
 }
 
+/**
+ * Dense pose/perspective warp from photo space to panel UV space.
+ *
+ * The mesh panel's UVs run side seam -> side seam horizontally at every
+ * height, and hem -> shoulder vertically. This function builds the same
+ * parameterisation over the photo's garment mask:
+ * - per-row left/right garment edges give the horizontal mapping, following
+ *   the real silhouette (drape, pose tilt, perspective),
+ * - shoulder and hem lines fitted through two probe columns give the
+ *   vertical mapping, de-rotating a tilted garment.
+ * Every output pixel is sampled through that mapping, so prints land where
+ * they sit on the real shirt even when the photo is not straight-on.
+ */
+export function warpGarmentTile(input: {
+  data: Buffer | Uint8Array;
+  mask: Uint8Array;
+  width: number;
+  height: number;
+  minX: number;
+  maxX: number;
+  tileSize: number;
+  exclude?: (r: number, g: number, b: number) => boolean;
+}): { tileRaw: Buffer; keep: Uint8Array } {
+  const { data, mask, width, height, minX, maxX, tileSize, exclude } = input;
+
+  // Per-row garment edges, restricted to torso columns so sleeves are not
+  // mistaken for the side seams.
+  const rowLeft = new Int32Array(height).fill(-1);
+  const rowRight = new Int32Array(height).fill(-1);
+  for (let y = 0; y < height; y += 1) {
+    for (let x = minX; x <= maxX; x += 1) {
+      if (mask[y * width + x]) {
+        if (rowLeft[y] === -1) {
+          rowLeft[y] = x;
+        }
+        rowRight[y] = x;
+      }
+    }
+  }
+  // Smooth the edges (5-row moving average over valid rows) to remove
+  // segmentation jitter.
+  const smooth = (edges: Int32Array) => {
+    const source = edges.slice();
+    for (let y = 0; y < height; y += 1) {
+      if (source[y] === -1) {
+        continue;
+      }
+      let sum = 0;
+      let count = 0;
+      for (let dy = -2; dy <= 2; dy += 1) {
+        const yy = y + dy;
+        if (yy >= 0 && yy < height && source[yy] !== -1) {
+          sum += source[yy];
+          count += 1;
+        }
+      }
+      edges[y] = Math.round(sum / count);
+    }
+  };
+  smooth(rowLeft);
+  smooth(rowRight);
+
+  // Shoulder and hem lines through two probe columns (25% / 75% across the
+  // torso). Scanning a few neighbouring columns guards against mask holes.
+  const probe = (xTarget: number) => {
+    let top = -1;
+    let bottom = -1;
+    for (let dx = 0; dx <= 4 && (top === -1 || bottom === -1); dx += 1) {
+      for (const x of [xTarget - dx, xTarget + dx]) {
+        if (x < minX || x > maxX) {
+          continue;
+        }
+        for (let y = 0; y < height; y += 1) {
+          if (mask[y * width + x]) {
+            if (top === -1 || y < top) {
+              top = y;
+            }
+            if (bottom === -1 || y > bottom) {
+              bottom = y;
+            }
+            break;
+          }
+        }
+        for (let y = height - 1; y >= 0; y -= 1) {
+          if (mask[y * width + x]) {
+            if (bottom === -1 || y > bottom) {
+              bottom = y;
+            }
+            break;
+          }
+        }
+      }
+    }
+    return { top, bottom };
+  };
+  const xA = Math.round(minX + (maxX - minX) * 0.25);
+  const xB = Math.round(minX + (maxX - minX) * 0.75);
+  const a = probe(xA);
+  const b = probe(xB);
+
+  const lineAt = (x: number, yA: number, yB: number) => {
+    if (yA === -1 || yB === -1) {
+      return yA !== -1 ? yA : yB;
+    }
+    if (xB === xA) {
+      return yA;
+    }
+    return yA + ((x - xA) / (xB - xA)) * (yB - yA);
+  };
+
+  const tileRaw = Buffer.alloc(tileSize * tileSize * 3);
+  const keep = new Uint8Array(tileSize * tileSize);
+
+  for (let ty = 0; ty < tileSize; ty += 1) {
+    const v = ty / (tileSize - 1);
+    for (let tx = 0; tx < tileSize; tx += 1) {
+      const u = tx / (tileSize - 1);
+
+      // First estimate of the source column, refined once through the
+      // row-edge mapping (the two are mutually dependent).
+      let sx = minX + u * (maxX - minX);
+      let sy = 0;
+      for (let iter = 0; iter < 2; iter += 1) {
+        const yTop = lineAt(sx, a.top, b.top);
+        const yBottom = lineAt(sx, a.bottom, b.bottom);
+        if (yTop === -1 || yBottom === -1 || yBottom - yTop < 4) {
+          break;
+        }
+        sy = clampInt(Math.round(yTop + v * (yBottom - yTop)), 0, height - 1);
+        const left = rowLeft[sy];
+        const right = rowRight[sy];
+        if (left !== -1 && right - left >= 4) {
+          sx = left + u * (right - left);
+        }
+      }
+      const sxi = clampInt(Math.round(sx), 0, width - 1);
+      const si = sy * width + sxi;
+      const ti = (ty * tileSize + tx) * 3;
+      const r = data[si * 3];
+      const g = data[si * 3 + 1];
+      const bch = data[si * 3 + 2];
+      tileRaw[ti] = r;
+      tileRaw[ti + 1] = g;
+      tileRaw[ti + 2] = bch;
+      if (mask[si] && !(exclude && exclude(r, g, bch))) {
+        keep[ty * tileSize + tx] = 1;
+      }
+    }
+  }
+
+  return { tileRaw, keep };
+}
+
+function clampInt(value: number, min: number, max: number) {
+  return value < min ? min : value > max ? max : value;
+}
+
 export function rgbToHex(r: number, g: number, b: number) {
   const toHex = (value: number) =>
     Math.max(0, Math.min(255, Math.round(value)))
@@ -386,8 +543,6 @@ export async function segmentGarment(
     if (minX >= maxX || minY >= maxY) {
       return null;
     }
-    const boxW = maxX - minX + 1;
-    const boxH = maxY - minY + 1;
 
     // Garment colour: median of the masked pixels.
     const rs: number[] = [];
@@ -412,28 +567,19 @@ export async function segmentGarment(
     const gg = median(gs);
     const gb = median(bs);
 
-    // Build the texture tile: sample the bounding box into a TILE x TILE
-    // image, then inpaint non-garment pixels (neck opening, seams, skin)
-    // from the surrounding fabric so no ghost collar or flat patches appear.
-    const tileRaw = Buffer.alloc(TILE * TILE * 3);
-    const keep = new Uint8Array(TILE * TILE);
-    for (let ty = 0; ty < TILE; ty += 1) {
-      const sy = minY + Math.min(boxH - 1, Math.floor((ty / TILE) * boxH));
-      for (let tx = 0; tx < TILE; tx += 1) {
-        const sx = minX + Math.min(boxW - 1, Math.floor((tx / TILE) * boxW));
-        const si = sy * width + sx;
-        const ti = (ty * TILE + tx) * 3;
-        const r = data[si * 3];
-        const g = data[si * 3 + 1];
-        const b = data[si * 3 + 2];
-        tileRaw[ti] = r;
-        tileRaw[ti + 1] = g;
-        tileRaw[ti + 2] = b;
-        if (mask[si] && !isSkinTone(r, g, b)) {
-          keep[ty * TILE + tx] = 1;
-        }
-      }
-    }
+    // Build the texture tile through the dense pose/perspective warp, then
+    // inpaint non-garment pixels (neck opening, seams, skin) from the
+    // surrounding fabric so no ghost collar or flat patches appear.
+    const { tileRaw, keep } = warpGarmentTile({
+      data,
+      mask,
+      width,
+      height,
+      minX,
+      maxX,
+      tileSize: TILE,
+      exclude: isSkinTone,
+    });
     inpaintTile(tileRaw, keep, TILE, [gr, gg, gb]);
 
     // Plain fabric swatch for the sleeves/collar, and the base colour from
