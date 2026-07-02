@@ -26,7 +26,10 @@ function loadTexture(url?: string) {
 
 function fabricMaterial(color: string, map: THREE.Texture | null) {
   return new THREE.MeshPhysicalMaterial({
-    color,
+    // three.js multiplies the map by the material colour, so textured
+    // surfaces must stay white or the photo gets darkened and prints are
+    // crushed. Plain surfaces carry the fabric colour directly.
+    color: map ? "#ffffff" : color,
     map: map ?? undefined,
     roughness: 0.88,
     metalness: 0,

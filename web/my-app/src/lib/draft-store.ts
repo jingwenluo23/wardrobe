@@ -55,6 +55,8 @@ type StoredDraft = {
   segmentationConfidence: number;
   extractedTextureUrl?: string;
   extractedBackTextureUrl?: string;
+  /** False while the background extraction task is still running. */
+  extractionReady: boolean;
 };
 
 const STAGE_LABELS = [
@@ -285,6 +287,8 @@ async function analyzePhoto(buffer: Buffer): Promise<{
   const tile = await sharp(tileRaw, {
     raw: { width: TILE, height: TILE, channels: 3 },
   })
+    // Gentle local contrast so prints stay clearly visible on the mesh.
+    .clahe({ width: 128, height: 128, maxSlope: 2 })
     .jpeg({ quality: 78 })
     .toBuffer();
   const textureUrl = "data:image/jpeg;base64," + tile.toString("base64");
@@ -317,15 +321,6 @@ export async function createDraft(input: {
   const back = await fileToDataUrl(input.backPhoto);
   const side = input.sidePhoto ? await fileToDataUrl(input.sidePhoto) : null;
 
-  // Preferred path: ML clothes segmentation (SegFormer). Falls back to the
-  // colour-heuristic extractor when the model is unavailable.
-  const frontSeg = await segmentGarment(front.buffer, input.category);
-  const backSeg = await segmentGarment(back.buffer, input.category);
-  const usedModel = Boolean(frontSeg);
-  const { color, textureUrl } = frontSeg ?? (await analyzePhoto(front.buffer));
-  const backTextureUrl = (backSeg ?? (await analyzePhoto(back.buffer)))
-    .textureUrl;
-
   const photos: DraftPhoto[] = [
     { url: front.dataUrl, role: "front" },
     { url: back.dataUrl, role: "back" },
@@ -334,36 +329,77 @@ export async function createDraft(input: {
     photos.push({ url: side.dataUrl, role: "side" });
   }
 
-  // Model-based extraction is far more reliable than the colour heuristic;
-  // extra reference views nudge confidence up either way.
-  const segmentationConfidence = Math.min(
-    0.99,
-    (usedModel ? 0.93 : 0.78) + photos.length * 0.02,
-  );
+  // Provisional colour so the card renders immediately; the extraction task
+  // replaces it with the true garment colour.
+  const stats = await sharp(front.buffer).rotate().stats();
+  const toHex = (value: number) =>
+    Math.round(value).toString(16).padStart(2, "0");
+  const provisionalColor =
+    "#" +
+    toHex(stats.channels[0]?.mean ?? 150) +
+    toHex(stats.channels[1]?.mean ?? 150) +
+    toHex(stats.channels[2]?.mean ?? 150);
 
   const stored: StoredDraft = {
     id,
     name: input.name,
     category: input.category,
-    color,
+    color: provisionalColor,
     createdAtMs: Date.now(),
     photos,
     params,
     template,
-    segmentationConfidence,
-    extractedTextureUrl: textureUrl,
-    extractedBackTextureUrl: backTextureUrl,
+    segmentationConfidence: 0.8,
+    extractionReady: false,
   };
 
   drafts.set(id, stored);
+
+  // Extraction runs in the background so the upload request returns right
+  // away; the outfit card's progress bar covers the wait and the mesh flips
+  // to ready once both the timer and the extraction are done.
+  void (async () => {
+    try {
+      // Preferred path: ML clothes segmentation (SegFormer). Falls back to
+      // the colour-heuristic extractor when the model is unavailable.
+      const frontSeg = await segmentGarment(front.buffer, input.category);
+      const backSeg = await segmentGarment(back.buffer, input.category);
+      const usedModel = Boolean(frontSeg);
+      const frontResult = frontSeg ?? (await analyzePhoto(front.buffer));
+      const backResult = backSeg ?? (await analyzePhoto(back.buffer));
+
+      stored.color = frontResult.color;
+      stored.extractedTextureUrl = frontResult.textureUrl;
+      stored.extractedBackTextureUrl = backResult.textureUrl;
+      // Model-based extraction is far more reliable than the heuristic;
+      // extra reference views nudge confidence up either way.
+      stored.segmentationConfidence = Math.min(
+        0.99,
+        (usedModel ? 0.93 : 0.78) + photos.length * 0.02,
+      );
+    } catch (error) {
+      console.warn(
+        "[draft-store] extraction failed, keeping plain colour:",
+        error instanceof Error ? error.message : error,
+      );
+    } finally {
+      stored.extractionReady = true;
+    }
+  })();
+
   return serializeDraft(stored);
 }
 
 function serializeDraft(stored: StoredDraft): ApiDraft {
   const elapsed = Date.now() - stored.createdAtMs;
   const ratio = Math.min(1, elapsed / PIPELINE_MS);
-  const progress = Math.round(ratio * 100);
-  const isReady = ratio >= 1;
+  // The mesh is ready when the staged timer has run its course AND the
+  // background extraction has finished (the model may still be downloading
+  // on its very first run). Progress holds at 90% while extraction runs.
+  const isReady = ratio >= 1 && stored.extractionReady;
+  const progress = isReady
+    ? 100
+    : Math.min(stored.extractionReady ? 99 : 90, Math.round(ratio * 100));
 
   const totalStages = STAGE_LABELS.length;
   const activeIndex = isReady

@@ -200,6 +200,9 @@ export async function segmentGarment(
     const tile = await sharp(tileRaw, {
       raw: { width: TILE, height: TILE, channels: 3 },
     })
+      // Gentle local contrast so washed/tonal prints stay clearly visible
+      // on the mesh instead of sinking into the fabric colour.
+      .clahe({ width: 128, height: 128, maxSlope: 2 })
       .jpeg({ quality: 80 })
       .toBuffer();
 
