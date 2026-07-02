@@ -132,20 +132,43 @@ export async function segmentGarment(
       return null;
     }
 
-    // Tight bounding box of the mask.
+    // Torso-aware crop: the mesh's front/back panels only span the torso
+    // (side seam to side seam), but the garment mask includes the sleeves.
+    // Columns through the torso are tall; columns that only cross a sleeve
+    // are short. Restricting the crop to shoulder-height columns keeps the
+    // print's position and scale close to 1:1 with the real shirt.
+    const colHeight = new Array<number>(width).fill(0);
+    for (let x = 0; x < width; x += 1) {
+      let count = 0;
+      for (let y = 0; y < height; y += 1) {
+        if (mask[y * width + x]) {
+          count += 1;
+        }
+      }
+      colHeight[x] = count;
+    }
+    const maxColHeight = Math.max(...colHeight);
+    const isTorsoCol = (x: number) => colHeight[x] >= maxColHeight * 0.55;
+
     let minX = width;
     let maxX = 0;
     let minY = height;
     let maxY = 0;
-    for (let y = 0; y < height; y += 1) {
-      for (let x = 0; x < width; x += 1) {
+    for (let x = 0; x < width; x += 1) {
+      if (!isTorsoCol(x)) {
+        continue;
+      }
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      for (let y = 0; y < height; y += 1) {
         if (mask[y * width + x]) {
-          if (x < minX) minX = x;
-          if (x > maxX) maxX = x;
           if (y < minY) minY = y;
           if (y > maxY) maxY = y;
         }
       }
+    }
+    if (minX >= maxX || minY >= maxY) {
+      return null;
     }
     const boxW = maxX - minX + 1;
     const boxH = maxY - minY + 1;

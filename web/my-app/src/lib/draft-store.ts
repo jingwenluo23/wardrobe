@@ -170,33 +170,55 @@ async function analyzePhoto(buffer: Buffer): Promise<{
     Math.round(value).toString(16).padStart(2, "0");
   const color = "#" + toHex(gr) + toHex(gg) + toHex(gb);
 
-  // Mask pixels close to the garment colour, then take a robust bounding
-  // box (3rd-97th percentile) so stray background matches don't blow it up.
-  const xs: number[] = [];
+  // Mask pixels close to the garment colour. The crop is then restricted to
+  // torso columns (tall mask columns) so the sleeves don't stretch the
+  // texture: the mesh panels only span side seam to side seam, and matching
+  // that region keeps print placement close to 1:1 with the real shirt.
+  const colCount = new Array<number>(MASK_SIZE).fill(0);
   const ys: number[] = [];
+  const maskGrid = new Uint8Array(MASK_SIZE * MASK_SIZE);
   for (let y = 0; y < MASK_SIZE; y += 1) {
     for (let x = 0; x < MASK_SIZE; x += 1) {
       const [r, g, b] = pixelAt(x, y);
       const dist = Math.abs(r - gr) + Math.abs(g - gg) + Math.abs(b - gb);
       if (dist < 110) {
-        xs.push(x);
+        maskGrid[y * MASK_SIZE + x] = 1;
+        colCount[x] += 1;
+      }
+    }
+  }
+  const maxColCount = Math.max(...colCount);
+  let colLeft = -1;
+  let colRight = -1;
+  for (let x = 0; x < MASK_SIZE; x += 1) {
+    if (colCount[x] >= maxColCount * 0.55) {
+      if (colLeft === -1) {
+        colLeft = x;
+      }
+      colRight = x;
+    }
+  }
+  for (let y = 0; y < MASK_SIZE; y += 1) {
+    for (let x = Math.max(0, colLeft); x <= colRight; x += 1) {
+      if (maskGrid[y * MASK_SIZE + x]) {
         ys.push(y);
+        break;
       }
     }
   }
 
   let region = { left: 0, top: 0, width: srcW, height: srcH };
-  if (xs.length > MASK_SIZE) {
+  if (colLeft !== -1 && ys.length > 4) {
     const pct = (arr: number[], p: number) => {
       const sorted = [...arr].sort((a, b) => a - b);
       return sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * p))];
     };
     const sx = srcW / MASK_SIZE;
     const sy = srcH / MASK_SIZE;
-    const left = Math.max(0, Math.floor(pct(xs, 0.03) * sx));
-    const right = Math.min(srcW, Math.ceil((pct(xs, 0.97) + 1) * sx));
-    const top = Math.max(0, Math.floor(pct(ys, 0.03) * sy));
-    const bottom = Math.min(srcH, Math.ceil((pct(ys, 0.97) + 1) * sy));
+    const left = Math.max(0, Math.floor(colLeft * sx));
+    const right = Math.min(srcW, Math.ceil((colRight + 1) * sx));
+    const top = Math.max(0, Math.floor(pct(ys, 0.02) * sy));
+    const bottom = Math.min(srcH, Math.ceil((pct(ys, 0.98) + 1) * sy));
     if (right - left > srcW * 0.12 && bottom - top > srcH * 0.12) {
       region = { left, top, width: right - left, height: bottom - top };
     }

@@ -163,7 +163,10 @@ export function buildTeeGeometry(params: GarmentParams): THREE.BufferGeometry {
           (zEllipse / panelDepth) *
           smoothstep((0.9 - v) / 0.9);
         const z = (front ? 1 : -1) * (zEllipse + (gap - zEllipse) * mix + fold);
-        pushVertex(x, y, z, front ? u : 1 - u, v);
+        // Texture V follows absolute height, not the per-column row index,
+        // so prints stay straight instead of bending along the neckline.
+        const vTex = (y - hemY) / (neckShoulderY - hemY);
+        pushVertex(x, y, z, front ? u : 1 - u, vTex);
       }
     }
     for (let r = 0; r < ROWS; r += 1) {
