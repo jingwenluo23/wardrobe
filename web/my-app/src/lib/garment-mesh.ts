@@ -43,12 +43,12 @@ export type GarmentParams = {
 export const defaultTeeParams: GarmentParams = {
   bodyWidth: 55,
   bodyLength: 70,
-  bodyDepth: 20,
+  bodyDepth: 24,
   neckWidthFront: 18.5,
   neckDropFront: 8.5,
   neckDropBack: 2.5,
   shoulderSlope: 16,
-  armholeDepth: 23,
+  armholeDepth: 20,
   sleeveLength: 21,
   sleeveOpening: 17,
 };

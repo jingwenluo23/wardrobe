@@ -118,8 +118,6 @@ async function analyzePhoto(buffer: Buffer): Promise<{
   color: string;
   textureUrl: string;
 }> {
-  // Dominant colour via sharp's stats, and a small isolated texture tile
-  // (a centre crop) projected onto the mesh. No faces are reproduced.
   const image = sharp(buffer).rotate();
   const stats = await image.stats();
   const [r, g, b] = stats.channels;
@@ -128,10 +126,22 @@ async function analyzePhoto(buffer: Buffer): Promise<{
   const color =
     "#" + toHex(r?.mean ?? 180) + toHex(g?.mean ?? 180) + toHex(b?.mean ?? 180);
 
+  // Extract the garment body region rather than a raw centre crop of the full
+  // image. For a typical waist-up fashion photo the model's head occupies
+  // roughly the top 20 % of the frame; the shirt torso then runs from ~20 %
+  // to ~82 %. Sampling this band and discarding a 5 % sliver on each side
+  // captures collar-to-hem fabric without reproducing the model's face.
+  const { width = 512, height = 512 } = await sharp(buffer).rotate().metadata();
+  const top = Math.round(height * 0.20);
+  const cropH = Math.max(1, Math.round(height * 0.62));
+  const leftPad = Math.round(width * 0.05);
+  const cropW = Math.max(1, width - 2 * leftPad);
+
   const tile = await sharp(buffer)
     .rotate()
+    .extract({ left: leftPad, top, width: cropW, height: cropH })
     .resize(256, 256, { fit: "cover", position: "centre" })
-    .jpeg({ quality: 72 })
+    .jpeg({ quality: 80 })
     .toBuffer();
   const textureUrl = "data:image/jpeg;base64," + tile.toString("base64");
 
