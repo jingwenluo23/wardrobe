@@ -31,6 +31,84 @@ const longSleeve: Partial<GarmentParams> = {
   armholeDepth: 21,
 };
 
+/**
+ * Bottoms preset factory: every pants/shorts type is the same leg-loft
+ * block with different measurements (cm) and trims.
+ */
+function bottomsPresets(): GarmentTemplateDef[] {
+  const make = (
+    id: string,
+    label: string,
+    dims: {
+      inseam: number;
+      thigh: number;
+      open: number;
+      waist?: number;
+      hip?: number;
+      rise?: number;
+      depth?: number;
+    },
+    trims?: { cuff?: "ribbed"; cargo?: boolean },
+  ): GarmentTemplateDef => ({
+    id,
+    label,
+    category: "Bottoms",
+    params: {
+      ...defaultTeeParams,
+      bodyDepth: dims.depth ?? 22,
+      waistWidth: dims.waist ?? 41,
+      hipWidth: dims.hip ?? 51,
+      rise: dims.rise ?? 28,
+      inseam: dims.inseam,
+      thighWidth: dims.thigh,
+      legOpening: dims.open,
+    },
+    features: {
+      ...defaultTeeFeatures,
+      archetype: "bottoms",
+      cuff: trims?.cuff ?? "raw",
+      cargoPockets: trims?.cargo ?? false,
+    },
+  });
+
+  return [
+    // Core everyday
+    make("bottom-jeans", "Jeans", { inseam: 78, thigh: 33, open: 21 }),
+    make("bottom-trousers", "Trousers / pants", { inseam: 80, thigh: 34, open: 23 }),
+    make("bottom-chinos", "Chinos", { inseam: 78, thigh: 32, open: 19 }),
+    make("bottom-cargo", "Cargo pants", { inseam: 78, thigh: 36, open: 24 }, { cargo: true }),
+    make("bottom-joggers", "Joggers", { inseam: 74, thigh: 34, open: 13 }, { cuff: "ribbed" }),
+    make("bottom-sweatpants", "Sweatpants", { inseam: 76, thigh: 38, open: 16 }, { cuff: "ribbed" }),
+    // Formal
+    make("bottom-dress-trousers", "Dress trousers", { inseam: 82, thigh: 34, open: 23 }),
+    make("bottom-suit-pants", "Suit pants", { inseam: 82, thigh: 34, open: 22 }),
+    make("bottom-tuxedo-pants", "Tuxedo pants", { inseam: 82, thigh: 34, open: 22 }),
+    // Sports / active
+    make("bottom-shorts", "Shorts (sports)", { inseam: 22, thigh: 34, open: 30 }),
+    make("bottom-running-shorts", "Running shorts", { inseam: 10, thigh: 32, open: 32 }),
+    make("bottom-training-shorts", "Training shorts", { inseam: 18, thigh: 34, open: 30 }),
+    make("bottom-basketball-shorts", "Basketball shorts", { inseam: 28, thigh: 38, open: 34 }),
+    make("bottom-compression-leggings", "Compression leggings", {
+      inseam: 78,
+      thigh: 26,
+      open: 11,
+      waist: 37,
+      hip: 46,
+      depth: 19,
+    }),
+    make("bottom-track-pants", "Track pants", { inseam: 78, thigh: 36, open: 18 }),
+    // Casual / seasonal shorts
+    make("bottom-denim-shorts", "Denim shorts", { inseam: 26, thigh: 34, open: 28 }),
+    make("bottom-chino-shorts", "Chino shorts", { inseam: 24, thigh: 32, open: 26 }),
+    make("bottom-cargo-shorts", "Cargo shorts", { inseam: 26, thigh: 36, open: 30 }, { cargo: true }),
+    make("bottom-board-shorts", "Beach / swim shorts", { inseam: 30, thigh: 36, open: 32 }),
+    // Other / special
+    make("bottom-work-pants", "Work pants (utility)", { inseam: 80, thigh: 36, open: 24 }, { cargo: true }),
+    make("bottom-harem-pants", "Harem pants", { inseam: 72, thigh: 44, open: 14, rise: 34, hip: 56 }),
+    make("bottom-linen-pants", "Linen pants", { inseam: 80, thigh: 36, open: 24 }),
+  ];
+}
+
 export const garmentTemplates: GarmentTemplateDef[] = [
   {
     id: "top-standard-tee",
@@ -100,13 +178,8 @@ export const garmentTemplates: GarmentTemplateDef[] = [
     },
     features: { ...defaultTeeFeatures, sleeveTaper: 0.75 },
   },
-  {
-    id: "bottom-straight",
-    label: "Straight bottom",
-    category: "Bottoms",
-    params: { ...defaultTeeParams, bodyWidth: 46, bodyLength: 100 },
-    features: { ...defaultTeeFeatures },
-  },
+  // --- Bottoms archetype ---------------------------------------------------
+  ...bottomsPresets(),
   {
     id: "shoe-low",
     label: "Low shoe",
@@ -118,8 +191,17 @@ export const garmentTemplates: GarmentTemplateDef[] = [
 
 const byId = new Map(garmentTemplates.map((t) => [t.id, t]));
 
+// Ids that shipped before the registry existed.
+const LEGACY_ALIASES: Record<string, string> = {
+  "bottom-straight": "bottom-jeans",
+  "top-fitted": "top-standard-tee",
+};
+
 export function getTemplate(id: string | null | undefined) {
-  return (id && byId.get(id)) || null;
+  if (!id) {
+    return null;
+  }
+  return byId.get(id) ?? byId.get(LEGACY_ALIASES[id] ?? "") ?? null;
 }
 
 export function templatesForCategory(category: string): GarmentTemplateDef[] {

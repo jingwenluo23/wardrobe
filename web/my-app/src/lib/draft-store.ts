@@ -560,7 +560,7 @@ function serializeDraft(stored: StoredDraft): ApiDraft {
         extractedBackTextureUrl: stored.extractedBackTextureUrl,
         fabricTextureUrl: stored.fabricTextureUrl,
         color: stored.color,
-        bounds: boundsFromParams(stored.params),
+        bounds: boundsFromParams(stored.params, stored.features),
       }
     : undefined;
 

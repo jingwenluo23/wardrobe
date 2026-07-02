@@ -38,11 +38,22 @@ const smoothstep = (t: number) => {
 
 /**
  * Build a garment BufferGeometry from CAD-style params + feature toggles.
- * With default tee features this reproduces the original t-shirt exactly.
+ * Dispatches to the archetype block; with default tee features this
+ * reproduces the original t-shirt exactly.
  */
 export function buildGarmentGeometry(
   params: GarmentParams,
   features: GarmentFeatures = defaultTeeFeatures,
+): THREE.BufferGeometry {
+  if (features.archetype === "bottoms") {
+    return buildBottomsGeometry(params, features);
+  }
+  return buildTopGeometry(params, features);
+}
+
+function buildTopGeometry(
+  params: GarmentParams,
+  features: GarmentFeatures,
 ): THREE.BufferGeometry {
   const halfW = (params.bodyWidth / 2) * SCALE;
   const length = params.bodyLength * SCALE;
@@ -581,6 +592,264 @@ export function buildGarmentGeometry(
   geometry.setIndex(indices);
   // Material groups: 0 = front panel (front photo), 1 = back panel (back
   // photo), 2 = everything else (sleeves, seams, trims -> plain fabric).
+  geometry.addGroup(0, frontIndexEnd, 0);
+  geometry.addGroup(frontIndexEnd, backIndexEnd - frontIndexEnd, 1);
+  geometry.addGroup(backIndexEnd, indices.length - backIndexEnd, 2);
+  geometry.computeVertexNormals();
+  geometry.computeBoundingBox();
+  geometry.computeBoundingSphere();
+  return geometry;
+}
+
+// ---------------------------------------------------------------------------
+// Bottoms archetype: trousers / shorts built from two mirrored leg lofts.
+//
+// Each leg is a tube of elliptical half-arcs (front + back emitted as
+// separate strips so the panels get their own texture groups). Above the
+// crotch the legs' inner edges are lifted to the garment depth so the fabric
+// is continuous across the hip block; below the crotch the lift drops to
+// zero and the legs separate. A waistband ring caps the top, and features
+// add ribbed jogger cuffs and cargo pockets.
+// ---------------------------------------------------------------------------
+
+const LEG_SEGS = 22; // arc segments per panel half
+const LEG_ROWS = 44; // rows from waist to hem
+
+function buildBottomsGeometry(
+  params: GarmentParams,
+  features: GarmentFeatures,
+): THREE.BufferGeometry {
+  const waistHalf = ((params.waistWidth ?? 42) / 2) * SCALE;
+  const hipHalf = ((params.hipWidth ?? 51) / 2) * SCALE;
+  const rise = (params.rise ?? 28) * SCALE;
+  const inseam = (params.inseam ?? 78) * SCALE;
+  const thighHalf = ((params.thighWidth ?? 34) / 2) * SCALE;
+  const openHalf = ((params.legOpening ?? 22) / 2) * SCALE;
+  const depth = (params.bodyDepth / 2) * SCALE;
+
+  const totalH = rise + inseam;
+  const waistY = totalH / 2;
+  const crotchY = waistY - rise;
+  const hemY = -totalH / 2;
+
+  // Per-leg radius (half-width of one leg) as a function of height. The
+  // silhouette stays continuous (waist -> hip -> opening); the thigh
+  // measurement acts as a mid-leg fullness factor (baggy vs slim).
+  const thighFullness = clamp(thighHalf / (hipHalf / 2), 0.85, 1.3);
+  const legRadius = (y: number) => {
+    if (y >= crotchY) {
+      const t = (waistY - y) / rise;
+      return waistHalf / 2 + (hipHalf / 2 - waistHalf / 2) * smoothstep(t);
+    }
+    const t = (crotchY - y) / inseam;
+    const base = hipHalf / 2 + (openHalf - hipHalf / 2) * Math.pow(t, 0.85);
+    const fullness =
+      1 + (thighFullness - 1) * Math.sin(Math.PI * Math.min(1, t * 1.6)) * 0.4;
+    return base * fullness;
+  };
+  const crotchRadius = legRadius(crotchY);
+
+  // Front/back depth of a leg's cross-section.
+  const legDepth = (y: number) => {
+    if (y >= crotchY) {
+      return depth;
+    }
+    const t = (crotchY - y) / inseam;
+    const hemDepth = Math.min(depth, openHalf * 0.95);
+    return depth + (hemDepth - depth) * smoothstep(t * 1.1);
+  };
+
+  // Above the crotch the inner edges lift to full garment depth so the
+  // front/back fabric runs continuously across both legs; at the crotch it
+  // falls to zero and the legs separate.
+  const innerLift = (y: number) => {
+    if (y <= crotchY) {
+      return 0;
+    }
+    return depth * 0.85 * smoothstep((y - crotchY) / (rise * 0.7));
+  };
+
+  const positions: number[] = [];
+  const uvs: number[] = [];
+  const indices: number[] = [];
+
+  const pushVertex = (x: number, y: number, z: number, u: number, v: number) => {
+    positions.push(x, y, z);
+    uvs.push(u, v);
+    return positions.length / 3 - 1;
+  };
+
+  // Texture space: u spans the garment's full width, v runs hem -> waist.
+  const texHalfW = hipHalf * 1.25;
+  const uvFor = (x: number, y: number, front: boolean) => {
+    const u = 0.5 + (front ? x : -x) / (2 * texHalfW);
+    const v = (y - hemY) / totalH;
+    return [clamp(u, 0, 1), v] as const;
+  };
+
+  // One panel strip: half-arcs of one leg, front or back.
+  const buildLegPanel = (side: 1 | -1, front: boolean) => {
+    const rows: number[][] = [];
+    for (let r = 0; r <= LEG_ROWS; r += 1) {
+      const y = waistY - (totalH * r) / LEG_ROWS;
+      const rx = legRadius(y);
+      const rz = legDepth(y) * (front ? 1 : 0.92);
+      const lift = innerLift(y);
+      // Leg centre: inner edges meet at x=0 above the crotch, then the
+      // centre freezes so the legs part symmetrically below it.
+      const cx = side * (y >= crotchY ? rx : crotchRadius);
+      const ring: number[] = [];
+      for (let j = 0; j <= LEG_SEGS; j += 1) {
+        const phi = (j / LEG_SEGS) * Math.PI;
+        const x = cx - side * Math.cos(phi) * rx;
+        let z = Math.sin(phi) * rz;
+        // Blend the inner quarter of the arc up to the lift height so the
+        // hip front/back is continuous across the two legs.
+        const innerW = smoothstep((0.3 - phi / Math.PI) / 0.3);
+        z = z + (lift - z) * innerW * (lift > 0 ? 1 : 0);
+        if (!front) {
+          z = -z;
+        }
+        const [u, v] = uvFor(x, y, front);
+        ring.push(pushVertex(x, y, z, u, v));
+      }
+      rows.push(ring);
+    }
+    for (let r = 0; r < LEG_ROWS; r += 1) {
+      for (let j = 0; j < LEG_SEGS; j += 1) {
+        const a = rows[r][j];
+        const b = rows[r][j + 1];
+        const d = rows[r + 1][j];
+        const e = rows[r + 1][j + 1];
+        // Outward winding flips with panel side and leg side.
+        const flip = (front ? 1 : -1) * side;
+        if (flip > 0) {
+          indices.push(a, d, b, b, d, e);
+        } else {
+          indices.push(a, b, d, b, e, d);
+        }
+      }
+    }
+  };
+
+  // Front panels of both legs first, then back panels, so the texture
+  // groups stay contiguous.
+  buildLegPanel(-1, true);
+  buildLegPanel(1, true);
+  const frontIndexEnd = indices.length;
+  buildLegPanel(-1, false);
+  buildLegPanel(1, false);
+  const backIndexEnd = indices.length;
+
+  // --- Block: waistband ----------------------------------------------------
+  // An elliptical band hugging the top opening, folding slightly inward.
+  {
+    const bandH = 3.5 * SCALE;
+    const segs = 48;
+    const ringAt = (yOffset: number, scale: number, v: number) => {
+      const ring: number[] = [];
+      for (let j = 0; j <= segs; j += 1) {
+        const beta = (j / segs) * Math.PI * 2;
+        const x = Math.cos(beta) * waistHalf * scale;
+        const z = Math.sin(beta) * depth * 0.93 * scale;
+        ring.push(pushVertex(x, waistY + yOffset, z, j / segs, v));
+      }
+      return ring;
+    };
+    const r0 = ringAt(-0.8 * SCALE, 1.02, 0);
+    const r1 = ringAt(bandH, 0.99, 0.5);
+    const r2 = ringAt(bandH * 0.75, 0.9, 1);
+    const stitch = (ra: number[], rb: number[]) => {
+      for (let j = 0; j < segs; j += 1) {
+        indices.push(ra[j], rb[j], ra[j + 1], ra[j + 1], rb[j], rb[j + 1]);
+      }
+    };
+    stitch(r0, r1);
+    stitch(r1, r2);
+  }
+
+  // --- Block: ribbed jogger cuffs -------------------------------------------
+  if (features.cuff === "ribbed") {
+    for (const side of [-1, 1] as const) {
+      const cuffH = 4 * SCALE;
+      const rx = legRadius(hemY) * 0.66;
+      const rz = legDepth(hemY) * 0.66;
+      const cx = side * crotchRadius;
+      const segs = 28;
+      const ringAt = (yOffset: number, scale: number, v: number) => {
+        const ring: number[] = [];
+        for (let j = 0; j <= segs; j += 1) {
+          const beta = (j / segs) * Math.PI * 2;
+          ring.push(
+            pushVertex(
+              cx + Math.cos(beta) * rx * scale,
+              hemY + yOffset,
+              Math.sin(beta) * rz * scale,
+              j / segs,
+              v,
+            ),
+          );
+        }
+        return ring;
+      };
+      const r0 = ringAt(1.2 * SCALE, 1.25, 0);
+      const r1 = ringAt(-cuffH * 0.4, 1, 0.5);
+      const r2 = ringAt(-cuffH, 0.96, 1);
+      for (const [ra, rb] of [
+        [r0, r1],
+        [r1, r2],
+      ] as const) {
+        for (let j = 0; j < segs; j += 1) {
+          indices.push(ra[j], rb[j], ra[j + 1], ra[j + 1], rb[j], rb[j + 1]);
+        }
+      }
+    }
+  }
+
+  // --- Block: cargo pockets --------------------------------------------------
+  if (features.cargoPockets) {
+    for (const side of [-1, 1] as const) {
+      const yTop = crotchY - 6 * SCALE;
+      const yBottom = yTop - 17 * SCALE;
+      const rxMid = legRadius((yTop + yBottom) / 2);
+      const xFace = side * (side * (side * crotchRadius) + rxMid + 1.4 * SCALE);
+      const xRoot = side * (crotchRadius + rxMid * 0.98);
+      const zHalf = 6 * SCALE;
+      // Outer face corners + root corners.
+      const f = [
+        pushVertex(xFace, yTop, zHalf, 0, 0.05),
+        pushVertex(xFace, yTop, -zHalf, 0.05, 0.05),
+        pushVertex(xFace, yBottom, -zHalf, 0.05, 0),
+        pushVertex(xFace, yBottom, zHalf, 0, 0),
+      ];
+      const r = [
+        pushVertex(xRoot, yTop + 0.8 * SCALE, zHalf, 0, 0.05),
+        pushVertex(xRoot, yTop + 0.8 * SCALE, -zHalf, 0.05, 0.05),
+        pushVertex(xRoot, yBottom - 0.4 * SCALE, -zHalf, 0.05, 0),
+        pushVertex(xRoot, yBottom - 0.4 * SCALE, zHalf, 0, 0),
+      ];
+      const quad = (a: number, b: number, c: number, d: number) => {
+        if (side > 0) {
+          indices.push(a, b, c, a, c, d);
+        } else {
+          indices.push(a, c, b, a, d, c);
+        }
+      };
+      quad(f[0], f[1], f[2], f[3]); // outer face
+      quad(r[0], r[1], f[1], f[0]); // top
+      quad(f[3], f[2], r[2], r[3]); // bottom
+      quad(r[0], f[0], f[3], r[3]); // front side
+      quad(f[1], r[1], r[2], f[2]); // back side
+    }
+  }
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute(
+    "position",
+    new THREE.Float32BufferAttribute(positions, 3),
+  );
+  geometry.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
+  geometry.setIndex(indices);
   geometry.addGroup(0, frontIndexEnd, 0);
   geometry.addGroup(frontIndexEnd, backIndexEnd - frontIndexEnd, 1);
   geometry.addGroup(backIndexEnd, indices.length - backIndexEnd, 2);

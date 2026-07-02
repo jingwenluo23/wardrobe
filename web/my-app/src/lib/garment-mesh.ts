@@ -16,14 +16,18 @@ export type GarmentTemplate = string;
  * read these to decide which trims to build.
  */
 export type GarmentFeatures = {
+  /** Which geometry archetype builds this garment. Defaults to "top". */
+  archetype?: "top" | "bottoms";
   /** Neck opening finish: ribbed crew band or an attached hood. */
   neckFinish: "band" | "hood";
   /** Ribbed sweatshirt-style band at the bottom hem. */
   hemBand: boolean;
-  /** Sleeve-end finish: raw edge or a snug ribbed cuff. */
+  /** Sleeve/leg-end finish: raw edge or a snug ribbed cuff (joggers). */
   cuff: "raw" | "ribbed";
   /** Sleeve width at the opening relative to the root (1 = straight tube). */
   sleeveTaper: number;
+  /** Bottoms: boxy utility pockets on the outer thighs. */
+  cargoPockets?: boolean;
 };
 
 export const defaultTeeFeatures: GarmentFeatures = {
@@ -60,6 +64,20 @@ export type GarmentParams = {
   sleeveLength: number;
   /** Opening width of the sleeve hem relative to the armhole. */
   sleeveOpening: number;
+
+  // --- Bottoms archetype (present when features.archetype === "bottoms") ---
+  /** Flat waist width. */
+  waistWidth?: number;
+  /** Flat hip width (widest point). */
+  hipWidth?: number;
+  /** Waist-to-crotch length. */
+  rise?: number;
+  /** Crotch-to-hem length (long pants ~78, shorts 10-30). */
+  inseam?: number;
+  /** Flat single-leg width at the thigh. */
+  thighWidth?: number;
+  /** Flat single-leg width at the hem opening. */
+  legOpening?: number;
 };
 
 export const defaultTeeParams: GarmentParams = {
@@ -113,7 +131,19 @@ export type DraftMesh = {
  * Approximate the on-screen bounding box of the parametric tee from its
  * construction parameters. Returned in centimetres.
  */
-export function boundsFromParams(params: GarmentParams): GarmentBounds {
+export function boundsFromParams(
+  params: GarmentParams,
+  features?: GarmentFeatures,
+): GarmentBounds {
+  if (features?.archetype === "bottoms") {
+    const width = params.hipWidth ?? 50;
+    const height = (params.rise ?? 28) + (params.inseam ?? 78) + 4;
+    return {
+      width: Math.round(width) / 10,
+      height: Math.round(height) / 10,
+      depth: Math.round(params.bodyDepth) / 10,
+    };
+  }
   // Total width = body width + two cap sleeves projecting outward.
   const width = params.bodyWidth + params.sleeveLength * 1.1;
   const height = params.bodyLength;
