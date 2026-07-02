@@ -4,6 +4,7 @@
 
 import sharp from "sharp";
 
+import { segmentGarment } from "./garment-segmentation";
 import {
   boundsFromParams,
   defaultTeeParams,
@@ -295,8 +296,14 @@ export async function createDraft(input: {
   const back = await fileToDataUrl(input.backPhoto);
   const side = input.sidePhoto ? await fileToDataUrl(input.sidePhoto) : null;
 
-  const { color, textureUrl } = await analyzePhoto(front.buffer);
-  const { textureUrl: backTextureUrl } = await analyzePhoto(back.buffer);
+  // Preferred path: ML clothes segmentation (SegFormer). Falls back to the
+  // colour-heuristic extractor when the model is unavailable.
+  const frontSeg = await segmentGarment(front.buffer, input.category);
+  const backSeg = await segmentGarment(back.buffer, input.category);
+  const usedModel = Boolean(frontSeg);
+  const { color, textureUrl } = frontSeg ?? (await analyzePhoto(front.buffer));
+  const backTextureUrl = (backSeg ?? (await analyzePhoto(back.buffer)))
+    .textureUrl;
 
   const photos: DraftPhoto[] = [
     { url: front.dataUrl, role: "front" },
@@ -306,8 +313,12 @@ export async function createDraft(input: {
     photos.push({ url: side.dataUrl, role: "side" });
   }
 
-  // More reference views -> higher extraction confidence.
-  const segmentationConfidence = Math.min(0.99, 0.78 + photos.length * 0.05);
+  // Model-based extraction is far more reliable than the colour heuristic;
+  // extra reference views nudge confidence up either way.
+  const segmentationConfidence = Math.min(
+    0.99,
+    (usedModel ? 0.93 : 0.78) + photos.length * 0.02,
+  );
 
   const stored: StoredDraft = {
     id,
