@@ -13,51 +13,74 @@ type GarmentMeshViewerProps = {
   className?: string;
 };
 
+function loadTexture(url?: string) {
+  if (!url) {
+    return null;
+  }
+  const loaded = new THREE.TextureLoader().load(url);
+  loaded.colorSpace = THREE.SRGBColorSpace;
+  loaded.wrapS = THREE.ClampToEdgeWrapping;
+  loaded.wrapT = THREE.ClampToEdgeWrapping;
+  return loaded;
+}
+
+function fabricMaterial(color: string, map: THREE.Texture | null) {
+  return new THREE.MeshPhysicalMaterial({
+    color,
+    map: map ?? undefined,
+    roughness: 0.88,
+    metalness: 0,
+    sheen: 0.55,
+    sheenColor: new THREE.Color("#ffffff"),
+    sheenRoughness: 0.9,
+    side: THREE.FrontSide,
+  });
+}
+
 function TeeModel({ mesh }: { mesh: DraftMesh }) {
   const geometry = useMemo(() => buildTeeGeometry(mesh.params), [mesh.params]);
 
-  const texture = useMemo(() => {
-    if (!mesh.extractedTextureUrl) {
-      return null;
-    }
-    const loaded = new THREE.TextureLoader().load(mesh.extractedTextureUrl);
-    loaded.colorSpace = THREE.SRGBColorSpace;
-    loaded.wrapS = THREE.ClampToEdgeWrapping;
-    loaded.wrapT = THREE.ClampToEdgeWrapping;
-    return loaded;
-  }, [mesh.extractedTextureUrl]);
+  // Geometry groups: 0 = front panel, 1 = back panel, 2 = sleeves/collar.
+  // The extracted front photo maps to the front, the back photo to the back,
+  // and the trims stay plain fabric colour.
+  const materials = useMemo(() => {
+    const frontTexture = loadTexture(mesh.extractedTextureUrl);
+    const backTexture = loadTexture(mesh.extractedBackTextureUrl) ?? frontTexture;
+    return [
+      fabricMaterial(mesh.color, frontTexture),
+      fabricMaterial(mesh.color, backTexture),
+      fabricMaterial(mesh.color, null),
+    ];
+  }, [mesh.color, mesh.extractedTextureUrl, mesh.extractedBackTextureUrl]);
+
+  const innerMaterial = useMemo(
+    () =>
+      new THREE.MeshPhysicalMaterial({
+        color: new THREE.Color(mesh.color).multiplyScalar(0.82),
+        roughness: 0.95,
+        metalness: 0,
+        side: THREE.BackSide,
+      }),
+    [mesh.color],
+  );
 
   useEffect(() => {
     return () => {
       geometry.dispose();
-      texture?.dispose();
+      materials.forEach((material) => {
+        material.map?.dispose();
+        material.dispose();
+      });
+      innerMaterial.dispose();
     };
-  }, [geometry, texture]);
+  }, [geometry, materials, innerMaterial]);
 
   return (
     <group>
-      {/* Outside: printed/textured fabric. */}
-      <mesh geometry={geometry} castShadow receiveShadow>
-        <meshPhysicalMaterial
-          color={mesh.color}
-          map={texture ?? undefined}
-          roughness={0.88}
-          metalness={0}
-          sheen={0.55}
-          sheenColor="#ffffff"
-          sheenRoughness={0.9}
-          side={THREE.FrontSide}
-        />
-      </mesh>
+      {/* Outside: front/back photo textures on their panels, plain trims. */}
+      <mesh geometry={geometry} material={materials} castShadow receiveShadow />
       {/* Inside: plain fabric, slightly shaded — prints stay outside only. */}
-      <mesh geometry={geometry}>
-        <meshPhysicalMaterial
-          color={new THREE.Color(mesh.color).multiplyScalar(0.82)}
-          roughness={0.95}
-          metalness={0}
-          side={THREE.BackSide}
-        />
-      </mesh>
+      <mesh geometry={geometry} material={innerMaterial} />
     </group>
   );
 }

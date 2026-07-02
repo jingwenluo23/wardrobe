@@ -53,6 +53,7 @@ type StoredDraft = {
   template: GarmentTemplate;
   segmentationConfidence: number;
   extractedTextureUrl?: string;
+  extractedBackTextureUrl?: string;
 };
 
 const STAGE_LABELS = [
@@ -114,38 +115,95 @@ function paramsForTemplate(template: GarmentTemplate): GarmentParams {
   }
 }
 
+const MASK_SIZE = 96;
+
 async function analyzePhoto(buffer: Buffer): Promise<{
   color: string;
   textureUrl: string;
 }> {
-  // Dominant colour via sharp's stats, and a small isolated texture tile
-  // (a centre crop) projected onto the mesh. No faces are reproduced.
-  const image = sharp(buffer).rotate();
-  const stats = await image.stats();
-  const [r, g, b] = stats.channels;
-  const toHex = (value: number) =>
-    Math.round(value).toString(16).padStart(2, "0");
-  const color =
-    "#" + toHex(r?.mean ?? 180) + toHex(g?.mean ?? 180) + toHex(b?.mean ?? 180);
-
-  // Crop the chest band of the photo (centre-horizontal, upper-middle
-  // vertically) so the texture picks up fabric rather than the wearer's
-  // face or the background.
+  // Colour-based garment extraction:
+  // 1. Sample the garment colour from the chest area (centre-horizontal,
+  //    mid-height — where the garment sits when worn or laid flat).
+  // 2. Mask every pixel whose colour is close to that sample.
+  // 3. Take a robust bounding box of the mask and crop the original photo
+  //    to it, so the texture is the actual garment front/back, not the
+  //    wearer's skin or the background.
   const meta = await sharp(buffer).rotate().metadata();
   const srcW = meta.width ?? 512;
   const srcH = meta.height ?? 512;
-  const cropW = Math.max(16, Math.round(srcW * 0.36));
-  const cropH = Math.max(16, Math.round(srcH * 0.26));
+
+  const raw = await sharp(buffer)
+    .rotate()
+    .resize(MASK_SIZE, MASK_SIZE, { fit: "fill" })
+    .removeAlpha()
+    .raw()
+    .toBuffer();
+
+  const pixelAt = (x: number, y: number) => {
+    const i = (y * MASK_SIZE + x) * 3;
+    return [raw[i], raw[i + 1], raw[i + 2]] as const;
+  };
+
+  // Reference colour: median of the chest patch (40-60% wide, 42-60% tall).
+  const rs: number[] = [];
+  const gs: number[] = [];
+  const bs: number[] = [];
+  for (let y = Math.floor(MASK_SIZE * 0.42); y < MASK_SIZE * 0.6; y += 1) {
+    for (let x = Math.floor(MASK_SIZE * 0.4); x < MASK_SIZE * 0.6; x += 1) {
+      const [r, g, b] = pixelAt(x, y);
+      rs.push(r);
+      gs.push(g);
+      bs.push(b);
+    }
+  }
+  const median = (arr: number[]) => {
+    const sorted = [...arr].sort((a, b) => a - b);
+    return sorted[Math.floor(sorted.length / 2)] ?? 128;
+  };
+  const gr = median(rs);
+  const gg = median(gs);
+  const gb = median(bs);
+  const toHex = (value: number) =>
+    Math.round(value).toString(16).padStart(2, "0");
+  const color = "#" + toHex(gr) + toHex(gg) + toHex(gb);
+
+  // Mask pixels close to the garment colour, then take a robust bounding
+  // box (3rd-97th percentile) so stray background matches don't blow it up.
+  const xs: number[] = [];
+  const ys: number[] = [];
+  for (let y = 0; y < MASK_SIZE; y += 1) {
+    for (let x = 0; x < MASK_SIZE; x += 1) {
+      const [r, g, b] = pixelAt(x, y);
+      const dist = Math.abs(r - gr) + Math.abs(g - gg) + Math.abs(b - gb);
+      if (dist < 110) {
+        xs.push(x);
+        ys.push(y);
+      }
+    }
+  }
+
+  let region = { left: 0, top: 0, width: srcW, height: srcH };
+  if (xs.length > MASK_SIZE) {
+    const pct = (arr: number[], p: number) => {
+      const sorted = [...arr].sort((a, b) => a - b);
+      return sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * p))];
+    };
+    const sx = srcW / MASK_SIZE;
+    const sy = srcH / MASK_SIZE;
+    const left = Math.max(0, Math.floor(pct(xs, 0.03) * sx));
+    const right = Math.min(srcW, Math.ceil((pct(xs, 0.97) + 1) * sx));
+    const top = Math.max(0, Math.floor(pct(ys, 0.03) * sy));
+    const bottom = Math.min(srcH, Math.ceil((pct(ys, 0.97) + 1) * sy));
+    if (right - left > srcW * 0.12 && bottom - top > srcH * 0.12) {
+      region = { left, top, width: right - left, height: bottom - top };
+    }
+  }
+
   const tile = await sharp(buffer)
     .rotate()
-    .extract({
-      left: Math.round((srcW - cropW) / 2),
-      top: Math.round(srcH * 0.38),
-      width: cropW,
-      height: Math.min(cropH, srcH - Math.round(srcH * 0.38)),
-    })
-    .resize(256, 256, { fit: "cover" })
-    .jpeg({ quality: 72 })
+    .extract(region)
+    .resize(512, 512, { fit: "fill" })
+    .jpeg({ quality: 78 })
     .toBuffer();
   const textureUrl = "data:image/jpeg;base64," + tile.toString("base64");
 
@@ -178,6 +236,7 @@ export async function createDraft(input: {
   const side = input.sidePhoto ? await fileToDataUrl(input.sidePhoto) : null;
 
   const { color, textureUrl } = await analyzePhoto(front.buffer);
+  const { textureUrl: backTextureUrl } = await analyzePhoto(back.buffer);
 
   const photos: DraftPhoto[] = [
     { url: front.dataUrl, role: "front" },
@@ -201,6 +260,7 @@ export async function createDraft(input: {
     template,
     segmentationConfidence,
     extractedTextureUrl: textureUrl,
+    extractedBackTextureUrl: backTextureUrl,
   };
 
   drafts.set(id, stored);
@@ -238,6 +298,7 @@ function serializeDraft(stored: StoredDraft): ApiDraft {
         params: stored.params,
         segmentation: { confidence: stored.segmentationConfidence },
         extractedTextureUrl: stored.extractedTextureUrl,
+        extractedBackTextureUrl: stored.extractedBackTextureUrl,
         color: stored.color,
         bounds: boundsFromParams(stored.params),
       }

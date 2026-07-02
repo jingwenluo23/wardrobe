@@ -182,7 +182,9 @@ export function buildTeeGeometry(params: GarmentParams): THREE.BufferGeometry {
   };
 
   const frontBase = buildPanel(true);
+  const frontIndexEnd = indices.length;
   const backBase = buildPanel(false);
+  const backIndexEnd = indices.length;
 
   // --- Shoulder seam -----------------------------------------------------
   // Bridge the front and back top edges between the neck edge and the
@@ -350,6 +352,16 @@ export function buildTeeGeometry(params: GarmentParams): THREE.BufferGeometry {
 
     const cuffCenter = centroid.clone().addScaledVector(axis, sleeveLen);
 
+    // Average radius of the armhole root ring, measured in the plane
+    // perpendicular to the sleeve axis.
+    const avgRootRadius =
+      loop.reduce((acc, p) => {
+        const offset = p.clone().sub(centroid);
+        return acc + Math.hypot(offset.dot(e1), offset.dot(e2));
+      }, 0) / loopCount;
+    // The sleeve must taper: never let the cuff exceed ~80% of the root.
+    const cuffR = Math.min(cuffRadius, avgRootRadius * 0.8);
+
     // Map each loop point to an angle around the axis so the cuff circle
     // keeps the same vertex ordering (no twist along the sleeve).
     const cuffPoints = loop.map((p) => {
@@ -359,8 +371,8 @@ export function buildTeeGeometry(params: GarmentParams): THREE.BufferGeometry {
       // sleeve rather than a rigid pipe.
       return cuffCenter
         .clone()
-        .addScaledVector(e1, Math.cos(a) * cuffRadius)
-        .addScaledVector(e2, Math.sin(a) * cuffRadius * 0.82);
+        .addScaledVector(e1, Math.cos(a) * cuffR)
+        .addScaledVector(e2, Math.sin(a) * cuffR * 0.82);
     });
 
     // Loft rings from the armhole loop to the cuff.
@@ -399,6 +411,11 @@ export function buildTeeGeometry(params: GarmentParams): THREE.BufferGeometry {
   );
   geometry.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
   geometry.setIndex(indices);
+  // Material groups: 0 = front panel (front photo), 1 = back panel (back
+  // photo), 2 = everything else (sleeves, shoulder seam, neckband -> plain).
+  geometry.addGroup(0, frontIndexEnd, 0);
+  geometry.addGroup(frontIndexEnd, backIndexEnd - frontIndexEnd, 1);
+  geometry.addGroup(backIndexEnd, indices.length - backIndexEnd, 2);
   geometry.computeVertexNormals();
   geometry.computeBoundingBox();
   geometry.computeBoundingSphere();

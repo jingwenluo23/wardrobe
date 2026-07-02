@@ -70,8 +70,10 @@ export type DraftMesh = {
   segmentation: {
     confidence: number;
   };
-  /** Optional isolated garment texture (data URL) projected onto the mesh. */
+  /** Optional isolated garment texture (data URL) for the front panel. */
   extractedTextureUrl?: string;
+  /** Optional isolated garment texture (data URL) for the back panel. */
+  extractedBackTextureUrl?: string;
   /** Dominant garment colour as a hex string, sampled from the photos. */
   color: string;
   bounds: GarmentBounds;
