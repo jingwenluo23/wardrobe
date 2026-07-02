@@ -209,14 +209,21 @@ export function buildTeeGeometry(params: GarmentParams): THREE.BufferGeometry {
   const seamRise = 0.75 * SCALE;
   const shoulderMid: Record<number, number> = {};
   for (let c = 0; c <= COLS; c += 1) {
-    if (Math.abs(c / COLS - 0.5) * 2 < neckFrac) {
+    const s = Math.abs(c / COLS - 0.5) * 2;
+    // Start one column inside the neck arc so the bridge overlaps the
+    // neckband; otherwise the straddling quad belongs to neither and leaves
+    // a slit at the neckline.
+    if (s < neckFrac - 2.5 / COLS) {
       continue;
     }
+    // The rounded roll fades out toward the shoulder tip, where the sleeve
+    // cap takes over — a full-height ridge there sticks up as a loose fin.
+    const rise = seamRise * (1 - smoothstep((s - 0.78) / 0.22));
     const fi = (frontBase + topRow + c) * 3;
     const bi = (backBase + topRow + c) * 3;
     shoulderMid[c] = pushVertex(
       (positions[fi] + positions[bi]) / 2,
-      (positions[fi + 1] + positions[bi + 1]) / 2 + seamRise,
+      (positions[fi + 1] + positions[bi + 1]) / 2 + rise,
       (positions[fi + 2] + positions[bi + 2]) / 2,
       c / COLS,
       1,
