@@ -36,11 +36,14 @@ function TeeModel({ mesh }: { mesh: DraftMesh }) {
 
   return (
     <mesh geometry={geometry} castShadow receiveShadow>
-      <meshStandardMaterial
+      <meshPhysicalMaterial
         color={mesh.color}
         map={texture ?? undefined}
-        roughness={0.82}
-        metalness={0.04}
+        roughness={0.88}
+        metalness={0}
+        sheen={0.55}
+        sheenColor="#ffffff"
+        sheenRoughness={0.9}
         side={THREE.DoubleSide}
       />
     </mesh>
