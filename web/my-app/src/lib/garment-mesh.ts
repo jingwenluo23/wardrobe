@@ -18,14 +18,18 @@ export type GarmentTemplate = string;
 export type GarmentFeatures = {
   /** Which geometry archetype builds this garment. Defaults to "top". */
   archetype?: "top" | "bottoms";
-  /** Neck opening finish: ribbed crew band or an attached hood. */
-  neckFinish: "band" | "hood";
+  /** Neck opening finish. */
+  neckFinish: "band" | "hood" | "turtleneck" | "polo-collar" | "shirt-collar";
   /** Ribbed sweatshirt-style band at the bottom hem. */
   hemBand: boolean;
   /** Sleeve/leg-end finish: raw edge or a snug ribbed cuff (joggers). */
   cuff: "raw" | "ribbed";
   /** Sleeve width at the opening relative to the root (1 = straight tube). */
   sleeveTaper: number;
+  /** Front placket strip with buttons: polo half-placket or full button front. */
+  placket?: "none" | "half" | "full";
+  /** Set false for tank tops / sleeveless jerseys (open armholes). */
+  sleeves?: boolean;
   /** Bottoms: boxy utility pockets on the outer thighs. */
   cargoPockets?: boolean;
 };

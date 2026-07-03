@@ -32,6 +32,48 @@ const longSleeve: Partial<GarmentParams> = {
 };
 
 /**
+ * Woven button-front shirts: one geometry preset (shirt collar + full
+ * placket + barrel cuffs), the types differ by fit and — later — fabric.
+ */
+function wovenShirtPresets(): GarmentTemplateDef[] {
+  const make = (
+    id: string,
+    label: string,
+    fit?: Partial<GarmentParams>,
+  ): GarmentTemplateDef => ({
+    id,
+    label,
+    category: "Tops",
+    params: {
+      ...defaultTeeParams,
+      ...longSleeve,
+      bodyWidth: 54,
+      bodyDepth: 23,
+      bodyLength: 74,
+      neckWidthFront: 15.5,
+      neckDropFront: 6,
+      neckDropBack: 2,
+      ...fit,
+    },
+    features: {
+      neckFinish: "shirt-collar",
+      hemBand: false,
+      cuff: "ribbed",
+      sleeveTaper: 0.6,
+      placket: "full",
+    },
+  });
+  return [
+    make("top-dress-shirt", "Dress shirt", { bodyWidth: 52 }),
+    make("top-casual-shirt", "Casual shirt"),
+    make("top-flannel-shirt", "Flannel shirt", { bodyWidth: 56, bodyDepth: 24 }),
+    make("top-denim-shirt", "Denim shirt"),
+    make("top-oxford-shirt", "Oxford shirt", { bodyWidth: 53 }),
+    make("top-button-down-shirt", "Button-down shirt", { bodyWidth: 53 }),
+  ];
+}
+
+/**
  * Bottoms preset factory: every pants/shorts type is the same leg-loft
  * block with different measurements (cm) and trims.
  */
@@ -162,6 +204,148 @@ export const garmentTemplates: GarmentTemplateDef[] = [
       cuff: "ribbed",
       sleeveTaper: 0.6,
     },
+  },
+  {
+    id: "top-polo",
+    label: "Polo shirt",
+    category: "Tops",
+    params: { ...defaultTeeParams, neckWidthFront: 16, neckDropFront: 7 },
+    features: {
+      ...defaultTeeFeatures,
+      neckFinish: "polo-collar",
+      placket: "half",
+    },
+  },
+  // Button-front woven shirts: identical geometry, different fabric/fit.
+  ...wovenShirtPresets(),
+  {
+    id: "top-sweater",
+    label: "Pullover / sweater",
+    category: "Tops",
+    params: {
+      ...defaultTeeParams,
+      ...longSleeve,
+      bodyWidth: 56,
+      bodyDepth: 25,
+      neckWidthFront: 18,
+      neckDropFront: 7,
+    },
+    features: {
+      neckFinish: "band",
+      hemBand: true,
+      cuff: "ribbed",
+      sleeveTaper: 0.62,
+    },
+  },
+  {
+    id: "top-turtleneck",
+    label: "Turtleneck / roll neck",
+    category: "Tops",
+    params: {
+      ...defaultTeeParams,
+      ...longSleeve,
+      bodyWidth: 50,
+      bodyDepth: 22,
+      neckWidthFront: 15,
+      neckDropFront: 3.5,
+      neckDropBack: 2,
+    },
+    features: {
+      neckFinish: "turtleneck",
+      hemBand: false,
+      cuff: "ribbed",
+      sleeveTaper: 0.58,
+    },
+  },
+  {
+    id: "top-cardigan",
+    label: "Cardigan",
+    category: "Tops",
+    params: {
+      ...defaultTeeParams,
+      ...longSleeve,
+      bodyWidth: 55,
+      bodyDepth: 24,
+      neckWidthFront: 17,
+      neckDropFront: 10,
+    },
+    features: {
+      neckFinish: "band",
+      hemBand: true,
+      cuff: "ribbed",
+      sleeveTaper: 0.62,
+      placket: "full",
+    },
+  },
+  // Undergarment / sleeveless
+  {
+    id: "top-tank",
+    label: "Tank top / sleeveless",
+    category: "Tops",
+    params: {
+      ...defaultTeeParams,
+      bodyWidth: 47,
+      bodyDepth: 20,
+      neckWidthFront: 17,
+      neckDropFront: 10,
+      armholeDepth: 23,
+    },
+    features: { ...defaultTeeFeatures, sleeves: false },
+  },
+  {
+    id: "top-undershirt",
+    label: "Undershirt",
+    category: "Tops",
+    params: {
+      ...defaultTeeParams,
+      bodyWidth: 45,
+      bodyDepth: 18,
+      neckDropFront: 9.5,
+    },
+    features: { ...defaultTeeFeatures, sleeves: false },
+  },
+  {
+    id: "top-compression",
+    label: "Compression / base layer",
+    category: "Tops",
+    params: {
+      ...defaultTeeParams,
+      ...longSleeve,
+      bodyWidth: 44,
+      bodyDepth: 17,
+      neckWidthFront: 16,
+      neckDropFront: 5,
+    },
+    features: { ...defaultTeeFeatures, sleeveTaper: 0.5 },
+  },
+  // Sports tops
+  {
+    id: "top-gym-tee",
+    label: "Gym T-shirt",
+    category: "Tops",
+    params: { ...defaultTeeParams, bodyWidth: 51, bodyDepth: 21 },
+    features: { ...defaultTeeFeatures },
+  },
+  {
+    id: "top-basketball-jersey",
+    label: "Basketball jersey",
+    category: "Tops",
+    params: {
+      ...defaultTeeParams,
+      bodyWidth: 54,
+      bodyLength: 76,
+      neckWidthFront: 19,
+      neckDropFront: 11,
+      armholeDepth: 25,
+    },
+    features: { ...defaultTeeFeatures, sleeves: false },
+  },
+  {
+    id: "top-sports-jersey",
+    label: "Football / training jersey",
+    category: "Tops",
+    params: { ...defaultTeeParams, bodyWidth: 53, sleeveLength: 24 },
+    features: { ...defaultTeeFeatures, sleeveTaper: 0.85 },
   },
   // Legacy / other-category placeholders (same knit block until their own
   // archetypes land).

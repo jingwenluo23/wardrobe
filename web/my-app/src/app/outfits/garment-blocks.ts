@@ -571,17 +571,170 @@ function buildTopGeometry(
     }
   };
 
+  // --- Block: turtleneck ------------------------------------------------------
+  // A tall knit tube rising from the neck opening with a fold-over hint.
+  const buildTurtleneck = () => {
+    const loopCount = neckLoop.length;
+    if (loopCount < 4) {
+      return;
+    }
+    const rings: number[][] = [];
+    const stages: Array<[number, number]> = [
+      [0, 1], // rim
+      [5, 0.97],
+      [8.5, 0.99],
+      [10, 1.04], // folded-over lip
+    ];
+    for (let k = 0; k < stages.length; k += 1) {
+      const [rise, scale] = stages[k];
+      const ring: number[] = [];
+      for (let j = 0; j < loopCount; j += 1) {
+        const q = neckLoop[j];
+        ring.push(
+          pushVertex(
+            q.x * scale,
+            q.y + rise * SCALE,
+            q.z * scale,
+            j / loopCount,
+            k / (stages.length - 1),
+          ),
+        );
+      }
+      rings.push(ring);
+    }
+    for (let k = 0; k < rings.length - 1; k += 1) {
+      for (let j = 0; j < loopCount; j += 1) {
+        const jn = (j + 1) % loopCount;
+        indices.push(
+          rings[k][j],
+          rings[k][jn],
+          rings[k + 1][j],
+          rings[k][jn],
+          rings[k + 1][jn],
+          rings[k + 1][j],
+        );
+      }
+    }
+  };
+
+  // --- Block: folded collar (polo / shirt) -----------------------------------
+  // A stand rising from the neckline, folding outward and down over itself.
+  const buildFoldedCollar = (
+    standH: number,
+    foldScale: number,
+    foldDrop: number,
+  ) => {
+    const loopCount = neckLoop.length;
+    if (loopCount < 4) {
+      return;
+    }
+    const stages: Array<[number, number]> = [
+      [0, 1], // rim
+      [standH, 0.96], // stand
+      [standH - foldDrop * 0.35, foldScale * 0.55 + 0.45], // roll
+      [standH - foldDrop, foldScale], // fold-over edge
+    ];
+    const rings: number[][] = [];
+    for (let k = 0; k < stages.length; k += 1) {
+      const [rise, scale] = stages[k];
+      const ring: number[] = [];
+      for (let j = 0; j < loopCount; j += 1) {
+        const q = neckLoop[j];
+        ring.push(
+          pushVertex(
+            q.x * scale,
+            q.y + rise * SCALE,
+            q.z * scale,
+            j / loopCount,
+            k / (stages.length - 1),
+          ),
+        );
+      }
+      rings.push(ring);
+    }
+    for (let k = 0; k < rings.length - 1; k += 1) {
+      for (let j = 0; j < loopCount; j += 1) {
+        const jn = (j + 1) % loopCount;
+        indices.push(
+          rings[k][j],
+          rings[k][jn],
+          rings[k + 1][j],
+          rings[k][jn],
+          rings[k + 1][jn],
+          rings[k + 1][j],
+        );
+      }
+    }
+  };
+
+  // --- Block: placket ---------------------------------------------------------
+  // A raised button strip down the centre front: polo half-placket or a full
+  // button front (shirts, cardigans), with small button bumps.
+  const buildPlacket = (half: boolean) => {
+    const stripHalf = 1.6 * SCALE;
+    const raise = 0.7 * SCALE;
+    const yTop = topEdgeY(0, neckDropF) + 0.4 * SCALE;
+    const yBottom = half ? yTop - 16 * SCALE : hemY + 0.5 * SCALE;
+    const rows = 14;
+    const frontZ = (y: number) =>
+      depth * 1.05 * depthTaper(y) + 0.15 * SCALE;
+    const cols: number[][] = [[], [], [], []];
+    for (let r = 0; r <= rows; r += 1) {
+      const y = yTop + ((yBottom - yTop) * r) / rows;
+      const zSurf = frontZ(y);
+      const v = r / rows;
+      cols[0].push(pushVertex(-stripHalf, y, zSurf, 0, v));
+      cols[1].push(pushVertex(-stripHalf, y, zSurf + raise, 0.05, v));
+      cols[2].push(pushVertex(stripHalf, y, zSurf + raise, 0.1, v));
+      cols[3].push(pushVertex(stripHalf, y, zSurf, 0.15, v));
+    }
+    for (let c = 0; c < 3; c += 1) {
+      for (let r = 0; r < rows; r += 1) {
+        const a = cols[c][r];
+        const b = cols[c + 1][r];
+        const d = cols[c][r + 1];
+        const e = cols[c + 1][r + 1];
+        indices.push(a, b, d, b, e, d);
+      }
+    }
+    // Button bumps down the strip.
+    const buttonCount = Math.max(2, Math.floor((yTop - yBottom) / (9 * SCALE)));
+    const bh = 0.55 * SCALE;
+    for (let i = 0; i < buttonCount; i += 1) {
+      const y = yTop - (i + 0.75) * ((yTop - yBottom) / buttonCount);
+      const z = frontZ(y) + raise + 0.2 * SCALE;
+      const a = pushVertex(-bh, y + bh, z, 0, 0);
+      const b = pushVertex(bh, y + bh, z, 0.02, 0);
+      const c = pushVertex(bh, y - bh, z, 0.02, 0.02);
+      const d = pushVertex(-bh, y - bh, z, 0, 0.02);
+      indices.push(a, b, c, a, c, d);
+    }
+  };
+
   // --- Assemble from features ----------------------------------------------
   if (features.neckFinish === "hood") {
     buildHood();
+  } else if (features.neckFinish === "turtleneck") {
+    buildTurtleneck();
+  } else if (features.neckFinish === "polo-collar") {
+    buildFoldedCollar(2.6, 1.32, 1.8);
+  } else if (features.neckFinish === "shirt-collar") {
+    buildFoldedCollar(3.2, 1.5, 2.6);
   } else {
     buildNeckband();
+  }
+  if (features.placket === "half") {
+    buildPlacket(true);
+  } else if (features.placket === "full") {
+    buildPlacket(false);
   }
   if (features.hemBand) {
     buildHemBand();
   }
-  buildSleeve(1);
-  buildSleeve(-1);
+  if (features.sleeves !== false) {
+    buildSleeve(1);
+    buildSleeve(-1);
+  }
 
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute(
