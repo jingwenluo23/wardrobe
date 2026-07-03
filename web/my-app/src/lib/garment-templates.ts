@@ -183,6 +183,7 @@ export const garmentTemplates: GarmentTemplateDef[] = [
       hemBand: true,
       cuff: "ribbed",
       sleeveTaper: 0.6,
+      fabric: "fleece",
     },
   },
   {
@@ -203,6 +204,7 @@ export const garmentTemplates: GarmentTemplateDef[] = [
       hemBand: true,
       cuff: "ribbed",
       sleeveTaper: 0.6,
+      fabric: "fleece",
     },
   },
   {
@@ -235,6 +237,7 @@ export const garmentTemplates: GarmentTemplateDef[] = [
       hemBand: true,
       cuff: "ribbed",
       sleeveTaper: 0.62,
+      fabric: "knit",
     },
   },
   {
@@ -255,6 +258,7 @@ export const garmentTemplates: GarmentTemplateDef[] = [
       hemBand: false,
       cuff: "ribbed",
       sleeveTaper: 0.58,
+      fabric: "knit",
     },
   },
   {
@@ -275,6 +279,7 @@ export const garmentTemplates: GarmentTemplateDef[] = [
       cuff: "ribbed",
       sleeveTaper: 0.62,
       placket: "full",
+      fabric: "knit",
     },
   },
   // Undergarment / sleeveless
@@ -289,6 +294,7 @@ export const garmentTemplates: GarmentTemplateDef[] = [
       neckWidthFront: 17,
       neckDropFront: 10,
       armholeDepth: 23,
+      shoulderWidthFactor: 0.68,
     },
     features: { ...defaultTeeFeatures, sleeves: false },
   },
@@ -301,6 +307,9 @@ export const garmentTemplates: GarmentTemplateDef[] = [
       bodyWidth: 45,
       bodyDepth: 18,
       neckDropFront: 9.5,
+      neckWidthFront: 19,
+      armholeDepth: 24,
+      shoulderWidthFactor: 0.58,
     },
     features: { ...defaultTeeFeatures, sleeves: false },
   },
@@ -337,15 +346,9 @@ export const garmentTemplates: GarmentTemplateDef[] = [
       neckWidthFront: 19,
       neckDropFront: 11,
       armholeDepth: 25,
+      shoulderWidthFactor: 0.66,
     },
     features: { ...defaultTeeFeatures, sleeves: false },
-  },
-  {
-    id: "top-sports-jersey",
-    label: "Football / training jersey",
-    category: "Tops",
-    params: { ...defaultTeeParams, bodyWidth: 53, sleeveLength: 24 },
-    features: { ...defaultTeeFeatures, sleeveTaper: 0.85 },
   },
   // Legacy / other-category placeholders (same knit block until their own
   // archetypes land).
@@ -379,6 +382,7 @@ const byId = new Map(garmentTemplates.map((t) => [t.id, t]));
 const LEGACY_ALIASES: Record<string, string> = {
   "bottom-straight": "bottom-jeans",
   "top-fitted": "top-standard-tee",
+  "top-sports-jersey": "top-gym-tee",
 };
 
 export function getTemplate(id: string | null | undefined) {

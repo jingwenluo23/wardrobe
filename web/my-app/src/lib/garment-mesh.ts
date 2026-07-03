@@ -32,6 +32,10 @@ export type GarmentFeatures = {
   sleeves?: boolean;
   /** Bottoms: boxy utility pockets on the outer thighs. */
   cargoPockets?: boolean;
+  /** Fabric weight/structure: scales trims and adds surface texture.
+   *  jersey = light knit (default), fleece = thick sweatshirt fabric,
+   *  knit = chunky visible-rib sweater knit. */
+  fabric?: "jersey" | "fleece" | "knit";
 };
 
 export const defaultTeeFeatures: GarmentFeatures = {
@@ -82,6 +86,9 @@ export type GarmentParams = {
   thighWidth?: number;
   /** Flat single-leg width at the hem opening. */
   legOpening?: number;
+  /** Shoulder width as a fraction of body half-width (default 0.8);
+   *  small values give narrow tank/undershirt straps. */
+  shoulderWidthFactor?: number;
 };
 
 export const defaultTeeParams: GarmentParams = {

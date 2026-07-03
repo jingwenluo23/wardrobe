@@ -24,13 +24,19 @@ function loadTexture(url?: string) {
   return loaded;
 }
 
-function fabricMaterial(color: string, map: THREE.Texture | null) {
+function fabricMaterial(
+  color: string,
+  map: THREE.Texture | null,
+  bump?: { texture: THREE.Texture; scale: number } | null,
+) {
   return new THREE.MeshPhysicalMaterial({
     // three.js multiplies the map by the material colour, so textured
     // surfaces must stay white or the photo gets darkened and prints are
     // crushed. Plain surfaces carry the fabric colour directly.
     color: map ? "#ffffff" : color,
     map: map ?? undefined,
+    bumpMap: bump?.texture,
+    bumpScale: bump?.scale ?? 0,
     roughness: 0.88,
     metalness: 0,
     sheen: 0.55,
@@ -38,6 +44,52 @@ function fabricMaterial(color: string, map: THREE.Texture | null) {
     sheenRoughness: 0.9,
     side: THREE.FrontSide,
   });
+}
+
+/**
+ * Procedural fabric relief: chunky vertical ribs for sweater knit, fine
+ * noise for fleece. Rendered to a small repeating canvas bump map so heavy
+ * fabrics read as material, not just colour.
+ */
+function makeFabricBump(kind: "knit" | "fleece") {
+  const size = 128;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const g = canvas.getContext("2d");
+  if (!g) {
+    return null;
+  }
+  g.fillStyle = "#808080";
+  g.fillRect(0, 0, size, size);
+  if (kind === "knit") {
+    // Rib columns with a subtle stitch wave.
+    for (let x = 0; x < size; x += 8) {
+      const grad = g.createLinearGradient(x, 0, x + 8, 0);
+      grad.addColorStop(0, "#9a9a9a");
+      grad.addColorStop(0.45, "#6e6e6e");
+      grad.addColorStop(1, "#9a9a9a");
+      g.fillStyle = grad;
+      g.fillRect(x, 0, 8, size);
+    }
+    g.globalAlpha = 0.25;
+    for (let y = 0; y < size; y += 5) {
+      g.fillStyle = y % 10 === 0 ? "#707070" : "#909090";
+      g.fillRect(0, y, size, 2);
+    }
+    g.globalAlpha = 1;
+  } else {
+    for (let i = 0; i < 2600; i += 1) {
+      const v = 118 + Math.floor(Math.random() * 20);
+      g.fillStyle = "rgb(" + v + "," + v + "," + v + ")";
+      g.fillRect(Math.random() * size, Math.random() * size, 1.5, 1.5);
+    }
+  }
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.set(kind === "knit" ? 10 : 6, kind === "knit" ? 10 : 6);
+  return texture;
 }
 
 function TeeModel({ mesh }: { mesh: DraftMesh }) {
@@ -59,16 +111,25 @@ function TeeModel({ mesh }: { mesh: DraftMesh }) {
       fabricTexture.wrapS = THREE.RepeatWrapping;
       fabricTexture.wrapT = THREE.RepeatWrapping;
     }
+    const fabricKind = mesh.features?.fabric;
+    const bumpTexture =
+      fabricKind === "knit" || fabricKind === "fleece"
+        ? makeFabricBump(fabricKind)
+        : null;
+    const bump = bumpTexture
+      ? { texture: bumpTexture, scale: fabricKind === "knit" ? 2.2 : 0.7 }
+      : null;
     return [
-      fabricMaterial(mesh.color, frontTexture),
-      fabricMaterial(mesh.color, backTexture),
-      fabricMaterial(mesh.color, fabricTexture),
+      fabricMaterial(mesh.color, frontTexture, bump),
+      fabricMaterial(mesh.color, backTexture, bump),
+      fabricMaterial(mesh.color, fabricTexture, bump),
     ];
   }, [
     mesh.color,
     mesh.extractedTextureUrl,
     mesh.extractedBackTextureUrl,
     mesh.fabricTextureUrl,
+    mesh.features?.fabric,
   ]);
 
   const innerMaterial = useMemo(

@@ -73,7 +73,11 @@ function buildTopGeometry(
   );
 
   // Shoulder point: end of the shoulder seam, start of the armhole curve.
-  const shoulderX = Math.max(neckHalf + halfW * 0.12, halfW * 0.8);
+  // shoulderWidthFactor < 0.8 narrows the straps (tanks, undershirts).
+  const shoulderX = Math.max(
+    neckHalf + halfW * 0.08,
+    halfW * (params.shoulderWidthFactor ?? 0.8),
+  );
   const shoulderPtY =
     neckShoulderY - Math.tan(slopeRad) * (shoulderX - neckHalf);
   // Underarm point: bottom of the armhole curve, on the side seam.
@@ -144,6 +148,10 @@ function buildTopGeometry(
       fillet
     );
   };
+
+  // Heavier fabrics get visibly chunkier trims (bands, cuffs, collars).
+  const trimScale =
+    features.fabric === "fleece" ? 1.6 : features.fabric === "knit" ? 1.35 : 1;
 
   const positions: number[] = [];
   const uvs: number[] = [];
@@ -299,8 +307,8 @@ function buildTopGeometry(
       .reduce((acc, p) => acc.clone().add(p), new THREE.Vector3())
       .multiplyScalar(1 / loopCount);
 
-    const bandH = 1.25 * SCALE; // band height (cm)
-    const bandIn = 1.1 * SCALE; // how far the band turns inward (cm)
+    const bandH = 1.25 * SCALE * trimScale; // band height (cm)
+    const bandIn = 1.1 * SCALE * trimScale; // how far the band turns inward (cm)
     const rings: number[][] = [[], [], []];
     for (let j = 0; j < loopCount; j += 1) {
       const p = neckLoop[j];
@@ -408,7 +416,7 @@ function buildTopGeometry(
   // A snug sweatshirt band around the bottom opening: follows the hem edge,
   // dropping down and pulling slightly inward.
   const buildHemBand = () => {
-    const bandH = 4.5 * SCALE;
+    const bandH = 4.5 * SCALE * trimScale;
     const pinch = 0.93;
     // Closed loop around the hem: front row left->right, back row right->left.
     const loop: THREE.Vector3[] = [];
@@ -473,13 +481,19 @@ function buildTopGeometry(
       .reduce((acc, p) => acc.clone().add(p), new THREE.Vector3())
       .multiplyScalar(1 / loopCount);
 
-    // Sleeve axis: outward and drooping down, in the XY plane. Long sleeves
-    // hang closer to vertical than a cap sleeve does.
+    // Sleeve hang: starts nearly along the shoulder line and bends toward
+    // vertical along the length, like fabric falling under gravity. A
+    // straight steep axis pinched the armpit right at the root.
     const lengthT = smoothstep((params.sleeveLength - 21) / 35);
-    const droop = droopRad + lengthT * (16 * Math.PI) / 180;
+    const droopStart = slopeRad + (14 * Math.PI) / 180;
+    const droopEnd = droopRad + (lengthT * 26 * Math.PI) / 180;
+    const droopAt = (t: number) =>
+      droopStart + (droopEnd - droopStart) * smoothstep(Math.min(1, t * 1.4));
+    // Average axis for the ring frame.
+    const droopMid = droopAt(0.5);
     const axis = new THREE.Vector3(
-      side * Math.cos(droop),
-      -Math.sin(droop),
+      side * Math.cos(droopMid),
+      -Math.sin(droopMid),
       0,
     );
     // Local frame perpendicular to the axis, for ring construction.
@@ -538,13 +552,22 @@ function buildTopGeometry(
       }
     };
 
+    // Ring centres follow the curved hang; shaping starts a little away
+    // from the root so the armpit joins the torso without a pinch.
     let previousRing: number[] | null = null;
+    const ringCenter = centroid.clone();
+    const step = sleeveLen / SLEEVE_RINGS;
     for (let i = 0; i <= SLEEVE_RINGS; i += 1) {
       const t = i / SLEEVE_RINGS;
-      const soften = smoothstep(Math.min(1, t / 0.5));
-      const scale = 1 + (taper - 1) * smoothstep(t);
-      const ringCenter = centroid.clone().addScaledVector(axis, sleeveLen * t);
-      const ring = emitRing(ringCenter, scale, soften, t);
+      if (i > 0) {
+        const d = droopAt(t);
+        ringCenter.add(
+          new THREE.Vector3(side * Math.cos(d) * step, -Math.sin(d) * step, 0),
+        );
+      }
+      const soften = smoothstep(Math.max(0, t - 0.12) / 0.5);
+      const scale = 1 + (taper - 1) * smoothstep(Math.max(0, t - 0.15) / 0.85);
+      const ring = emitRing(ringCenter.clone(), scale, soften, t);
       if (previousRing) {
         stitchRings(previousRing, ring);
       }
@@ -553,9 +576,9 @@ function buildTopGeometry(
 
     // Optional ribbed cuff: a short, snugger band past the sleeve end.
     if (features.cuff === "ribbed" && previousRing) {
-      const cuffLen = 3 * SCALE;
+      const cuffLen = 3 * SCALE * trimScale;
       const cuffScale = taper * 0.8;
-      const endCenter = centroid.clone().addScaledVector(axis, sleeveLen);
+      const endCenter = ringCenter.clone();
       const rib1 = emitRing(
         endCenter.clone().addScaledVector(axis, cuffLen * 0.15),
         cuffScale,
