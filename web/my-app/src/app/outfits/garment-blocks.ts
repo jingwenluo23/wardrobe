@@ -476,7 +476,7 @@ function buildTopGeometry(
     // Sleeve axis: outward and drooping down, in the XY plane. Long sleeves
     // hang closer to vertical than a cap sleeve does.
     const lengthT = smoothstep((params.sleeveLength - 21) / 35);
-    const droop = droopRad + lengthT * (26 * Math.PI) / 180;
+    const droop = droopRad + lengthT * (16 * Math.PI) / 180;
     const axis = new THREE.Vector3(
       side * Math.cos(droop),
       -Math.sin(droop),
@@ -489,14 +489,16 @@ function buildTopGeometry(
     // Every ring keeps the root ring's shape; the pointed top of the armhole
     // oval is softened along the way so the sleeve cap rounds off, and the
     // ring scale eases toward the feature's taper at the opening.
+    // Soft ring: same angular layout as the root ring but rotated into the
+    // plane perpendicular to the sleeve axis. Radii use each offset's FULL
+    // 3D length — projecting onto the perpendicular plane alone collapses
+    // the ring when the axis is steep (long sleeves became sticks).
     const rootOffsets = loop.map((p) => p.clone().sub(centroid));
     const avgRootRadius =
-      rootOffsets.reduce(
-        (acc, offset) => acc + Math.hypot(offset.dot(e1), offset.dot(e2)),
-        0,
-      ) / loopCount;
+      rootOffsets.reduce((acc, offset) => acc + offset.length(), 0) /
+      loopCount;
     const softOffsets = rootOffsets.map((offset) => {
-      const r = Math.hypot(offset.dot(e1), offset.dot(e2));
+      const r = offset.length();
       const a = Math.atan2(offset.dot(e2), offset.dot(e1));
       // Pull extreme radii 35% toward the mean: same overall width, softer
       // corners.
