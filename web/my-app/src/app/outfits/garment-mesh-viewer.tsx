@@ -11,6 +11,12 @@ import { buildGarmentGeometry } from "./garment-blocks";
 type GarmentMeshViewerProps = {
   mesh: DraftMesh;
   className?: string;
+  /** Stage colour behind the garment (default: studio beige). */
+  background?: string;
+  /** Slow continuous turntable, for ambient/hero displays. */
+  autoRotate?: boolean;
+  /** Container height (default 560). */
+  height?: number | string;
 };
 
 function loadTexture(url?: string) {
@@ -167,20 +173,23 @@ function TeeModel({ mesh }: { mesh: DraftMesh }) {
 export default function GarmentMeshViewer({
   mesh,
   className,
+  background = "#f1ece0",
+  autoRotate = false,
+  height = 560,
 }: GarmentMeshViewerProps) {
   return (
     <div
       className={className}
-      style={{ position: "relative", width: "100%", height: 560 }}
+      style={{ position: "relative", width: "100%", height }}
     >
       <Canvas
         shadows
         resize={{ scroll: false }}
         camera={{ position: [0, 0.4, 4.2], fov: 38 }}
         gl={{ antialias: true, preserveDrawingBuffer: true }}
-        style={{ position: "absolute", inset: 0, background: "#f1ece0" }}
+        style={{ position: "absolute", inset: 0, background }}
       >
-        <color attach="background" args={["#f1ece0"]} />
+        <color attach="background" args={[background]} />
         <hemisphereLight args={["#ffffff", "#cdbfa6", 1.1]} />
         <ambientLight intensity={0.35} />
         <directionalLight
@@ -198,6 +207,8 @@ export default function GarmentMeshViewer({
         <OrbitControls
           makeDefault
           enablePan={false}
+          autoRotate={autoRotate}
+          autoRotateSpeed={1.4}
           minDistance={2.2}
           maxDistance={9}
           target={[0, 0, 0]}

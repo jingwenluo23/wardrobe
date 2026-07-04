@@ -13,8 +13,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Wardrobe",
-  description: "A local wardrobe planning dashboard.",
+  title: "Wardrobe — your closet, in 3D",
+  description:
+    "Photograph your clothes, get pattern-true 3D models, and plan outfits from a digital wardrobe that knows everything you own.",
 };
 
 export default function RootLayout({
