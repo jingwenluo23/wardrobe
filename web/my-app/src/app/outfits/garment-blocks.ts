@@ -26,7 +26,7 @@ const SCALE = 0.04;
 const COLS = 64; // columns across the body width
 const ROWS = 44; // rows from hem to shoulder
 const SLEEVE_RINGS = 12; // rings along each sleeve
-const HOOD_RINGS = 8; // rings from neckline to hood apex
+const HOOD_RINGS = 14; // rings from neckline to hood end
 
 const clamp = (value: number, min: number, max: number) =>
   Math.min(max, Math.max(min, value));
@@ -374,14 +374,17 @@ function buildTopGeometry(
     const rings: number[][] = [];
     for (let i = 0; i <= HOOD_RINGS; i += 1) {
       const t = i / HOOD_RINGS;
+      // Rounded pouch profile: rise over the collar, roll backward and
+      // down, settling low on the back.
       const lift =
-        10 * Math.sin(Math.PI * Math.min(1, t * 1.15)) -
-        9 * smoothstep((t - 0.5) / 0.5);
-      const back = 13 * smoothstep(t);
+        12 * Math.sin(Math.PI * Math.min(1, t * 1.05)) -
+        8 * smoothstep((t - 0.5) / 0.5);
+      const back = 15 * smoothstep(t * 0.95);
       // The cowl spreads wider as it drapes (a resting hood is wider than
-      // the neck opening) and pinches closed at its bottom edge.
-      const widen = 1 + 0.5 * smoothstep(t);
-      const pinch = t < 0.8 ? 1 : 1 - 0.7 * smoothstep((t - 0.8) / 0.2);
+      // the neck opening), keeps its depth for volume, and only closes in
+      // the last stretch so the bottom edge is a soft rounded fold.
+      const widen = 1 + 0.42 * Math.sin(Math.PI * Math.min(1, t * 1.1));
+      const pinch = t < 0.75 ? 1 : 1 - 0.62 * smoothstep((t - 0.75) / 0.25);
       const ringCenter = new THREE.Vector3(
         arcCenter.x,
         arcCenter.y + lift * SCALE,
@@ -391,10 +394,14 @@ function buildTopGeometry(
       for (let j = 0; j < arc.length; j += 1) {
         const radial = arc[j].clone().sub(arcCenter);
         radial.y = 0;
+        // Soft dome: ring edges dip slightly relative to its centre so the
+        // pouch reads as rounded fabric, not a flat slab.
+        const edge = Math.abs(j / (arc.length - 1) - 0.5) * 2;
+        const dome = -1.6 * SCALE * edge * edge * Math.sin(Math.PI * t);
         const p = new THREE.Vector3(
-          ringCenter.x + radial.x * widen * pinch,
-          ringCenter.y,
-          ringCenter.z + radial.z * pinch,
+          ringCenter.x + radial.x * (1 + (widen - 1)) * pinch,
+          ringCenter.y + dome,
+          ringCenter.z + radial.z * Math.max(pinch, 0.55),
         );
         ring.push(pushVertex(p.x, p.y, p.z, j / (arc.length - 1), t));
       }
