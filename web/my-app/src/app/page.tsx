@@ -91,32 +91,32 @@ export default function Home() {
   ).length;
 
   return (
-    <main className="min-h-screen bg-[#0e1210] text-[#e9e5da]">
+    <main className="min-h-screen bg-[#fafaf7] text-[#1c1e1c]">
       {/* ---------------------------------------------------------- nav */}
       <header className="mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-6">
         <Link className="flex items-center gap-3" href="/">
-          <div className="grid h-9 w-9 place-items-center rounded-md bg-[#5ecfa3] font-mono text-sm font-bold text-[#0b1210]">
+          <div className="grid h-9 w-9 place-items-center rounded-md bg-[#1f6a52] font-mono text-sm font-bold text-white">
             W
           </div>
-          <span className="font-mono text-sm uppercase tracking-[0.22em] text-[#e9e5da]">
+          <span className="font-mono text-sm uppercase tracking-[0.22em] text-[#1c1e1c]">
             Wardrobe
           </span>
         </Link>
         <nav className="flex items-center gap-2 text-sm">
           <Link
-            className="rounded-md px-3 py-2 text-[#98a29b] transition hover:text-[#e9e5da]"
+            className="rounded-md px-3 py-2 text-[#6b7370] transition hover:text-[#1c1e1c]"
             href="/outfits"
           >
             My wardrobe
           </Link>
-          <span className="hidden rounded-md px-3 py-2 text-[#5b665f] sm:inline">
+          <span className="hidden rounded-md px-3 py-2 text-[#97a09b] sm:inline">
             Community
-            <span className="ml-2 rounded-full border border-[#2a332e] px-2 py-0.5 font-mono text-[10px] uppercase tracking-widest">
+            <span className="ml-2 rounded-full border border-[#e4e2da] px-2 py-0.5 font-mono text-[10px] uppercase tracking-widest">
               soon
             </span>
           </span>
           <Link
-            className="rounded-md bg-[#5ecfa3] px-4 py-2 font-semibold text-[#0b1210] transition hover:bg-[#79dcb5]"
+            className="rounded-md bg-[#1f6a52] px-4 py-2 font-semibold text-white transition hover:bg-[#17553f]"
             href="/outfits"
           >
             Open wardrobe
@@ -127,7 +127,7 @@ export default function Home() {
       {/* ---------------------------------------------------------- hero */}
       <section className="mx-auto grid w-full max-w-6xl items-center gap-10 px-6 pb-20 pt-10 lg:grid-cols-[1.05fr_1fr]">
         <div>
-          <p className="font-mono text-xs uppercase tracking-[0.28em] text-[#5ecfa3]">
+          <p className="font-mono text-xs uppercase tracking-[0.28em] text-[#1f6a52]">
             Digital wardrobe · 3D try-on engine
           </p>
           <h1 className="mt-4 text-5xl font-semibold leading-[1.04] tracking-tight sm:text-6xl">
@@ -135,7 +135,7 @@ export default function Home() {
             <br />
             rebuilt in 3D.
           </h1>
-          <p className="mt-6 max-w-xl text-lg leading-8 text-[#98a29b]">
+          <p className="mt-6 max-w-xl text-lg leading-8 text-[#6b7370]">
             Photograph your clothes once. Wardrobe isolates the garment,
             reconstructs it as a pattern-true 3D model, and files it into a
             closet you can search, orbit, and plan outfits with — so you
@@ -144,87 +144,87 @@ export default function Home() {
           </p>
           <div className="mt-8 flex flex-wrap items-center gap-4">
             <Link
-              className="rounded-md bg-[#5ecfa3] px-6 py-3.5 text-sm font-semibold text-[#0b1210] transition hover:bg-[#79dcb5]"
+              className="rounded-md bg-[#1f6a52] px-6 py-3.5 text-sm font-semibold text-white transition hover:bg-[#17553f]"
               href="/outfits"
             >
               Digitize your first garment
             </Link>
-            <span className="font-mono text-xs uppercase tracking-[0.18em] text-[#5b665f]">
+            <span className="font-mono text-xs uppercase tracking-[0.18em] text-[#97a09b]">
               Web now · app later
             </span>
           </div>
-          <dl className="mt-12 grid grid-cols-3 gap-4 border-t border-[#2a332e] pt-6 font-mono text-sm">
+          <dl className="mt-12 grid grid-cols-3 gap-4 border-t border-[#e4e2da] pt-6 font-mono text-sm">
             <div>
-              <dt className="text-[10px] uppercase tracking-[0.2em] text-[#5b665f]">
+              <dt className="text-[10px] uppercase tracking-[0.2em] text-[#97a09b]">
                 Templates
               </dt>
-              <dd className="mt-1 text-2xl text-[#e9e5da] tabular-nums">
+              <dd className="mt-1 text-2xl text-[#1c1e1c] tabular-nums">
                 {garmentTemplates.length}
               </dd>
             </div>
             <div>
-              <dt className="text-[10px] uppercase tracking-[0.2em] text-[#5b665f]">
+              <dt className="text-[10px] uppercase tracking-[0.2em] text-[#97a09b]">
                 Tops / Bottoms
               </dt>
-              <dd className="mt-1 text-2xl text-[#e9e5da] tabular-nums">
+              <dd className="mt-1 text-2xl text-[#1c1e1c] tabular-nums">
                 {topsCount} / {bottomsCount}
               </dd>
             </div>
             <div>
-              <dt className="text-[10px] uppercase tracking-[0.2em] text-[#5b665f]">
+              <dt className="text-[10px] uppercase tracking-[0.2em] text-[#97a09b]">
                 Extraction
               </dt>
-              <dd className="mt-1 text-2xl text-[#e9e5da]">ML</dd>
+              <dd className="mt-1 text-2xl text-[#1c1e1c]">ML</dd>
             </div>
           </dl>
         </div>
 
         <div className="relative">
-          <div className="overflow-hidden rounded-xl border border-[#2a332e] bg-[#0b0f0d]">
+          <div className="overflow-hidden rounded-xl border border-[#e4e2da] bg-[#f1ece0]">
             {heroMesh ? (
               <GarmentMeshViewer
                 autoRotate
-                background="#0b0f0d"
+                background="#f1ece0"
                 height={520}
                 mesh={heroMesh}
               />
             ) : null}
           </div>
-          <div className="pointer-events-none absolute left-4 top-4 rounded-md border border-[#2a332e] bg-[#0e1210]/85 px-3 py-2 font-mono text-[10px] uppercase tracking-[0.2em] text-[#98a29b]">
+          <div className="pointer-events-none absolute left-4 top-4 rounded-md border border-[#e4e2da] bg-white/85 px-3 py-2 font-mono text-[10px] uppercase tracking-[0.2em] text-[#555d58]">
             live mesh · hoodie block
           </div>
-          <div className="pointer-events-none absolute bottom-4 right-4 rounded-md border border-[#2a332e] bg-[#0e1210]/85 px-3 py-2 font-mono text-[10px] uppercase tracking-[0.2em] text-[#98a29b]">
+          <div className="pointer-events-none absolute bottom-4 right-4 rounded-md border border-[#e4e2da] bg-white/85 px-3 py-2 font-mono text-[10px] uppercase tracking-[0.2em] text-[#555d58]">
             drag to orbit
           </div>
         </div>
       </section>
 
       {/* ------------------------------------------------------ pipeline */}
-      <section className="border-t border-[#2a332e] bg-[#101512]">
+      <section className="border-t border-[#e4e2da] bg-[#f3f2ec]">
         <div className="mx-auto w-full max-w-6xl px-6 py-16">
-          <p className="font-mono text-xs uppercase tracking-[0.28em] text-[#5ecfa3]">
+          <p className="font-mono text-xs uppercase tracking-[0.28em] text-[#1f6a52]">
             How a garment enters your wardrobe
           </p>
           <div className="mt-8 grid gap-6 md:grid-cols-3">
             {pipeline.map((stage) => (
               <div
-                className="rounded-lg border border-[#2a332e] bg-[#0e1210] p-6"
+                className="rounded-lg border border-[#e4e2da] bg-white p-6"
                 key={stage.step}
               >
                 <div className="flex items-baseline gap-3">
-                  <span className="font-mono text-xs text-[#5ecfa3]">
+                  <span className="font-mono text-xs text-[#1f6a52]">
                     {stage.step}
                   </span>
-                  <span className="h-px flex-1 bg-[#2a332e]" />
+                  <span className="h-px flex-1 bg-[#e4e2da]" />
                   <h3 className="text-lg font-semibold">{stage.name}</h3>
                 </div>
-                <p className="mt-4 text-sm leading-6 text-[#98a29b]">
+                <p className="mt-4 text-sm leading-6 text-[#6b7370]">
                   {stage.detail}
                 </p>
               </div>
             ))}
           </div>
-          <p className="mt-6 max-w-3xl text-sm leading-6 text-[#5b665f]">
+          <p className="mt-6 max-w-3xl text-sm leading-6 text-[#97a09b]">
             The same extraction is built to survive store fitting rooms and
             busy backgrounds — point it at something on the rack and preview
             it in your wardrobe before you pay.
@@ -233,9 +233,9 @@ export default function Home() {
       </section>
 
       {/* ------------------------------------------------------- roadmap */}
-      <section className="border-t border-[#2a332e]">
+      <section className="border-t border-[#e4e2da]">
         <div className="mx-auto w-full max-w-6xl px-6 py-16">
-          <p className="font-mono text-xs uppercase tracking-[0.28em] text-[#5ecfa3]">
+          <p className="font-mono text-xs uppercase tracking-[0.28em] text-[#1f6a52]">
             Where this is going
           </p>
           <h2 className="mt-3 max-w-2xl text-3xl font-semibold tracking-tight">
@@ -244,24 +244,24 @@ export default function Home() {
           <div className="mt-8 grid gap-6 md:grid-cols-3">
             {roadmap.map((column) => (
               <div
-                className="rounded-lg border border-[#2a332e] bg-[#101512] p-6"
+                className="rounded-lg border border-[#e4e2da] bg-[#f3f2ec] p-6"
                 key={column.phase}
               >
                 <span
                   className={
                     "inline-block rounded-full px-3 py-1 font-mono text-[10px] uppercase tracking-[0.2em] " +
                     (column.phase === "NOW"
-                      ? "bg-[#5ecfa3] text-[#0b1210]"
-                      : "border border-[#2a332e] text-[#98a29b]")
+                      ? "bg-[#1f6a52] text-white"
+                      : "border border-[#e4e2da] text-[#6b7370]")
                   }
                 >
                   {column.phase}
                 </span>
                 <h3 className="mt-4 text-xl font-semibold">{column.title}</h3>
-                <ul className="mt-4 grid gap-3 text-sm leading-6 text-[#98a29b]">
+                <ul className="mt-4 grid gap-3 text-sm leading-6 text-[#6b7370]">
                   {column.items.map((item) => (
                     <li className="flex gap-3" key={item}>
-                      <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-[#5ecfa3]" />
+                      <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-[#1f6a52]" />
                       {item}
                     </li>
                   ))}
@@ -273,10 +273,10 @@ export default function Home() {
       </section>
 
       {/* -------------------------------------------------------- avatar */}
-      <section className="border-t border-[#2a332e] bg-[#101512]">
+      <section className="border-t border-[#e4e2da] bg-[#f3f2ec]">
         <div className="mx-auto grid w-full max-w-6xl gap-10 px-6 py-16 lg:grid-cols-2">
           <div>
-            <p className="font-mono text-xs uppercase tracking-[0.28em] text-[#5ecfa3]">
+            <p className="font-mono text-xs uppercase tracking-[0.28em] text-[#1f6a52]">
               The avatar
             </p>
             <h2 className="mt-3 text-3xl font-semibold tracking-tight">
@@ -284,7 +284,7 @@ export default function Home() {
               <br />
               Your proportions. No face.
             </h2>
-            <p className="mt-5 max-w-xl text-sm leading-7 text-[#98a29b]">
+            <p className="mt-5 max-w-xl text-sm leading-7 text-[#6b7370]">
               The avatar is a mannequin, not a portrait: height, shoulders,
               chest, waist — tuned like a character creator, private by
               design. Every garment you digitize fits onto it, so outfit
@@ -293,7 +293,7 @@ export default function Home() {
               me?&quot; before the till.
             </p>
           </div>
-          <div className="grid content-center gap-3 font-mono text-sm text-[#98a29b]">
+          <div className="grid content-center gap-3 font-mono text-sm text-[#6b7370]">
             {[
               ["HEIGHT", "178 cm", "w-2/3"],
               ["SHOULDER", "46 cm", "w-1/2"],
@@ -301,19 +301,19 @@ export default function Home() {
               ["WAIST", "82 cm", "w-2/5"],
             ].map(([label, value, bar]) => (
               <div
-                className="flex items-center justify-between gap-4 rounded-md border border-[#2a332e] bg-[#0e1210] px-4 py-3"
+                className="flex items-center justify-between gap-4 rounded-md border border-[#e4e2da] bg-white px-4 py-3"
                 key={label}
               >
-                <span className="w-24 text-[10px] uppercase tracking-[0.24em] text-[#5b665f]">
+                <span className="w-24 text-[10px] uppercase tracking-[0.24em] text-[#97a09b]">
                   {label}
                 </span>
-                <span className="tabular-nums text-[#e9e5da]">{value}</span>
-                <div className="h-1 w-24 rounded-full bg-[#24302a]">
-                  <div className={"h-1 rounded-full bg-[#5ecfa3] " + bar} />
+                <span className="tabular-nums text-[#1c1e1c]">{value}</span>
+                <div className="h-1 w-24 rounded-full bg-[#e4e2da]">
+                  <div className={"h-1 rounded-full bg-[#1f6a52] " + bar} />
                 </div>
               </div>
             ))}
-            <p className="mt-1 text-[10px] uppercase tracking-[0.2em] text-[#5b665f]">
+            <p className="mt-1 text-[10px] uppercase tracking-[0.2em] text-[#97a09b]">
               concept · sliders ship with the avatar phase
             </p>
           </div>
@@ -321,18 +321,18 @@ export default function Home() {
       </section>
 
       {/* ----------------------------------------------------------- cta */}
-      <section className="border-t border-[#2a332e]">
+      <section className="border-t border-[#e4e2da]">
         <div className="mx-auto flex w-full max-w-6xl flex-col items-start gap-6 px-6 py-16 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="text-2xl font-semibold tracking-tight">
               Start with the shirt on your chair.
             </h2>
-            <p className="mt-2 text-sm text-[#98a29b]">
+            <p className="mt-2 text-sm text-[#6b7370]">
               Two photos in, one 3D garment out. Your closet starts counting.
             </p>
           </div>
           <Link
-            className="rounded-md bg-[#5ecfa3] px-6 py-3.5 text-sm font-semibold text-[#0b1210] transition hover:bg-[#79dcb5]"
+            className="rounded-md bg-[#1f6a52] px-6 py-3.5 text-sm font-semibold text-white transition hover:bg-[#17553f]"
             href="/outfits"
           >
             Open my wardrobe
@@ -340,8 +340,8 @@ export default function Home() {
         </div>
       </section>
 
-      <footer className="border-t border-[#2a332e]">
-        <div className="mx-auto flex w-full max-w-6xl flex-col gap-2 px-6 py-8 font-mono text-[11px] uppercase tracking-[0.2em] text-[#5b665f] sm:flex-row sm:items-center sm:justify-between">
+      <footer className="border-t border-[#e4e2da]">
+        <div className="mx-auto flex w-full max-w-6xl flex-col gap-2 px-6 py-8 font-mono text-[11px] uppercase tracking-[0.2em] text-[#97a09b] sm:flex-row sm:items-center sm:justify-between">
           <span>Wardrobe — reshaping the fashion industry</span>
           <span>web → app · clothes → shoes → everything</span>
         </div>
