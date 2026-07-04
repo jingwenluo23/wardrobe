@@ -398,7 +398,7 @@ export default function OutfitsPage() {
       <section className="mx-auto grid min-h-screen w-full max-w-7xl grid-cols-1 gap-8 px-5 py-6 sm:px-8 lg:grid-cols-[280px_1fr] lg:px-10">
         <aside className="border-b border-[#e4e2da] pb-6 lg:border-b-0 lg:border-r lg:pb-0 lg:pr-8">
           <Link className="flex items-center gap-3" href="/">
-            <div className="grid h-11 w-11 place-items-center rounded-lg bg-[#1f6a52] text-lg font-semibold text-white">
+            <div className="grid h-11 w-11 place-items-center rounded-lg bg-[#2e8b6b] text-lg font-semibold text-white">
               W
             </div>
             <div>
@@ -417,7 +417,7 @@ export default function OutfitsPage() {
               Overview
             </Link>
             <Link
-              className="rounded-lg bg-[#1f6a52] px-3 py-2 font-semibold text-white"
+              className="rounded-lg bg-[#2e8b6b] px-3 py-2 font-semibold text-white"
               href="/outfits"
             >
               Outfits
@@ -472,7 +472,7 @@ export default function OutfitsPage() {
               </p>
             </div>
             <button
-              className="rounded-lg bg-[#1f6a52] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#17553f]"
+              className="rounded-lg bg-[#2e8b6b] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#27775a]"
               onClick={() => setIsUploadOpen(true)}
               type="button"
             >
@@ -519,7 +519,7 @@ export default function OutfitsPage() {
                   }
                 >
                   {item.imageUrls?.[0] ? (
-                    <div className="absolute bottom-4 left-4 rounded-full bg-white/90 px-3 py-1 text-xs font-semibold text-[#1f6a52]">
+                    <div className="absolute bottom-4 left-4 rounded-full bg-white/90 px-3 py-1 text-xs font-semibold text-[#256f56]">
                       {item.imageUrls.length} photos
                     </div>
                   ) : (
@@ -554,7 +554,7 @@ export default function OutfitsPage() {
                     </p>
                     <h3 className="mt-1 text-lg font-semibold">{item.name}</h3>
                   </div>
-                  <span className="rounded-full bg-[#e5f2ec] px-3 py-1 text-xs font-semibold text-[#1f6a52]">
+                  <span className="rounded-full bg-[#e5f2ec] px-3 py-1 text-xs font-semibold text-[#256f56]">
                     {item.status}
                   </span>
                 </div>
@@ -588,7 +588,7 @@ export default function OutfitsPage() {
                         </p>
                       </div>
                       <button
-                        className="rounded-lg bg-[#1f6a52] px-3 py-2 text-xs font-semibold text-white transition hover:bg-[#17553f]"
+                        className="rounded-lg bg-[#2e8b6b] px-3 py-2 text-xs font-semibold text-white transition hover:bg-[#27775a]"
                         onClick={() => setSelectedDraftItem(item)}
                         type="button"
                       >
@@ -597,7 +597,7 @@ export default function OutfitsPage() {
                     </div>
                     <div className="mt-3 h-2 rounded-full bg-[#e4e2da]">
                       <div
-                        className="h-2 rounded-full bg-[#1f6a52] transition-all"
+                        className="h-2 rounded-full bg-[#2e8b6b] transition-all"
                         style={{ width: String(item.progress ?? 0) + "%" }}
                       />
                     </div>
@@ -641,7 +641,7 @@ export default function OutfitsPage() {
                   <label className="grid gap-2 text-sm font-semibold text-[#6b7370]">
                     Item name
                     <input
-                      className="rounded-lg border border-[#dcdad1] bg-white px-3 py-3 text-base font-medium text-[#1c1e1c] outline-none focus:border-[#1f6a52]"
+                      className="rounded-lg border border-[#dcdad1] bg-white px-3 py-3 text-base font-medium text-[#1c1e1c] outline-none focus:border-[#2e8b6b]"
                       onChange={(event) => setItemName(event.target.value)}
                       placeholder="Black knit polo"
                       type="text"
@@ -651,7 +651,7 @@ export default function OutfitsPage() {
                   <label className="grid gap-2 text-sm font-semibold text-[#6b7370]">
                     Category
                     <select
-                      className="rounded-lg border border-[#dcdad1] bg-white px-3 py-3 text-base font-medium text-[#1c1e1c] outline-none focus:border-[#1f6a52]"
+                      className="rounded-lg border border-[#dcdad1] bg-white px-3 py-3 text-base font-medium text-[#1c1e1c] outline-none focus:border-[#2e8b6b]"
                       onChange={(event) => {
                         const category = event.target.value;
                         setItemCategory(category);
@@ -669,7 +669,7 @@ export default function OutfitsPage() {
                   <label className="grid gap-2 text-sm font-semibold text-[#6b7370] sm:col-span-2">
                     Garment type
                     <select
-                      className="rounded-lg border border-[#dcdad1] bg-white px-3 py-3 text-base font-medium text-[#1c1e1c] outline-none focus:border-[#1f6a52]"
+                      className="rounded-lg border border-[#dcdad1] bg-white px-3 py-3 text-base font-medium text-[#1c1e1c] outline-none focus:border-[#2e8b6b]"
                       onChange={(event) => setItemTemplateId(event.target.value)}
                       value={itemTemplateId}
                     >
@@ -716,7 +716,7 @@ export default function OutfitsPage() {
                             </span>
                           </div>
 
-                          <label className="mt-3 grid min-h-40 cursor-pointer place-items-center overflow-hidden rounded-lg border border-dashed border-[#cfd4cd] bg-white text-center transition hover:border-[#1f6a52]">
+                          <label className="mt-3 grid min-h-40 cursor-pointer place-items-center overflow-hidden rounded-lg border border-dashed border-[#cfd4cd] bg-white text-center transition hover:border-[#2e8b6b]">
                             {photo ? (
                               <div
                                 className="relative h-full min-h-40 w-full bg-[#ecebe4]"
@@ -810,7 +810,7 @@ export default function OutfitsPage() {
                         className={
                           "grid h-8 w-8 place-items-center rounded-full text-xs font-bold " +
                           (hasRequiredUploadPhotos
-                            ? "bg-[#1f6a52] text-white"
+                            ? "bg-[#2e8b6b] text-white"
                             : "bg-[#e4e2da] text-[#6b7370]")
                         }
                       >
@@ -848,7 +848,7 @@ export default function OutfitsPage() {
                 Cancel
               </button>
               <button
-                className="rounded-lg bg-[#1f6a52] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#17553f] disabled:cursor-not-allowed disabled:bg-[#c9cfc9]"
+                className="rounded-lg bg-[#2e8b6b] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#27775a] disabled:cursor-not-allowed disabled:bg-[#c9cfc9]"
                 disabled={!itemName.trim() || !hasRequiredUploadPhotos || isSubmitting}
                 type="submit"
               >
@@ -902,7 +902,7 @@ export default function OutfitsPage() {
                   <div>
                     Drag to orbit the 3D mesh. Scroll to zoom. The view now auto-fits on open.
                   </div>
-                  <div className="rounded-full bg-white px-3 py-1 font-semibold text-[#1f6a52] shadow-sm ring-1 ring-[#e9e7df]">
+                  <div className="rounded-full bg-white px-3 py-1 font-semibold text-[#256f56] shadow-sm ring-1 ring-[#e9e7df]">
                     {selectedDraftViewCount === 0
                       ? "0 / 0"
                       : String(selectedReferenceIndex + 1) +
@@ -976,7 +976,7 @@ export default function OutfitsPage() {
                       className={
                         "relative h-28 overflow-hidden rounded-lg bg-[#ecebe4] text-left ring-2 transition " +
                         (selectedReferenceIndex === index
-                          ? "ring-[#1f6a52]"
+                          ? "ring-[#2e8b6b]"
                           : "ring-transparent hover:ring-[#cfd4cd]")
                       }
                       key={selectedDraftItem.name + "-view-" + String(index)}

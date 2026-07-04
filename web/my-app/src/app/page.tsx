@@ -95,7 +95,7 @@ export default function Home() {
       {/* ---------------------------------------------------------- nav */}
       <header className="mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-6">
         <Link className="flex items-center gap-3" href="/">
-          <div className="grid h-9 w-9 place-items-center rounded-md bg-[#1f6a52] font-mono text-sm font-bold text-white">
+          <div className="grid h-9 w-9 place-items-center rounded-md bg-[#2e8b6b] font-mono text-sm font-bold text-white">
             W
           </div>
           <span className="font-mono text-sm uppercase tracking-[0.22em] text-[#1c1e1c]">
@@ -116,7 +116,7 @@ export default function Home() {
             </span>
           </span>
           <Link
-            className="rounded-md bg-[#1f6a52] px-4 py-2 font-semibold text-white transition hover:bg-[#17553f]"
+            className="rounded-md bg-[#2e8b6b] px-4 py-2 font-semibold text-white transition hover:bg-[#27775a]"
             href="/outfits"
           >
             Open wardrobe
@@ -127,7 +127,7 @@ export default function Home() {
       {/* ---------------------------------------------------------- hero */}
       <section className="mx-auto grid w-full max-w-6xl items-center gap-10 px-6 pb-20 pt-10 lg:grid-cols-[1.05fr_1fr]">
         <div>
-          <p className="font-mono text-xs uppercase tracking-[0.28em] text-[#1f6a52]">
+          <p className="font-mono text-xs uppercase tracking-[0.28em] text-[#256f56]">
             Digital wardrobe · 3D try-on engine
           </p>
           <h1 className="mt-4 text-5xl font-semibold leading-[1.04] tracking-tight sm:text-6xl">
@@ -144,7 +144,7 @@ export default function Home() {
           </p>
           <div className="mt-8 flex flex-wrap items-center gap-4">
             <Link
-              className="rounded-md bg-[#1f6a52] px-6 py-3.5 text-sm font-semibold text-white transition hover:bg-[#17553f]"
+              className="rounded-md bg-[#2e8b6b] px-6 py-3.5 text-sm font-semibold text-white transition hover:bg-[#27775a]"
               href="/outfits"
             >
               Digitize your first garment
@@ -202,7 +202,7 @@ export default function Home() {
       {/* ------------------------------------------------------ pipeline */}
       <section className="border-t border-[#e4e2da] bg-[#f3f2ec]">
         <div className="mx-auto w-full max-w-6xl px-6 py-16">
-          <p className="font-mono text-xs uppercase tracking-[0.28em] text-[#1f6a52]">
+          <p className="font-mono text-xs uppercase tracking-[0.28em] text-[#256f56]">
             How a garment enters your wardrobe
           </p>
           <div className="mt-8 grid gap-6 md:grid-cols-3">
@@ -212,7 +212,7 @@ export default function Home() {
                 key={stage.step}
               >
                 <div className="flex items-baseline gap-3">
-                  <span className="font-mono text-xs text-[#1f6a52]">
+                  <span className="font-mono text-xs text-[#256f56]">
                     {stage.step}
                   </span>
                   <span className="h-px flex-1 bg-[#e4e2da]" />
@@ -235,7 +235,7 @@ export default function Home() {
       {/* ------------------------------------------------------- roadmap */}
       <section className="border-t border-[#e4e2da]">
         <div className="mx-auto w-full max-w-6xl px-6 py-16">
-          <p className="font-mono text-xs uppercase tracking-[0.28em] text-[#1f6a52]">
+          <p className="font-mono text-xs uppercase tracking-[0.28em] text-[#256f56]">
             Where this is going
           </p>
           <h2 className="mt-3 max-w-2xl text-3xl font-semibold tracking-tight">
@@ -251,7 +251,7 @@ export default function Home() {
                   className={
                     "inline-block rounded-full px-3 py-1 font-mono text-[10px] uppercase tracking-[0.2em] " +
                     (column.phase === "NOW"
-                      ? "bg-[#1f6a52] text-white"
+                      ? "bg-[#2e8b6b] text-white"
                       : "border border-[#e4e2da] text-[#6b7370]")
                   }
                 >
@@ -261,7 +261,7 @@ export default function Home() {
                 <ul className="mt-4 grid gap-3 text-sm leading-6 text-[#6b7370]">
                   {column.items.map((item) => (
                     <li className="flex gap-3" key={item}>
-                      <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-[#1f6a52]" />
+                      <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-[#2e8b6b]" />
                       {item}
                     </li>
                   ))}
@@ -276,7 +276,7 @@ export default function Home() {
       <section className="border-t border-[#e4e2da] bg-[#f3f2ec]">
         <div className="mx-auto grid w-full max-w-6xl gap-10 px-6 py-16 lg:grid-cols-2">
           <div>
-            <p className="font-mono text-xs uppercase tracking-[0.28em] text-[#1f6a52]">
+            <p className="font-mono text-xs uppercase tracking-[0.28em] text-[#256f56]">
               The avatar
             </p>
             <h2 className="mt-3 text-3xl font-semibold tracking-tight">
@@ -309,7 +309,7 @@ export default function Home() {
                 </span>
                 <span className="tabular-nums text-[#1c1e1c]">{value}</span>
                 <div className="h-1 w-24 rounded-full bg-[#e4e2da]">
-                  <div className={"h-1 rounded-full bg-[#1f6a52] " + bar} />
+                  <div className={"h-1 rounded-full bg-[#2e8b6b] " + bar} />
                 </div>
               </div>
             ))}
@@ -332,7 +332,7 @@ export default function Home() {
             </p>
           </div>
           <Link
-            className="rounded-md bg-[#1f6a52] px-6 py-3.5 text-sm font-semibold text-white transition hover:bg-[#17553f]"
+            className="rounded-md bg-[#2e8b6b] px-6 py-3.5 text-sm font-semibold text-white transition hover:bg-[#27775a]"
             href="/outfits"
           >
             Open my wardrobe
