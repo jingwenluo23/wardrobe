@@ -20,6 +20,10 @@ export type GarmentFeatures = {
   archetype?: "top" | "bottoms" | "skirt";
   /** Neck opening finish. */
   neckFinish: "band" | "hood" | "turtleneck" | "polo-collar" | "shirt-collar";
+  /** Neckline shape: rounded crew (default) or a V. */
+  neckShape?: "crew" | "v";
+  /** Two flat patch pockets low on the front (cardigans, camp shirts). */
+  patchPockets?: boolean;
   /** Ribbed sweatshirt-style band at the bottom hem. */
   hemBand: boolean;
   /** Sleeve/leg-end finish: raw edge or a snug ribbed cuff (joggers). */

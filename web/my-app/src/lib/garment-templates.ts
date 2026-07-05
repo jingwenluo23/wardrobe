@@ -537,11 +537,11 @@ export const garmentTemplates: GarmentTemplateDef[] = [
       bodyWidth: 54,
       bodyLength: 76,
       neckWidthFront: 19,
-      neckDropFront: 11,
+      neckDropFront: 18,
       armholeDepth: 25,
       shoulderWidthFactor: 0.66,
     },
-    features: { ...defaultTeeFeatures, sleeves: false },
+    features: { ...defaultTeeFeatures, sleeves: false, neckShape: "v" },
   },
   // Legacy / other-category placeholders (same knit block until their own
   // archetypes land).

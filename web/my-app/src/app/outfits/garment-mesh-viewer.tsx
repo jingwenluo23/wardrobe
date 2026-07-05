@@ -85,10 +85,16 @@ function makeFabricBump(kind: "knit" | "fleece") {
     }
     g.globalAlpha = 1;
   } else {
+    // Seeded PRNG so the fleece speckle is deterministic (stable goldens).
+    let seed = 0x9e3779b9;
+    const rand = () => {
+      seed = (seed * 1664525 + 1013904223) >>> 0;
+      return seed / 0xffffffff;
+    };
     for (let i = 0; i < 2600; i += 1) {
-      const v = 118 + Math.floor(Math.random() * 20);
+      const v = 118 + Math.floor(rand() * 20);
       g.fillStyle = "rgb(" + v + "," + v + "," + v + ")";
-      g.fillRect(Math.random() * size, Math.random() * size, 1.5, 1.5);
+      g.fillRect(rand() * size, rand() * size, 1.5, 1.5);
     }
   }
   const texture = new THREE.CanvasTexture(canvas);

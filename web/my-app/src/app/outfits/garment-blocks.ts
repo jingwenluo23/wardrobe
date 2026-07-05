@@ -129,11 +129,18 @@ function buildTopGeometry(
   // Top edge of a panel as a function of lateral position s in [0, 1]
   // (0 = centre front, 1 = shoulder point).
   const neckFrac = neckHalf / shoulderX;
+  const vNeck = features.neckShape === "v";
   const topEdgeY = (s: number, neckDrop: number) => {
     if (s <= neckFrac) {
+      const t = s / neckFrac;
+      if (vNeck) {
+        // V-neck: a near-linear taper from a rounded point at the centre
+        // up to the shoulder line (cardigans, V-neck jerseys/sweaters).
+        const f = Math.pow(1 - t, 1.15);
+        return neckShoulderY - neckDrop * f;
+      }
       // Crew neckline: superellipse blend -> flat-bottomed U at the centre
       // that turns up smoothly into the shoulder line.
-      const t = s / neckFrac;
       const f = Math.pow(1 - Math.pow(t, 2.2), 0.8);
       return neckShoulderY - neckDrop * f;
     }
@@ -450,6 +457,53 @@ function buildTopGeometry(
       const jn = (j + 1) % loopCount;
       // Wound so the band's outer face points outward/down.
       indices.push(ringA[j], ringB[j], ringA[jn], ringA[jn], ringB[j], ringB[jn]);
+    }
+  };
+
+  // --- Block: patch pockets ------------------------------------------------
+  // Two flat raised pockets low on the front (cardigans, camp shirts).
+  const buildPatchPockets = () => {
+    const pocketW = 13 * SCALE;
+    const pocketH = 13 * SCALE;
+    const cy = hemY + length * 0.24;
+    const raise = 0.45 * SCALE;
+    for (const side of [-1, 1] as const) {
+      const cx = side * halfW * 0.42;
+      const surfZ = depth * 1.05 * 0.72 + raise;
+      const x0 = cx - pocketW / 2;
+      const x1 = cx + pocketW / 2;
+      const yTop = cy + pocketH / 2;
+      const yBot = cy - pocketH / 2;
+      // Rounded bottom corners via a small chamfer.
+      const ch = 2 * SCALE;
+      const face = [
+        pushVertex(x0, yTop, surfZ, 0, 1),
+        pushVertex(x1, yTop, surfZ, 1, 1),
+        pushVertex(x1, yBot + ch, surfZ, 1, 0.1),
+        pushVertex(x1 - ch, yBot, surfZ, 0.9, 0),
+        pushVertex(x0 + ch, yBot, surfZ, 0.1, 0),
+        pushVertex(x0, yBot + ch, surfZ, 0, 0.1),
+      ];
+      // Fan the front face.
+      for (let i = 1; i < face.length - 1; i += 1) {
+        indices.push(face[0], face[i], face[i + 1]);
+      }
+      // Thin sidewalls back to the body surface.
+      const bodyZ = surfZ - raise;
+      const back = face.map((_, i) => {
+        const idx = face[i] * 3;
+        return pushVertex(
+          positions[idx],
+          positions[idx + 1],
+          bodyZ,
+          0,
+          0,
+        );
+      });
+      for (let i = 0; i < face.length; i += 1) {
+        const j = (i + 1) % face.length;
+        indices.push(face[i], back[i], face[j], face[j], back[i], back[j]);
+      }
     }
   };
 
@@ -780,6 +834,9 @@ function buildTopGeometry(
   }
   if (features.hemBand) {
     buildHemBand();
+  }
+  if (features.patchPockets) {
+    buildPatchPockets();
   }
   // --- Block: dress skirt ----------------------------------------------
   // Lofts a skirt from the bodice hem: straight for bodycon, flared for
