@@ -67,6 +67,7 @@ const categoryNames = [
   "All clothes",
   "Tops",
   "Bottoms",
+  "Dresses",
   "Outerwear",
   "Socks",
   "Shoes",

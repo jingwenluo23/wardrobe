@@ -17,7 +17,7 @@ export type GarmentTemplate = string;
  */
 export type GarmentFeatures = {
   /** Which geometry archetype builds this garment. Defaults to "top". */
-  archetype?: "top" | "bottoms";
+  archetype?: "top" | "bottoms" | "skirt";
   /** Neck opening finish. */
   neckFinish: "band" | "hood" | "turtleneck" | "polo-collar" | "shirt-collar";
   /** Ribbed sweatshirt-style band at the bottom hem. */
@@ -32,6 +32,15 @@ export type GarmentFeatures = {
   sleeves?: boolean;
   /** Bottoms: boxy utility pockets on the outer thighs. */
   cargoPockets?: boolean;
+  /** Bottoms/skirts: flat tailored waistband with belt loops, or a thicker
+   *  elastic band with a hanging drawcord. */
+  waistband?: "flat" | "elastic";
+  /** Tops: attach a lofted skirt below the bodice hem (dresses). Length in
+   *  cm from the hem down. */
+  skirtLength?: number;
+  /** Dresses: hem width relative to the bodice hem (0 = straight/bodycon,
+   *  0.6 = full A-line flare). */
+  skirtFlare?: number;
   /** Fabric weight/structure: scales trims and adds surface texture.
    *  jersey = light knit (default), fleece = thick sweatshirt fabric,
    *  knit = chunky visible-rib sweater knit. */
@@ -149,6 +158,15 @@ export function boundsFromParams(
   if (features?.archetype === "bottoms") {
     const width = params.hipWidth ?? 50;
     const height = (params.rise ?? 28) + (params.inseam ?? 78) + 4;
+    return {
+      width: Math.round(width) / 10,
+      height: Math.round(height) / 10,
+      depth: Math.round(params.bodyDepth) / 10,
+    };
+  }
+  if (features?.archetype === "skirt") {
+    const width = Math.max(params.hipWidth ?? 50, params.legOpening ?? 50);
+    const height = params.inseam ?? 60;
     return {
       width: Math.round(width) / 10,
       height: Math.round(height) / 10,

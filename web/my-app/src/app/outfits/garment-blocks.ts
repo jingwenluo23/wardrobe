@@ -48,6 +48,9 @@ export function buildGarmentGeometry(
   if (features.archetype === "bottoms") {
     return buildBottomsGeometry(params, features);
   }
+  if (features.archetype === "skirt") {
+    return buildSkirtGeometry(params, features);
+  }
   return buildTopGeometry(params, features);
 }
 
@@ -778,6 +781,56 @@ function buildTopGeometry(
   if (features.hemBand) {
     buildHemBand();
   }
+  // --- Block: dress skirt ----------------------------------------------
+  // Lofts a skirt from the bodice hem: straight for bodycon, flared for
+  // A-line, with a soft ripple gathering toward the hem.
+  if (features.skirtLength && features.skirtLength > 0) {
+    const skirtL = features.skirtLength * SCALE;
+    const flare = clamp(features.skirtFlare ?? 0.4, 0, 1);
+    const rings = 14;
+    const loop: THREE.Vector3[] = [];
+    for (let c = 0; c <= COLS; c += 1) {
+      loop.push(readVertex(frontBase + c));
+    }
+    for (let c = COLS; c >= 0; c -= 1) {
+      loop.push(readVertex(backBase + c));
+    }
+    const loopCount = loop.length;
+    let previous: number[] | null = null;
+    for (let i = 0; i <= rings; i += 1) {
+      const t = i / rings;
+      const spread = 1 + flare * 0.9 * t;
+      const ripple = 0.035 * flare * smoothstep(t);
+      const ring: number[] = [];
+      for (let j = 0; j < loopCount; j += 1) {
+        const q = loop[j];
+        const wave = 1 + ripple * Math.sin((j / loopCount) * Math.PI * 10);
+        ring.push(
+          pushVertex(
+            q.x * spread * wave,
+            q.y - skirtL * t,
+            q.z * spread * wave,
+            j / loopCount,
+            t,
+          ),
+        );
+      }
+      if (previous) {
+        for (let j = 0; j < loopCount; j += 1) {
+          const jn = (j + 1) % loopCount;
+          indices.push(
+            previous[j],
+            ring[j],
+            previous[jn],
+            previous[jn],
+            ring[j],
+            ring[jn],
+          );
+        }
+      }
+      previous = ring;
+    }
+  }
   if (features.sleeves !== false) {
     buildSleeve(1);
     buildSleeve(-1);
@@ -835,7 +888,7 @@ function buildBottomsGeometry(
   // Per-leg radius (half-width of one leg) as a function of height. The
   // silhouette stays continuous (waist -> hip -> opening); the thigh
   // measurement acts as a mid-leg fullness factor (baggy vs slim).
-  const thighFullness = clamp(thighHalf / (hipHalf / 2), 0.85, 1.3);
+  const thighFullness = clamp(thighHalf / (hipHalf / 2), 0.85, 1.5);
   const legRadius = (y: number) => {
     if (y >= crotchY) {
       const t = (waistY - y) / rise;
@@ -942,16 +995,22 @@ function buildBottomsGeometry(
   const backIndexEnd = indices.length;
 
   // --- Block: waistband ----------------------------------------------------
-  // An elliptical band hugging the top opening, folding slightly inward.
+  // An elliptical band hugging the top opening. "flat" is a crisp tailored
+  // band with belt loops (jeans, chinos, dress trousers); "elastic" is a
+  // thicker gathered band with a hanging drawcord (joggers, sports shorts).
   {
-    const bandH = 3.5 * SCALE;
+    const waistStyle = features.waistband ?? "flat";
+    const bandH = (waistStyle === "elastic" ? 4.4 : 3.2) * SCALE;
     const segs = 48;
     const ringAt = (yOffset: number, scale: number, v: number) => {
       const ring: number[] = [];
       for (let j = 0; j <= segs; j += 1) {
         const beta = (j / segs) * Math.PI * 2;
-        const x = Math.cos(beta) * waistHalf * scale;
-        const z = Math.sin(beta) * depth * 0.93 * scale;
+        // Elastic bands gather: a subtle vertical ripple around the ring.
+        const gather =
+          waistStyle === "elastic" ? 1 + 0.012 * Math.sin(beta * 14) : 1;
+        const x = Math.cos(beta) * waistHalf * scale * gather;
+        const z = Math.sin(beta) * depth * 0.93 * scale * gather;
         ring.push(pushVertex(x, waistY + yOffset, z, j / segs, v));
       }
       return ring;
@@ -966,6 +1025,71 @@ function buildBottomsGeometry(
     };
     stitch(r0, r1);
     stitch(r1, r2);
+
+    if (waistStyle === "flat") {
+      // Belt loops: slim raised tabs spaced around the band.
+      const loopH = 2.7 * SCALE;
+      const loopW = 0.95 * SCALE;
+      const lift = 0.55 * SCALE;
+      for (const deg of [58, 122, 180, 238, 302]) {
+        const beta = (deg * Math.PI) / 180;
+        const nx = Math.cos(beta);
+        const nz = Math.sin(beta);
+        const cx = nx * waistHalf * 1.01;
+        const cz = nz * depth * 0.94;
+        // Tangent along the band for the tab's width.
+        const tx = -nz * loopW;
+        const tz = nx * loopW * (depth / waistHalf);
+        const yTop = waistY + bandH * 0.9;
+        const yBottom = waistY - 0.4 * SCALE + (loopH - loopH);
+        const ox = nx * lift;
+        const oz = nz * lift * (depth / waistHalf);
+        const a = pushVertex(cx - tx / 2 + ox, yTop, cz - tz / 2 + oz, 0, 0);
+        const b = pushVertex(cx + tx / 2 + ox, yTop, cz + tz / 2 + oz, 0.02, 0);
+        const c2 = pushVertex(
+          cx + tx / 2 + ox,
+          yBottom - loopH,
+          cz + tz / 2 + oz,
+          0.02,
+          0.02,
+        );
+        const d = pushVertex(
+          cx - tx / 2 + ox,
+          yBottom - loopH,
+          cz - tz / 2 + oz,
+          0,
+          0.02,
+        );
+        indices.push(a, b, c2, a, c2, d, a, c2, b, a, d, c2);
+      }
+    } else {
+      // Drawcord: two short cords hanging at the centre front.
+      const cordL = 7 * SCALE;
+      const cordW = 0.45 * SCALE;
+      const zFront = depth * 0.93 + 0.35 * SCALE;
+      for (const side of [-1, 1] as const) {
+        const x0 = side * 1.1 * SCALE;
+        const x1 = x0 + side * cordW;
+        const yTop = waistY + bandH * 0.35;
+        const a = pushVertex(x0, yTop, zFront, 0, 0);
+        const b = pushVertex(x1, yTop, zFront, 0.01, 0);
+        const c2 = pushVertex(
+          x1 + side * 0.6 * SCALE,
+          yTop - cordL,
+          zFront - 0.2 * SCALE,
+          0.01,
+          0.02,
+        );
+        const d = pushVertex(
+          x0 + side * 0.6 * SCALE,
+          yTop - cordL,
+          zFront - 0.2 * SCALE,
+          0,
+          0.02,
+        );
+        indices.push(a, b, c2, a, c2, d, a, c2, b, a, d, c2);
+      }
+    }
   }
 
   // --- Block: ribbed jogger cuffs -------------------------------------------
@@ -1042,6 +1166,141 @@ function buildBottomsGeometry(
       quad(f[1], r[1], r[2], f[2]); // back side
     }
   }
+
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute(
+    "position",
+    new THREE.Float32BufferAttribute(positions, 3),
+  );
+  geometry.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
+  geometry.setIndex(indices);
+  geometry.addGroup(0, frontIndexEnd, 0);
+  geometry.addGroup(frontIndexEnd, backIndexEnd - frontIndexEnd, 1);
+  geometry.addGroup(backIndexEnd, indices.length - backIndexEnd, 2);
+  geometry.computeVertexNormals();
+  geometry.computeBoundingBox();
+  geometry.computeBoundingSphere();
+  return geometry;
+}
+
+
+// ---------------------------------------------------------------------------
+// Skirt archetype: a single waist-to-hem loft (mini / midi / maxi / pencil).
+// Front and back half-arc panels keep the photo texture groups; the
+// silhouette runs waist -> hip -> hem, straight or flared, with a soft
+// ripple gathering toward a flared hem.
+// ---------------------------------------------------------------------------
+
+const SKIRT_SEGS = 26;
+const SKIRT_ROWS = 34;
+
+function buildSkirtGeometry(
+  params: GarmentParams,
+  features: GarmentFeatures,
+): THREE.BufferGeometry {
+  const waistHalf = ((params.waistWidth ?? 38) / 2) * SCALE;
+  const hipHalf = ((params.hipWidth ?? 50) / 2) * SCALE;
+  const hemHalf = ((params.legOpening ?? 50) / 2) * SCALE;
+  const hipDrop = (params.rise ?? 18) * SCALE;
+  const length = (params.inseam ?? 60) * SCALE;
+  const depth = (params.bodyDepth / 2) * SCALE;
+
+  const waistY = length / 2;
+  const hemY = -length / 2;
+  const hipY = waistY - hipDrop;
+
+  const radiusAt = (y: number) => {
+    if (y >= hipY) {
+      const t = (waistY - y) / hipDrop;
+      return waistHalf + (hipHalf - waistHalf) * smoothstep(t);
+    }
+    const t = (hipY - y) / (hipY - hemY);
+    return hipHalf + (hemHalf - hipHalf) * Math.pow(t, 0.9);
+  };
+  const flareRatio = Math.max(0, hemHalf / hipHalf - 1);
+
+  const positions: number[] = [];
+  const uvs: number[] = [];
+  const indices: number[] = [];
+  const pushVertex = (x: number, y: number, z: number, u: number, v: number) => {
+    positions.push(x, y, z);
+    uvs.push(u, v);
+    return positions.length / 3 - 1;
+  };
+
+  const buildPanel = (front: boolean) => {
+    const rows: number[][] = [];
+    for (let r = 0; r <= SKIRT_ROWS; r += 1) {
+      const t = r / SKIRT_ROWS;
+      const y = waistY - length * t;
+      const rx = radiusAt(y);
+      const rz = depth * Math.min(1.6, rx / hipHalf) * (front ? 1 : 0.92);
+      const ripple = 0.03 * Math.min(1, flareRatio) * smoothstep(t);
+      const ring: number[] = [];
+      for (let j = 0; j <= SKIRT_SEGS; j += 1) {
+        const phi = (j / SKIRT_SEGS) * Math.PI;
+        const wave = 1 + ripple * Math.sin(phi * 9 + (front ? 0 : 1.4));
+        const x = -Math.cos(phi) * rx * wave;
+        const z = (front ? 1 : -1) * Math.sin(phi) * rz * wave;
+        const u = front ? j / SKIRT_SEGS : 1 - j / SKIRT_SEGS;
+        ring.push(pushVertex(x, y, z, u, 1 - t));
+      }
+      rows.push(ring);
+    }
+    for (let r = 0; r < SKIRT_ROWS; r += 1) {
+      for (let j = 0; j < SKIRT_SEGS; j += 1) {
+        const a = rows[r][j];
+        const b = rows[r][j + 1];
+        const d = rows[r + 1][j];
+        const e = rows[r + 1][j + 1];
+        if (front) {
+          indices.push(a, d, b, b, d, e);
+        } else {
+          indices.push(a, b, d, b, e, d);
+        }
+      }
+    }
+  };
+
+  buildPanel(true);
+  const frontIndexEnd = indices.length;
+  buildPanel(false);
+  const backIndexEnd = indices.length;
+
+  // Waistband: slim closed band around the top edge.
+  {
+    const bandH = 2.6 * SCALE;
+    const segs = 44;
+    const ringAt = (yOffset: number, scale: number, v: number) => {
+      const ring: number[] = [];
+      for (let j = 0; j <= segs; j += 1) {
+        const beta = (j / segs) * Math.PI * 2;
+        ring.push(
+          pushVertex(
+            Math.cos(beta) * waistHalf * scale,
+            waistY + yOffset,
+            Math.sin(beta) * depth * 0.95 * scale,
+            j / segs,
+            v,
+          ),
+        );
+      }
+      return ring;
+    };
+    const r0 = ringAt(-0.6 * SCALE, 1.02, 0);
+    const r1 = ringAt(bandH, 0.99, 0.5);
+    const r2 = ringAt(bandH * 0.7, 0.9, 1);
+    for (const [ra, rb] of [
+      [r0, r1],
+      [r1, r2],
+    ] as const) {
+      for (let j = 0; j < segs; j += 1) {
+        indices.push(ra[j], rb[j], ra[j + 1], ra[j + 1], rb[j], rb[j + 1]);
+      }
+    }
+  }
+
+  void features;
 
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute(
