@@ -510,20 +510,35 @@ function buildTopGeometry(
     // Every ring keeps the root ring's shape; the pointed top of the armhole
     // oval is softened along the way so the sleeve cap rounds off, and the
     // ring scale eases toward the feature's taper at the opening.
-    // Soft ring: same angular layout as the root ring but rotated into the
-    // plane perpendicular to the sleeve axis. Radii use each offset's FULL
-    // 3D length — projecting onto the perpendicular plane alone collapses
-    // the ring when the axis is steep (long sleeves became sticks).
+    // Soft ring: a smooth, evenly spaced near-circle in the plane
+    // perpendicular to the sleeve axis. The armhole loop's points are
+    // unevenly spaced with corner remnants where the front and back edges
+    // meet; carrying those angles down the tube left a crease along the
+    // front and back of the sleeve. Unwrapping the angles and blending them
+    // to a uniform sweep (and radii strongly toward the mean, using each
+    // offset's FULL 3D length so steep axes don't collapse the ring) gives
+    // clean cross-sections by mid-sleeve.
     const rootOffsets = loop.map((p) => p.clone().sub(centroid));
     const avgRootRadius =
       rootOffsets.reduce((acc, offset) => acc + offset.length(), 0) /
       loopCount;
-    const softOffsets = rootOffsets.map((offset) => {
+    const rawAngles = rootOffsets.map((offset) =>
+      Math.atan2(offset.dot(e2), offset.dot(e1)),
+    );
+    const unwrapped: number[] = [rawAngles[0]];
+    for (let j = 1; j < loopCount; j += 1) {
+      let delta = rawAngles[j] - rawAngles[j - 1];
+      while (delta > Math.PI) delta -= Math.PI * 2;
+      while (delta < -Math.PI) delta += Math.PI * 2;
+      unwrapped.push(unwrapped[j - 1] + delta);
+    }
+    const sweep =
+      Math.sign(unwrapped[loopCount - 1] - unwrapped[0] || 1) * Math.PI * 2;
+    const softOffsets = rootOffsets.map((offset, j) => {
+      const uniform = unwrapped[0] + (sweep * j) / loopCount;
+      const a = unwrapped[j] + (uniform - unwrapped[j]) * 0.85;
       const r = offset.length();
-      const a = Math.atan2(offset.dot(e2), offset.dot(e1));
-      // Pull extreme radii 35% toward the mean: same overall width, softer
-      // corners.
-      const rs = r + (avgRootRadius - r) * 0.35;
+      const rs = r + (avgRootRadius - r) * 0.7;
       return new THREE.Vector3()
         .addScaledVector(e1, Math.cos(a) * rs)
         .addScaledVector(e2, Math.sin(a) * rs);
