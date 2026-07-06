@@ -37,6 +37,50 @@ const smoothstep = (t: number) => {
 };
 
 /**
+ * Average vertex normals across all vertices that share a position, so seams
+ * between separately-built pieces (e.g. the sleeve root ring welded onto the
+ * torso's armhole edge) shade as one continuous surface. `computeVertexNormals`
+ * treats those coincident-but-distinct vertices independently, which leaves a
+ * hard normal crease — a visible "bump" — right at the join even though the
+ * geometry is watertight. Welding by position (UVs untouched, so texture
+ * groups are unaffected) removes it.
+ */
+function weldNormalsByPosition(geometry: THREE.BufferGeometry) {
+  const position = geometry.getAttribute("position");
+  const normal = geometry.getAttribute("normal");
+  if (!position || !normal) {
+    return;
+  }
+  const key = (i: number) =>
+    Math.round(position.getX(i) * 1e4) +
+    "," +
+    Math.round(position.getY(i) * 1e4) +
+    "," +
+    Math.round(position.getZ(i) * 1e4);
+
+  const buckets = new Map<string, THREE.Vector3>();
+  const tmp = new THREE.Vector3();
+  for (let i = 0; i < position.count; i += 1) {
+    const k = key(i);
+    let acc = buckets.get(k);
+    if (!acc) {
+      acc = new THREE.Vector3();
+      buckets.set(k, acc);
+    }
+    acc.add(tmp.set(normal.getX(i), normal.getY(i), normal.getZ(i)));
+  }
+  for (let i = 0; i < position.count; i += 1) {
+    const acc = buckets.get(key(i));
+    if (!acc || acc.lengthSq() < 1e-12) {
+      continue;
+    }
+    tmp.copy(acc).normalize();
+    normal.setXYZ(i, tmp.x, tmp.y, tmp.z);
+  }
+  normal.needsUpdate = true;
+}
+
+/**
  * Build a garment BufferGeometry from CAD-style params + feature toggles.
  * Dispatches to the archetype block; with default tee features this
  * reproduces the original t-shirt exactly.
@@ -45,13 +89,16 @@ export function buildGarmentGeometry(
   params: GarmentParams,
   features: GarmentFeatures = defaultTeeFeatures,
 ): THREE.BufferGeometry {
+  let geometry: THREE.BufferGeometry;
   if (features.archetype === "bottoms") {
-    return buildBottomsGeometry(params, features);
+    geometry = buildBottomsGeometry(params, features);
+  } else if (features.archetype === "skirt") {
+    geometry = buildSkirtGeometry(params, features);
+  } else {
+    geometry = buildTopGeometry(params, features);
   }
-  if (features.archetype === "skirt") {
-    return buildSkirtGeometry(params, features);
-  }
-  return buildTopGeometry(params, features);
+  weldNormalsByPosition(geometry);
+  return geometry;
 }
 
 function buildTopGeometry(
