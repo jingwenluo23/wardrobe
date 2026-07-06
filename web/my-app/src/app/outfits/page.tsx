@@ -11,7 +11,11 @@ import {
   useState,
 } from "react";
 import type { DraftMesh } from "@/lib/garment-mesh";
-import { templatesForCategory } from "@/lib/garment-templates";
+import {
+  categoriesForGender,
+  templatesFor,
+  type Gender,
+} from "@/lib/garment-templates";
 
 type DraftPipelineStatus = "processing" | "ready" | "failed";
 type DraftStageStatus = "pending" | "active" | "done";
@@ -142,10 +146,34 @@ export default function OutfitsPage() {
   const [draftItems, setDraftItems] = useState<WardrobeItem[]>([]);
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [itemName, setItemName] = useState("");
+  const [itemGender, setItemGender] = useState<Gender>("female");
   const [itemCategory, setItemCategory] = useState("Tops");
   const [itemTemplateId, setItemTemplateId] = useState(
-    () => templatesForCategory("Tops")[0].id,
+    () => templatesFor("female", "Tops")[0].id,
   );
+
+  // Gender + category together narrow the garment-type list.
+  const genderCategories = useMemo(
+    () => categoriesForGender(itemGender),
+    [itemGender],
+  );
+  const typeOptions = useMemo(
+    () => templatesFor(itemGender, itemCategory),
+    [itemGender, itemCategory],
+  );
+
+  function selectGender(gender: Gender) {
+    setItemGender(gender);
+    const cats = categoriesForGender(gender);
+    const category = cats.includes(itemCategory) ? itemCategory : cats[0];
+    setItemCategory(category);
+    setItemTemplateId(templatesFor(gender, category)[0].id);
+  }
+
+  function selectCategory(category: string) {
+    setItemCategory(category);
+    setItemTemplateId(templatesFor(itemGender, category)[0].id);
+  }
   const [uploadPhotos, setUploadPhotos] = useState<
     Partial<Record<UploadRole, UploadPhoto>>
   >({});
@@ -288,8 +316,9 @@ export default function OutfitsPage() {
 
   function resetUploadForm() {
     setItemName("");
+    setItemGender("female");
     setItemCategory("Tops");
-    setItemTemplateId(templatesForCategory("Tops")[0].id);
+    setItemTemplateId(templatesFor("female", "Tops")[0].id);
     setUploadError("");
     clearUploadPhotos();
   }
@@ -638,6 +667,26 @@ export default function OutfitsPage() {
 
             <div className="mt-5 grid gap-5 lg:grid-cols-[1fr_280px]">
               <div className="space-y-4">
+                <div className="grid gap-2 text-sm font-semibold text-[#9a9ba2]">
+                  Collection
+                  <div className="flex gap-2">
+                    {(["female", "male"] as Gender[]).map((gender) => (
+                      <button
+                        className={
+                          "flex-1 rounded-lg border px-3 py-2.5 text-sm font-semibold capitalize transition " +
+                          (itemGender === gender
+                            ? "border-[#c8a86b] bg-[#c8a86b] text-[#14110b]"
+                            : "border-[#ffffff14] bg-[#12151b]/70 text-[#9a9ba2] hover:text-[#ece7dd]")
+                        }
+                        key={gender}
+                        onClick={() => selectGender(gender)}
+                        type="button"
+                      >
+                        {gender === "female" ? "Womenswear" : "Menswear"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
                 <div className="grid gap-4 sm:grid-cols-2">
                   <label className="grid gap-2 text-sm font-semibold text-[#9a9ba2]">
                     Item name
@@ -653,18 +702,12 @@ export default function OutfitsPage() {
                     Category
                     <select
                       className="rounded-lg border border-[#ffffff14] bg-[#12151b]/70 backdrop-blur-xl px-3 py-3 text-base font-medium text-[#ece7dd] outline-none focus:border-[#c8a86b]"
-                      onChange={(event) => {
-                        const category = event.target.value;
-                        setItemCategory(category);
-                        setItemTemplateId(templatesForCategory(category)[0].id);
-                      }}
+                      onChange={(event) => selectCategory(event.target.value)}
                       value={itemCategory}
                     >
-                      {categoryNames
-                        .filter((category) => category !== "All clothes")
-                        .map((category) => (
-                          <option key={category}>{category}</option>
-                        ))}
+                      {genderCategories.map((category) => (
+                        <option key={category}>{category}</option>
+                      ))}
                     </select>
                   </label>
                   <label className="grid gap-2 text-sm font-semibold text-[#9a9ba2] sm:col-span-2">
@@ -674,7 +717,7 @@ export default function OutfitsPage() {
                       onChange={(event) => setItemTemplateId(event.target.value)}
                       value={itemTemplateId}
                     >
-                      {templatesForCategory(itemCategory).map((template) => (
+                      {typeOptions.map((template) => (
                         <option key={template.id} value={template.id}>
                           {template.label}
                         </option>

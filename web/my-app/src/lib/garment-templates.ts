@@ -17,14 +17,20 @@ import {
 /** Bump when geometry/param semantics change so stored drafts can migrate. */
 export const GARMENT_TEMPLATE_VERSION = 2;
 
+export type Gender = "male" | "female";
+
 export type GarmentTemplateDef = {
   id: string;
   label: string;
   /** Wardrobe category this type belongs to (matches the category picker). */
   category: string;
+  /** Who the type is offered to. Omit for unisex (both). */
+  gender?: Gender;
   params: GarmentParams;
   features: GarmentFeatures;
 };
+
+const CATEGORY_ORDER = ["Tops", "Bottoms", "Dresses", "Outerwear", "Shoes"];
 
 const longSleeve: Partial<GarmentParams> = {
   sleeveLength: 56,
@@ -181,6 +187,7 @@ function skirtPresets(): GarmentTemplateDef[] {
     id,
     label,
     category: "Bottoms",
+    gender: "female",
     params: {
       ...defaultTeeParams,
       bodyDepth: 20,
@@ -217,6 +224,7 @@ function dressPresets(): GarmentTemplateDef[] {
       id: "dress-aline",
       label: "A-line dress",
       category: "Dresses",
+      gender: "female",
       params: { ...base, neckDropFront: 9, shoulderWidthFactor: 0.62 },
       features: {
         ...defaultTeeFeatures,
@@ -229,6 +237,7 @@ function dressPresets(): GarmentTemplateDef[] {
       id: "dress-bodycon",
       label: "Bodycon dress",
       category: "Dresses",
+      gender: "female",
       params: { ...base, bodyWidth: 42, neckDropFront: 8, shoulderWidthFactor: 0.6 },
       features: {
         ...defaultTeeFeatures,
@@ -241,6 +250,7 @@ function dressPresets(): GarmentTemplateDef[] {
       id: "dress-slip",
       label: "Slip dress",
       category: "Dresses",
+      gender: "female",
       params: { ...base, bodyWidth: 43, neckWidthFront: 20, neckDropFront: 11, shoulderWidthFactor: 0.4 },
       features: {
         ...defaultTeeFeatures,
@@ -253,6 +263,7 @@ function dressPresets(): GarmentTemplateDef[] {
       id: "dress-sundress",
       label: "Sundress",
       category: "Dresses",
+      gender: "female",
       params: { ...base, bodyWidth: 44, bodyLength: 46, neckWidthFront: 24, neckDropFront: 4, neckDropBack: 4, shoulderWidthFactor: 0.34 },
       features: {
         ...defaultTeeFeatures,
@@ -265,6 +276,7 @@ function dressPresets(): GarmentTemplateDef[] {
       id: "dress-wrap",
       label: "Wrap dress",
       category: "Dresses",
+      gender: "female",
       params: { ...base, neckWidthFront: 16, neckDropFront: 16, sleeveLength: 22 },
       features: {
         ...defaultTeeFeatures,
@@ -278,6 +290,7 @@ function dressPresets(): GarmentTemplateDef[] {
       id: "dress-shirt",
       label: "Shirt dress",
       category: "Dresses",
+      gender: "female",
       params: { ...base, bodyWidth: 50, neckWidthFront: 15.5, neckDropFront: 6, sleeveLength: 22 },
       features: {
         ...defaultTeeFeatures,
@@ -577,6 +590,30 @@ export function getTemplate(id: string | null | undefined) {
 export function templatesForCategory(category: string): GarmentTemplateDef[] {
   const matches = garmentTemplates.filter((t) => t.category === category);
   return matches.length > 0 ? matches : [garmentTemplates[0]];
+}
+
+/** True when a type is offered to the given gender (unisex types match both). */
+function matchesGender(t: GarmentTemplateDef, gender: Gender): boolean {
+  return !t.gender || t.gender === gender;
+}
+
+/** Garment types for a gender + category, narrowing the dropdown. */
+export function templatesFor(
+  gender: Gender,
+  category: string,
+): GarmentTemplateDef[] {
+  const matches = garmentTemplates.filter(
+    (t) => t.category === category && matchesGender(t, gender),
+  );
+  return matches.length > 0 ? matches : templatesForCategory(category);
+}
+
+/** Categories that actually have a type for the given gender, in display order. */
+export function categoriesForGender(gender: Gender): string[] {
+  const present = new Set(
+    garmentTemplates.filter((t) => matchesGender(t, gender)).map((t) => t.category),
+  );
+  return CATEGORY_ORDER.filter((c) => present.has(c));
 }
 
 /** Resolve the template for an upload: explicit id first, else category default. */
