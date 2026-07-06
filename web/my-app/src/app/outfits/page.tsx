@@ -125,7 +125,7 @@ function draftToWardrobeItem(draft: ApiDraft): WardrobeItem {
           ? "Failed"
           : "Processing",
     worn: "Just uploaded",
-    background: "bg-[#ecebe4]",
+    background: "bg-[#ffffff0d]",
     shape: "bg-[#2f4f46]",
     imageUrls: draft.photos.map((photo) => photo.url),
     modelStatus: draft.currentStage,
@@ -395,36 +395,36 @@ export default function OutfitsPage() {
   const selectedDraftViewCount = selectedDraftItem?.imageUrls?.length ?? 0;
 
   return (
-    <main className="min-h-screen bg-[#fafaf7] text-[#1c1e1c]">
+    <main className="min-h-screen text-[#ece7dd]">
       <section className="mx-auto grid min-h-screen w-full max-w-7xl grid-cols-1 gap-8 px-5 py-6 sm:px-8 lg:grid-cols-[280px_1fr] lg:px-10">
-        <aside className="border-b border-[#e4e2da] pb-6 lg:border-b-0 lg:border-r lg:pb-0 lg:pr-8">
+        <aside className="border-b border-[#ffffff1a] pb-6 lg:border-b-0 lg:border-r lg:pb-0 lg:pr-8">
           <Link className="flex items-center gap-3" href="/">
-            <div className="grid h-11 w-11 place-items-center rounded-lg bg-[#2e8b6b] text-lg font-semibold text-white">
+            <div className="grid h-11 w-11 place-items-center rounded-lg bg-[#c8a86b] text-lg font-semibold text-[#14110b]">
               W
             </div>
             <div>
-              <p className="text-sm font-medium uppercase tracking-[0.18em] text-[#6b7370]">
+              <p className="text-sm font-medium uppercase tracking-[0.18em] text-[#9a9ba2]">
                 Wardrobe
               </p>
               <h1 className="text-2xl font-semibold">Outfits</h1>
             </div>
           </Link>
 
-          <nav className="mt-10 grid gap-2 text-sm font-medium text-[#6b7370]">
+          <nav className="mt-10 grid gap-2 text-sm font-medium text-[#9a9ba2]">
             <Link
-              className="rounded-lg px-3 py-2 hover:bg-[#ecebe4] hover:text-[#1c1e1c]"
+              className="rounded-lg px-3 py-2 hover:bg-[#ffffff0d] hover:text-[#ece7dd]"
               href="/"
             >
               Overview
             </Link>
             <Link
-              className="rounded-lg bg-[#2e8b6b] px-3 py-2 font-semibold text-white"
+              className="rounded-lg bg-[#c8a86b] px-3 py-2 font-semibold text-[#14110b]"
               href="/outfits"
             >
               Outfits
             </Link>
             <Link
-              className="rounded-lg px-3 py-2 hover:bg-[#ecebe4] hover:text-[#1c1e1c]"
+              className="rounded-lg px-3 py-2 hover:bg-[#ffffff0d] hover:text-[#ece7dd]"
               href="/settings"
             >
               Settings
@@ -432,7 +432,7 @@ export default function OutfitsPage() {
           </nav>
 
           <div className="mt-10">
-            <p className="text-sm font-medium uppercase tracking-[0.16em] text-[#8a938d]">
+            <p className="text-sm font-medium uppercase tracking-[0.16em] text-[#6d6e76]">
               Categories
             </p>
             <div className="mt-4 grid gap-2">
@@ -443,13 +443,13 @@ export default function OutfitsPage() {
                   className={
                     "flex items-center justify-between rounded-lg px-3 py-2 text-left text-sm font-semibold " +
                     (selectedCategory === category.name
-                      ? "bg-white text-[#1c1e1c] shadow-sm ring-1 ring-[#e9e7df]"
-                      : "text-[#6b7370] hover:bg-[#ecebe4]")
+                      ? "bg-[#12151b]/70 backdrop-blur-xl text-[#ece7dd] shadow-sm ring-1 ring-[#ffffff14]"
+                      : "text-[#9a9ba2] hover:bg-[#ffffff0d]")
                   }
                   key={category.name}
                 >
                   <span>{category.name}</span>
-                  <span className="text-xs text-[#8a938d]">
+                  <span className="text-xs text-[#6d6e76]">
                     {category.count}
                   </span>
                 </button>
@@ -459,21 +459,21 @@ export default function OutfitsPage() {
         </aside>
 
         <div className="space-y-6">
-          <header className="flex flex-col justify-between gap-5 border-b border-[#e4e2da] pb-6 md:flex-row md:items-end">
+          <header className="flex flex-col justify-between gap-5 border-b border-[#ffffff1a] pb-6 md:flex-row md:items-end">
             <div>
-              <p className="text-sm font-medium uppercase tracking-[0.18em] text-[#8a938d]">
+              <p className="text-sm font-medium uppercase tracking-[0.18em] text-[#6d6e76]">
                 Outfit builder
               </p>
               <h2 className="mt-2 text-4xl font-semibold leading-tight md:text-5xl">
                 Uploaded clothes
               </h2>
-              <p className="mt-3 max-w-2xl text-[#6b7370]">
+              <p className="mt-3 max-w-2xl text-[#9a9ba2]">
                 Upload a few garment photos and the app fits them onto a known
                 garment template to generate a quick 3D mesh preview.
               </p>
             </div>
             <button
-              className="rounded-lg bg-[#2e8b6b] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#27775a]"
+              className="rounded-lg bg-[#c8a86b] px-4 py-3 text-sm font-semibold text-[#14110b] transition hover:bg-[#d8bd82]"
               onClick={() => setIsUploadOpen(true)}
               type="button"
             >
@@ -482,14 +482,14 @@ export default function OutfitsPage() {
           </header>
 
           {visibleClothes.length === 0 ? (
-            <section className="rounded-lg border border-dashed border-[#dcdad1] bg-white/70 p-10 text-center shadow-sm">
-              <p className="text-sm font-medium uppercase tracking-[0.16em] text-[#8a938d]">
+            <section className="rounded-lg border border-dashed border-[#ffffff14] bg-[#12151b]/70 p-10 text-center shadow-sm">
+              <p className="text-sm font-medium uppercase tracking-[0.16em] text-[#6d6e76]">
                 Uploaded clothes
               </p>
-              <h3 className="mt-2 text-2xl font-semibold text-[#1c1e1c]">
+              <h3 className="mt-2 text-2xl font-semibold text-[#ece7dd]">
                 Your library is empty
               </h3>
-              <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-[#6b7370]">
+              <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-[#9a9ba2]">
                 The wardrobe starts at 0 items and only keeps the clothes you upload.
               </p>
             </section>
@@ -498,7 +498,7 @@ export default function OutfitsPage() {
               {visibleClothes.map((item) => (
               <article
                 className={
-                  "rounded-lg bg-white p-4 shadow-sm ring-1 ring-[#e9e7df]" +
+                  "rounded-lg bg-[#12151b]/70 backdrop-blur-xl p-4 shadow-sm ring-1 ring-[#ffffff14]" +
                   (item.modelStatus ? " cursor-pointer transition hover:-translate-y-0.5" : "")
                 }
                 key={item.draftId ?? item.name}
@@ -520,7 +520,7 @@ export default function OutfitsPage() {
                   }
                 >
                   {item.imageUrls?.[0] ? (
-                    <div className="absolute bottom-4 left-4 rounded-full bg-white/90 px-3 py-1 text-xs font-semibold text-[#256f56]">
+                    <div className="absolute bottom-4 left-4 rounded-full bg-[#0b0d10]/85 px-3 py-1 text-xs font-semibold text-[#c8a86b]">
                       {item.imageUrls.length} photos
                     </div>
                   ) : (
@@ -531,12 +531,12 @@ export default function OutfitsPage() {
                           item.shape
                         }
                       />
-                      <div className="absolute bottom-6 left-8 right-8 h-7 rounded-full bg-white/60" />
+                      <div className="absolute bottom-6 left-8 right-8 h-7 rounded-full bg-[#12151b]/60" />
                     </>
                   )}
                   {item.draftId ? (
                     <button
-                      className="absolute right-3 top-3 rounded-full bg-white/90 px-3 py-1 text-[11px] font-semibold text-[#b0492c] shadow-sm ring-1 ring-[#e9e7df] transition hover:bg-[#ecebe4] disabled:cursor-not-allowed disabled:opacity-60"
+                      className="absolute right-3 top-3 rounded-full bg-[#0b0d10]/85 px-3 py-1 text-[11px] font-semibold text-[#e0a06d] shadow-sm ring-1 ring-[#ffffff14] transition hover:bg-[#ffffff0d] disabled:cursor-not-allowed disabled:opacity-60"
                       disabled={deletingDraftId === item.draftId}
                       onClick={(event) => {
                         event.stopPropagation();
@@ -550,55 +550,55 @@ export default function OutfitsPage() {
                 </div>
                 <div className="mt-4 flex items-start justify-between gap-4">
                   <div>
-                    <p className="text-xs font-medium uppercase tracking-[0.14em] text-[#8a938d]">
+                    <p className="text-xs font-medium uppercase tracking-[0.14em] text-[#6d6e76]">
                       {item.category}
                     </p>
                     <h3 className="mt-1 text-lg font-semibold">{item.name}</h3>
                   </div>
-                  <span className="rounded-full bg-[#e5f2ec] px-3 py-1 text-xs font-semibold text-[#256f56]">
+                  <span className="rounded-full bg-[#2a2418] px-3 py-1 text-xs font-semibold text-[#c8a86b]">
                     {item.status}
                   </span>
                 </div>
-                <div className="mt-4 grid grid-cols-2 gap-3 text-sm text-[#6b7370]">
-                  <div className="rounded-lg bg-white p-3">
-                    <p className="text-xs uppercase tracking-[0.14em] text-[#8a938d]">
+                <div className="mt-4 grid grid-cols-2 gap-3 text-sm text-[#9a9ba2]">
+                  <div className="rounded-lg bg-[#12151b]/70 backdrop-blur-xl p-3">
+                    <p className="text-xs uppercase tracking-[0.14em] text-[#6d6e76]">
                       Color
                     </p>
-                    <p className="mt-1 font-semibold text-[#1c1e1c]">
+                    <p className="mt-1 font-semibold text-[#ece7dd]">
                       {item.color}
                     </p>
                   </div>
-                  <div className="rounded-lg bg-white p-3">
-                    <p className="text-xs uppercase tracking-[0.14em] text-[#8a938d]">
+                  <div className="rounded-lg bg-[#12151b]/70 backdrop-blur-xl p-3">
+                    <p className="text-xs uppercase tracking-[0.14em] text-[#6d6e76]">
                       Last worn
                     </p>
-                    <p className="mt-1 font-semibold text-[#1c1e1c]">
+                    <p className="mt-1 font-semibold text-[#ece7dd]">
                       {item.worn}
                     </p>
                   </div>
                 </div>
                 {item.modelStatus ? (
-                  <div className="mt-3 rounded-lg border border-[#dcdad1] bg-[#f3f2ec] p-3">
+                  <div className="mt-3 rounded-lg border border-[#ffffff14] bg-[#ffffff08] p-3">
                     <div className="flex items-center justify-between gap-3">
                       <div>
-                        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#8a938d]">
+                        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#6d6e76]">
                           Mesh preview
                         </p>
-                        <p className="mt-1 text-sm font-semibold text-[#1c1e1c]">
+                        <p className="mt-1 text-sm font-semibold text-[#ece7dd]">
                           {item.modelStatus}
                         </p>
                       </div>
                       <button
-                        className="rounded-lg bg-[#2e8b6b] px-3 py-2 text-xs font-semibold text-white transition hover:bg-[#27775a]"
+                        className="rounded-lg bg-[#c8a86b] px-3 py-2 text-xs font-semibold text-[#14110b] transition hover:bg-[#d8bd82]"
                         onClick={() => setSelectedDraftItem(item)}
                         type="button"
                       >
                         View
                       </button>
                     </div>
-                    <div className="mt-3 h-2 rounded-full bg-[#e4e2da]">
+                    <div className="mt-3 h-2 rounded-full bg-[#ffffff1a]">
                       <div
-                        className="h-2 rounded-full bg-[#2e8b6b] transition-all"
+                        className="h-2 rounded-full bg-[#c8a86b] transition-all"
                         style={{ width: String(item.progress ?? 0) + "%" }}
                       />
                     </div>
@@ -614,12 +614,12 @@ export default function OutfitsPage() {
       {isUploadOpen ? (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4">
           <form
-            className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-lg bg-white p-5 shadow-2xl"
+            className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-lg bg-[#12151b]/70 backdrop-blur-xl p-5 shadow-2xl"
             onSubmit={handleGenerateModel}
           >
-            <div className="flex items-start justify-between gap-4 border-b border-[#e4e2da] pb-4">
+            <div className="flex items-start justify-between gap-4 border-b border-[#ffffff1a] pb-4">
               <div>
-                <p className="text-sm font-medium uppercase tracking-[0.18em] text-[#8a938d]">
+                <p className="text-sm font-medium uppercase tracking-[0.18em] text-[#6d6e76]">
                   New garment
                 </p>
                 <h2 className="mt-1 text-3xl font-semibold">
@@ -627,7 +627,7 @@ export default function OutfitsPage() {
                 </h2>
               </div>
               <button
-                className="rounded-lg border border-[#dcdad1] px-3 py-2 text-sm font-semibold hover:bg-[#ecebe4] disabled:cursor-not-allowed disabled:opacity-60"
+                className="rounded-lg border border-[#ffffff14] px-3 py-2 text-sm font-semibold hover:bg-[#ffffff0d] disabled:cursor-not-allowed disabled:opacity-60"
                 disabled={isSubmitting}
                 onClick={closeUploadPrompt}
                 type="button"
@@ -639,20 +639,20 @@ export default function OutfitsPage() {
             <div className="mt-5 grid gap-5 lg:grid-cols-[1fr_280px]">
               <div className="space-y-4">
                 <div className="grid gap-4 sm:grid-cols-2">
-                  <label className="grid gap-2 text-sm font-semibold text-[#6b7370]">
+                  <label className="grid gap-2 text-sm font-semibold text-[#9a9ba2]">
                     Item name
                     <input
-                      className="rounded-lg border border-[#dcdad1] bg-white px-3 py-3 text-base font-medium text-[#1c1e1c] outline-none focus:border-[#2e8b6b]"
+                      className="rounded-lg border border-[#ffffff14] bg-[#12151b]/70 backdrop-blur-xl px-3 py-3 text-base font-medium text-[#ece7dd] outline-none focus:border-[#c8a86b]"
                       onChange={(event) => setItemName(event.target.value)}
                       placeholder="Black knit polo"
                       type="text"
                       value={itemName}
                     />
                   </label>
-                  <label className="grid gap-2 text-sm font-semibold text-[#6b7370]">
+                  <label className="grid gap-2 text-sm font-semibold text-[#9a9ba2]">
                     Category
                     <select
-                      className="rounded-lg border border-[#dcdad1] bg-white px-3 py-3 text-base font-medium text-[#1c1e1c] outline-none focus:border-[#2e8b6b]"
+                      className="rounded-lg border border-[#ffffff14] bg-[#12151b]/70 backdrop-blur-xl px-3 py-3 text-base font-medium text-[#ece7dd] outline-none focus:border-[#c8a86b]"
                       onChange={(event) => {
                         const category = event.target.value;
                         setItemCategory(category);
@@ -667,10 +667,10 @@ export default function OutfitsPage() {
                         ))}
                     </select>
                   </label>
-                  <label className="grid gap-2 text-sm font-semibold text-[#6b7370] sm:col-span-2">
+                  <label className="grid gap-2 text-sm font-semibold text-[#9a9ba2] sm:col-span-2">
                     Garment type
                     <select
-                      className="rounded-lg border border-[#dcdad1] bg-white px-3 py-3 text-base font-medium text-[#1c1e1c] outline-none focus:border-[#2e8b6b]"
+                      className="rounded-lg border border-[#ffffff14] bg-[#12151b]/70 backdrop-blur-xl px-3 py-3 text-base font-medium text-[#ece7dd] outline-none focus:border-[#c8a86b]"
                       onChange={(event) => setItemTemplateId(event.target.value)}
                       value={itemTemplateId}
                     >
@@ -683,17 +683,17 @@ export default function OutfitsPage() {
                   </label>
                 </div>
 
-                <div className="rounded-lg border border-[#dcdad1] bg-white p-4">
+                <div className="rounded-lg border border-[#ffffff14] bg-[#12151b]/70 backdrop-blur-xl p-4">
                   <div className="flex items-start justify-between gap-4">
                     <div>
-                      <p className="text-base font-semibold text-[#1c1e1c]">
+                      <p className="text-base font-semibold text-[#ece7dd]">
                         Upload garment photos
                       </p>
-                      <p className="mt-1 text-sm text-[#6b7370]">
+                      <p className="mt-1 text-sm text-[#9a9ba2]">
                         Front and back are required — depth is reconstructed automatically.
                       </p>
                     </div>
-                    <div className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-[#6b7370]">
+                    <div className="rounded-full bg-[#12151b]/70 backdrop-blur-xl px-3 py-1 text-xs font-semibold text-[#9a9ba2]">
                       Required: Front + Back
                     </div>
                   </div>
@@ -705,22 +705,22 @@ export default function OutfitsPage() {
 
                       return (
                         <div
-                          className="rounded-lg border border-dashed border-[#cfd4cd] bg-[#f3f2ec] p-3"
+                          className="rounded-lg border border-dashed border-[#ffffff26] bg-[#ffffff08] p-3"
                           key={role}
                         >
                           <div className="flex items-center justify-between gap-3">
-                            <p className="text-sm font-semibold text-[#1c1e1c]">
+                            <p className="text-sm font-semibold text-[#ece7dd]">
                               {garmentPhotoLabel(role)}
                             </p>
-                            <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#8a938d]">
+                            <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#6d6e76]">
                               {isRequired ? "Required" : "Optional"}
                             </span>
                           </div>
 
-                          <label className="mt-3 grid min-h-40 cursor-pointer place-items-center overflow-hidden rounded-lg border border-dashed border-[#cfd4cd] bg-white text-center transition hover:border-[#2e8b6b]">
+                          <label className="mt-3 grid min-h-40 cursor-pointer place-items-center overflow-hidden rounded-lg border border-dashed border-[#ffffff26] bg-[#12151b]/70 backdrop-blur-xl text-center transition hover:border-[#c8a86b]">
                             {photo ? (
                               <div
-                                className="relative h-full min-h-40 w-full bg-[#ecebe4]"
+                                className="relative h-full min-h-40 w-full bg-[#ffffff0d]"
                                 style={{
                                   backgroundImage: "url(" + photo.url + ")",
                                   backgroundPosition: "center",
@@ -733,10 +733,10 @@ export default function OutfitsPage() {
                               </div>
                             ) : (
                               <div className="px-4">
-                                <p className="text-sm font-semibold text-[#1c1e1c]">
+                                <p className="text-sm font-semibold text-[#ece7dd]">
                                   Add {garmentPhotoLabel(role).toLowerCase()} photo
                                 </p>
-                                <p className="mt-1 text-xs leading-5 text-[#8a938d]">
+                                <p className="mt-1 text-xs leading-5 text-[#6d6e76]">
                                   {role === "front"
                                     ? "Flat front view of the garment."
                                     : role === "back"
@@ -754,12 +754,12 @@ export default function OutfitsPage() {
                           </label>
 
                           <div className="mt-3 flex items-center justify-between gap-3">
-                            <p className="truncate text-xs text-[#6b7370]">
+                            <p className="truncate text-xs text-[#9a9ba2]">
                               {photo ? photo.name : "No file selected"}
                             </p>
                             {photo ? (
                               <button
-                                className="rounded-lg border border-[#dcdad1] px-2 py-1 text-xs font-semibold text-[#6b7370] transition hover:bg-[#ecebe4]"
+                                className="rounded-lg border border-[#ffffff14] px-2 py-1 text-xs font-semibold text-[#9a9ba2] transition hover:bg-[#ffffff0d]"
                                 onClick={() => removeUploadPhoto(role)}
                                 type="button"
                               >
@@ -777,7 +777,7 @@ export default function OutfitsPage() {
                   <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                     {orderedUploadPhotos.map((photo) => (
                       <div
-                        className="relative h-32 overflow-hidden rounded-lg bg-[#ecebe4]"
+                        className="relative h-32 overflow-hidden rounded-lg bg-[#ffffff0d]"
                         key={photo.role}
                         style={{
                           backgroundImage: "url(" + photo.url + ")",
@@ -785,7 +785,7 @@ export default function OutfitsPage() {
                           backgroundSize: "cover",
                         }}
                       >
-                        <span className="absolute bottom-2 left-2 rounded-full bg-white/90 px-2 py-1 text-[11px] font-semibold text-[#555d58]">
+                        <span className="absolute bottom-2 left-2 rounded-full bg-[#0b0d10]/85 px-2 py-1 text-[11px] font-semibold text-[#9a9ba2]">
                           {garmentPhotoLabel(photo.role)}
                         </span>
                       </div>
@@ -794,14 +794,14 @@ export default function OutfitsPage() {
                 ) : null}
 
                 {uploadError ? (
-                  <p className="rounded-lg border border-[#e0b7a4] bg-[#fbeee8] px-3 py-2 text-sm font-semibold text-[#b0492c]">
+                  <p className="rounded-lg border border-[#7a4632] bg-[#241713] px-3 py-2 text-sm font-semibold text-[#e0a06d]">
                     {uploadError}
                   </p>
                 ) : null}
               </div>
 
-              <aside className="rounded-lg border border-[#dcdad1] bg-white p-4">
-                <p className="text-sm font-medium uppercase tracking-[0.16em] text-[#8a938d]">
+              <aside className="rounded-lg border border-[#ffffff14] bg-[#12151b]/70 backdrop-blur-xl p-4">
+                <p className="text-sm font-medium uppercase tracking-[0.16em] text-[#6d6e76]">
                   Mesh build
                 </p>
                 <div className="mt-4 grid gap-3">
@@ -811,27 +811,27 @@ export default function OutfitsPage() {
                         className={
                           "grid h-8 w-8 place-items-center rounded-full text-xs font-bold " +
                           (hasRequiredUploadPhotos
-                            ? "bg-[#2e8b6b] text-white"
-                            : "bg-[#e4e2da] text-[#6b7370]")
+                            ? "bg-[#c8a86b] text-[#14110b]"
+                            : "bg-[#ffffff1a] text-[#9a9ba2]")
                         }
                       >
                         {index + 1}
                       </span>
-                      <span className="text-sm font-semibold text-[#1c1e1c]">
+                      <span className="text-sm font-semibold text-[#ece7dd]">
                         {stage}
                       </span>
                     </div>
                   ))}
                 </div>
 
-                <div className="mt-6 rounded-lg bg-white p-4">
-                  <div className="mx-auto h-28 w-24 rounded-lg bg-white p-3 shadow-sm">
+                <div className="mt-6 rounded-lg bg-[#12151b]/70 backdrop-blur-xl p-4">
+                  <div className="mx-auto h-28 w-24 rounded-lg bg-[#12151b]/70 backdrop-blur-xl p-3 shadow-sm">
                     <div className="mx-auto h-20 w-14 rounded-t-full bg-[#2f4f46] shadow-[10px_10px_0_#b36f49] [transform:perspective(140px)_rotateY(-24deg)]" />
                   </div>
-                  <p className="mt-3 text-center text-sm font-semibold text-[#6b7370]">
+                  <p className="mt-3 text-center text-sm font-semibold text-[#9a9ba2]">
                     Standard mesh first
                   </p>
-                  <p className="mt-2 text-center text-xs leading-5 text-[#8a938d]">
+                  <p className="mt-2 text-center text-xs leading-5 text-[#6d6e76]">
                     Shirt drafts now start from a neutral T-shirt blockout
                     before texture and photo details are applied.
                   </p>
@@ -839,9 +839,9 @@ export default function OutfitsPage() {
               </aside>
             </div>
 
-            <div className="mt-5 flex flex-col-reverse justify-end gap-3 border-t border-[#e4e2da] pt-4 sm:flex-row">
+            <div className="mt-5 flex flex-col-reverse justify-end gap-3 border-t border-[#ffffff1a] pt-4 sm:flex-row">
               <button
-                className="rounded-lg border border-[#dcdad1] px-4 py-3 text-sm font-semibold hover:bg-[#ecebe4] disabled:cursor-not-allowed disabled:opacity-60"
+                className="rounded-lg border border-[#ffffff14] px-4 py-3 text-sm font-semibold hover:bg-[#ffffff0d] disabled:cursor-not-allowed disabled:opacity-60"
                 disabled={isSubmitting}
                 onClick={closeUploadPrompt}
                 type="button"
@@ -849,7 +849,7 @@ export default function OutfitsPage() {
                 Cancel
               </button>
               <button
-                className="rounded-lg bg-[#2e8b6b] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#27775a] disabled:cursor-not-allowed disabled:bg-[#c9cfc9]"
+                className="rounded-lg bg-[#c8a86b] px-4 py-3 text-sm font-semibold text-[#14110b] transition hover:bg-[#d8bd82] disabled:cursor-not-allowed disabled:bg-[#33383e]"
                 disabled={!itemName.trim() || !hasRequiredUploadPhotos || isSubmitting}
                 type="submit"
               >
@@ -862,10 +862,10 @@ export default function OutfitsPage() {
 
       {selectedDraftItem ? (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4">
-          <div className="max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded-lg bg-white p-5 shadow-2xl">
-            <div className="flex items-start justify-between gap-4 border-b border-[#e4e2da] pb-4">
+          <div className="max-h-[92vh] w-full max-w-5xl overflow-y-auto rounded-lg bg-[#12151b]/70 backdrop-blur-xl p-5 shadow-2xl">
+            <div className="flex items-start justify-between gap-4 border-b border-[#ffffff1a] pb-4">
               <div>
-                <p className="text-sm font-medium uppercase tracking-[0.18em] text-[#8a938d]">
+                <p className="text-sm font-medium uppercase tracking-[0.18em] text-[#6d6e76]">
                   3D garment mesh
                 </p>
                 <h2 className="mt-1 text-3xl font-semibold">
@@ -873,7 +873,7 @@ export default function OutfitsPage() {
                 </h2>
               </div>
               <button
-                className="rounded-lg border border-[#dcdad1] px-3 py-2 text-sm font-semibold hover:bg-[#ecebe4]"
+                className="rounded-lg border border-[#ffffff14] px-3 py-2 text-sm font-semibold hover:bg-[#ffffff0d]"
                 onClick={() => setSelectedDraftItem(null)}
                 type="button"
               >
@@ -882,10 +882,11 @@ export default function OutfitsPage() {
             </div>
 
             <div className="mt-5 grid gap-5 lg:grid-cols-[1fr_320px]">
-              <div className="rounded-lg bg-[#f3f2ec] p-6">
+              <div className="rounded-lg bg-[#ffffff08] p-6">
                 {selectedDraftItem.mesh ? (
                   <GarmentMeshViewer
-                    className="min-h-[560px] overflow-hidden rounded-lg border border-[#dcdad1]"
+                    className="min-h-[560px] overflow-hidden rounded-lg border border-[#ffffff14]"
+                    background="#0b0d10"
                     key={
                       selectedDraftItem.mesh.assetUrl +
                       ":" +
@@ -894,16 +895,16 @@ export default function OutfitsPage() {
                     mesh={selectedDraftItem.mesh}
                   />
                 ) : (
-                  <div className="grid min-h-[560px] place-items-center rounded-lg border border-[#dcdad1] bg-white p-4 text-sm font-semibold text-[#6b7370]">
+                  <div className="grid min-h-[560px] place-items-center rounded-lg border border-[#ffffff14] bg-[#12151b]/70 backdrop-blur-xl p-4 text-sm font-semibold text-[#9a9ba2]">
                     Building the mesh...
                   </div>
                 )}
 
-                <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-[#6b7370]">
+                <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-[#9a9ba2]">
                   <div>
                     Drag to orbit the 3D mesh. Scroll to zoom. The view now auto-fits on open.
                   </div>
-                  <div className="rounded-full bg-white px-3 py-1 font-semibold text-[#256f56] shadow-sm ring-1 ring-[#e9e7df]">
+                  <div className="rounded-full bg-[#12151b]/70 backdrop-blur-xl px-3 py-1 font-semibold text-[#c8a86b] shadow-sm ring-1 ring-[#ffffff14]">
                     {selectedDraftViewCount === 0
                       ? "0 / 0"
                       : String(selectedReferenceIndex + 1) +
@@ -911,27 +912,27 @@ export default function OutfitsPage() {
                         String(selectedDraftViewCount)}
                   </div>
                 </div>
-                <p className="mt-3 text-sm leading-6 text-[#6b7370]">
+                <p className="mt-3 text-sm leading-6 text-[#9a9ba2]">
                   The preview starts from a neutral garment base. Uploaded
                   photos are used afterward for garment extraction, texture, and
                   detail fitting without reproducing a person&apos;s face.
                 </p>
                 {selectedDraftItem.mesh ? (
-                  <div className="mt-4 grid gap-3 rounded-lg bg-white p-4 text-sm text-[#555d58] ring-1 ring-[#e9e7df] sm:grid-cols-4">
+                  <div className="mt-4 grid gap-3 rounded-lg bg-[#12151b]/70 backdrop-blur-xl p-4 text-sm text-[#9a9ba2] ring-1 ring-[#ffffff14] sm:grid-cols-4">
                     <div>
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#8a938d]">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#6d6e76]">
                         Shape base
                       </p>
-                      <p className="mt-1 font-semibold text-[#1c1e1c]">
+                      <p className="mt-1 font-semibold text-[#ece7dd]">
                         {selectedDraftItem.mesh.templateLabel ??
                           selectedDraftItem.mesh.template}
                       </p>
                     </div>
                     <div>
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#8a938d]">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#6d6e76]">
                         Extraction quality
                       </p>
-                      <p className="mt-1 font-semibold text-[#1c1e1c]">
+                      <p className="mt-1 font-semibold text-[#ece7dd]">
                         {Math.round(
                           selectedDraftItem.mesh.segmentation.confidence * 100,
                         )}
@@ -939,20 +940,20 @@ export default function OutfitsPage() {
                       </p>
                     </div>
                     <div>
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#8a938d]">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#6d6e76]">
                         Surface texture
                       </p>
-                      <p className="mt-1 font-semibold text-[#1c1e1c]">
+                      <p className="mt-1 font-semibold text-[#ece7dd]">
                         {selectedDraftItem.mesh.extractedTextureUrl
                           ? "Extracted garment"
                           : "Full reference"}
                       </p>
                     </div>
                     <div>
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#8a938d]">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#6d6e76]">
                         Approx. size
                       </p>
-                      <p className="mt-1 font-semibold text-[#1c1e1c]">
+                      <p className="mt-1 font-semibold text-[#ece7dd]">
                         {selectedDraftItem.mesh.bounds.width.toFixed(2)} x{" "}
                         {selectedDraftItem.mesh.bounds.height.toFixed(2)} x{" "}
                         {selectedDraftItem.mesh.bounds.depth.toFixed(2)}
@@ -962,11 +963,11 @@ export default function OutfitsPage() {
                 ) : null}
               </div>
 
-              <aside className="rounded-lg border border-[#dcdad1] bg-white p-4">
-                <p className="text-sm font-medium uppercase tracking-[0.16em] text-[#8a938d]">
+              <aside className="rounded-lg border border-[#ffffff14] bg-[#12151b]/70 backdrop-blur-xl p-4">
+                <p className="text-sm font-medium uppercase tracking-[0.16em] text-[#6d6e76]">
                   Reference captures
                 </p>
-                <p className="mt-2 text-xs leading-5 text-[#6b7370]">
+                <p className="mt-2 text-xs leading-5 text-[#9a9ba2]">
                   These photos now guide detail extraction after the base mesh
                   is built. The render uses the isolated garment texture, not
                   the full image.
@@ -975,10 +976,10 @@ export default function OutfitsPage() {
                   {selectedDraftItem.imageUrls?.map((url, index) => (
                     <button
                       className={
-                        "relative h-28 overflow-hidden rounded-lg bg-[#ecebe4] text-left ring-2 transition " +
+                        "relative h-28 overflow-hidden rounded-lg bg-[#ffffff0d] text-left ring-2 transition " +
                         (selectedReferenceIndex === index
-                          ? "ring-[#2e8b6b]"
-                          : "ring-transparent hover:ring-[#cfd4cd]")
+                          ? "ring-[#c8a86b]"
+                          : "ring-transparent hover:ring-[#ffffff26]")
                       }
                       key={selectedDraftItem.name + "-view-" + String(index)}
                       onClick={() => setSelectedReferenceIndex(index)}
@@ -989,7 +990,7 @@ export default function OutfitsPage() {
                       }}
                       type="button"
                     >
-                      <span className="absolute bottom-2 left-2 rounded-full bg-white/90 px-2 py-1 text-[11px] font-semibold text-[#555d58]">
+                      <span className="absolute bottom-2 left-2 rounded-full bg-[#0b0d10]/85 px-2 py-1 text-[11px] font-semibold text-[#9a9ba2]">
                         View {index + 1}
                       </span>
                     </button>

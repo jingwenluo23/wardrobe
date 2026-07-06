@@ -28,6 +28,8 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
+        <div className="aurora" aria-hidden="true" />
+        <div className="grain" aria-hidden="true" />
         {children}
       </body>
     </html>
