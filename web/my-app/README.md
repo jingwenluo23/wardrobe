@@ -1,5 +1,27 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## Garment CAD Asset
+
+The T-shirt mesh used by the app is a checked-in static CAD asset:
+
+- Canonical source asset: `src/lib/assets/tshirt_cad_source.json`
+- JSON runtime asset: `src/lib/assets/tshirt_cad.json`
+- OBJ inspection/export asset: `src/lib/assets/tshirt_cad.obj`
+
+Runtime behavior:
+
+- the web app does not procedurally generate the T-shirt mesh at request time
+- draft generation copies the checked-in JSON asset and serves it to the viewer
+- the viewer only loads and renders mesh data
+
+Offline tooling:
+
+- `npm run cad:refresh` is the single canonical asset refresh step
+- it copies the checked-in source mesh from `src/lib/assets/tshirt_cad_source.json`, normalizes metadata/normals/bounds, and exports `src/lib/assets/tshirt_cad.obj`
+- `scripts/legacy/generate_tshirt.py` is archived experimentation only and is not the runtime CAD source
+
+If the silhouette changes, regenerate or reshape offline, commit the updated asset, and bump the mesh version in `src/lib/garment-mesh.ts` so cached drafts refresh.
+
 ## Getting Started
 
 First, run the development server:

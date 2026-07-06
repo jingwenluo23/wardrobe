@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "cad:refresh": "node ./scripts/refresh_tshirt_asset.mjs",
     "golden": "node scripts/golden.mjs",
     "golden:update": "node scripts/golden.mjs --update"
   },
