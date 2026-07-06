@@ -1,0 +1,495 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NOCTURNE — Maison de Couture</title>
+<style>
+  :root {
+    --ink: #0a0b0e;
+    --ink-2: #101218;
+    --bone: #ece7dd;
+    --muted: #9a9ba2;
+    --faint: #6d6e76;
+    --gold: #c8a86b;
+    --gold-soft: rgba(200, 168, 107, 0.42);
+    --glass: rgba(255, 255, 255, 0.055);
+    --glass-2: rgba(255, 255, 255, 0.03);
+    --glass-brd: rgba(255, 255, 255, 0.12);
+    --glass-hi: rgba(255, 255, 255, 0.22);
+    --serif: "Didot", "Bodoni 72", "Bodoni MT", "Hoefler Text", Garamond,
+      "Times New Roman", serif;
+    --sans: "Neue Haas Grotesk Display", "Helvetica Neue", Helvetica, Arial,
+      system-ui, sans-serif;
+    --pad: clamp(1.25rem, 5vw, 5rem);
+    --maxw: 1240px;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ink);
+    color: var(--bone);
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+
+  /* ---- ambient light field behind everything ---- */
+  .aurora {
+    position: fixed;
+    inset: -30% -10% -10% -10%;
+    z-index: -2;
+    filter: blur(10px);
+    background:
+      radial-gradient(38% 44% at 22% 18%, rgba(96, 62, 120, 0.42), transparent 70%),
+      radial-gradient(34% 40% at 82% 26%, rgba(200, 168, 107, 0.22), transparent 68%),
+      radial-gradient(50% 50% at 50% 92%, rgba(28, 58, 74, 0.4), transparent 72%),
+      radial-gradient(60% 60% at 68% 68%, rgba(120, 40, 58, 0.18), transparent 70%);
+    animation: drift 26s ease-in-out infinite alternate;
+  }
+  @keyframes drift {
+    0%   { transform: translate3d(0,0,0) scale(1); }
+    50%  { transform: translate3d(-3%, 2%, 0) scale(1.08); }
+    100% { transform: translate3d(3%, -2%, 0) scale(1.04); }
+  }
+  /* film grain */
+  .grain {
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    opacity: 0.5;
+    mix-blend-mode: overlay;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix type='saturate' values='0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/></svg>");
+  }
+
+  /* ---- glass primitive ---- */
+  .glass {
+    background: linear-gradient(160deg, var(--glass), var(--glass-2));
+    backdrop-filter: blur(22px) saturate(1.5);
+    -webkit-backdrop-filter: blur(22px) saturate(1.5);
+    border: 1px solid var(--glass-brd);
+    box-shadow:
+      inset 0 1px 0 var(--glass-hi),
+      inset 0 -1px 0 rgba(0, 0, 0, 0.3),
+      0 30px 80px -30px rgba(0, 0, 0, 0.7);
+    border-radius: 18px;
+  }
+
+  .wrap { max-width: var(--maxw); margin: 0 auto; padding-inline: var(--pad); }
+
+  .eyebrow {
+    font-size: 0.68rem;
+    letter-spacing: 0.42em;
+    text-transform: uppercase;
+    color: var(--gold);
+    margin: 0;
+    font-weight: 500;
+  }
+
+  h1, h2, h3 { font-family: var(--serif); font-weight: 400; letter-spacing: 0.01em; text-wrap: balance; }
+
+  a { color: inherit; text-decoration: none; }
+
+  .hairline { height: 1px; background: linear-gradient(90deg, transparent, var(--gold-soft), transparent); border: 0; }
+
+  /* ---- nav ---- */
+  nav {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    backdrop-filter: blur(18px) saturate(1.4);
+    -webkit-backdrop-filter: blur(18px) saturate(1.4);
+    background: rgba(10, 11, 14, 0.5);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  }
+  nav .row {
+    display: flex; align-items: center; justify-content: space-between;
+    height: 74px; max-width: var(--maxw); margin: 0 auto; padding-inline: var(--pad);
+  }
+  .brand {
+    font-family: var(--serif);
+    font-size: 1.5rem;
+    letter-spacing: 0.3em;
+    padding-left: 0.3em;
+  }
+  .navlinks { display: flex; gap: 2.4rem; align-items: center; }
+  .navlinks a { font-size: 0.75rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); transition: color 0.4s; }
+  .navlinks a:hover { color: var(--bone); }
+  .btn {
+    display: inline-flex; align-items: center; gap: 0.6em;
+    font-size: 0.72rem; letter-spacing: 0.18em; text-transform: uppercase;
+    padding: 0.85em 1.5em; border-radius: 100px;
+    border: 1px solid var(--glass-brd);
+    background: linear-gradient(160deg, var(--glass), var(--glass-2));
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    color: var(--bone); cursor: pointer;
+    transition: border-color 0.4s, box-shadow 0.5s, transform 0.4s;
+  }
+  .btn:hover { border-color: var(--gold-soft); box-shadow: 0 0 0 1px var(--gold-soft), 0 10px 30px -12px rgba(200,168,107,0.4); transform: translateY(-1px); }
+  .btn-solid { background: linear-gradient(180deg, #f3ecdd, #d8cdb4); color: #14110b; border-color: transparent; }
+  .btn-solid:hover { box-shadow: 0 12px 34px -12px rgba(216, 205, 180, 0.6); }
+  @media (max-width: 760px) { .navlinks a:not(.btn) { display: none; } }
+
+  /* ---- hero ---- */
+  .hero { position: relative; padding: clamp(4rem, 12vh, 9rem) 0 clamp(3rem, 8vh, 6rem); }
+  .hero .eyebrow { margin-bottom: 1.8rem; }
+  .hero h1 {
+    font-size: clamp(2.9rem, 8.5vw, 7rem);
+    line-height: 0.98;
+    margin: 0 0 1.6rem;
+    max-width: 15ch;
+  }
+  .hero h1 em { font-style: italic; color: var(--gold); }
+  .hero p.lede { max-width: 46ch; color: var(--muted); font-size: 1.08rem; margin: 0 0 2.6rem; }
+  .hero .ctas { display: flex; gap: 1rem; flex-wrap: wrap; align-items: center; }
+  .hero .meta { display: flex; gap: 2.5rem; margin-top: 4rem; flex-wrap: wrap; }
+  .hero .meta div { }
+  .hero .meta .k { font-family: var(--serif); font-size: 1.7rem; }
+  .hero .meta .v { font-size: 0.68rem; letter-spacing: 0.22em; text-transform: uppercase; color: var(--faint); margin-top: 0.2rem; }
+
+  /* floating glass "flacon" motif on the hero right */
+  .hero-grid { display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 3rem; align-items: center; }
+  @media (max-width: 900px) { .hero-grid { grid-template-columns: 1fr; } .flacon-stage { order: -1; } }
+  .flacon-stage {
+    position: relative; aspect-ratio: 4 / 5; border-radius: 22px; overflow: hidden;
+    display: grid; place-items: center;
+  }
+  .flacon {
+    width: 46%; aspect-ratio: 3 / 5;
+    border-radius: 46% 46% 40% 40% / 20% 20% 12% 12%;
+    background:
+      linear-gradient(145deg, rgba(255,255,255,0.28), rgba(255,255,255,0.02) 40%),
+      linear-gradient(200deg, rgba(200,168,107,0.32), rgba(96,62,120,0.24));
+    border: 1px solid rgba(255,255,255,0.28);
+    box-shadow: inset 0 2px 14px rgba(255,255,255,0.35), inset 0 -20px 50px rgba(0,0,0,0.4), 0 40px 90px -30px rgba(0,0,0,0.8);
+    position: relative;
+    animation: float 9s ease-in-out infinite;
+  }
+  .flacon::before {
+    content: ""; position: absolute; top: -13%; left: 50%; transform: translateX(-50%);
+    width: 22%; height: 16%; border-radius: 4px 4px 2px 2px;
+    background: linear-gradient(180deg, #efe6d2, #b7a681);
+    box-shadow: 0 6px 16px rgba(0,0,0,0.5);
+  }
+  .flacon::after {
+    content: "N"; position: absolute; inset: 0; display: grid; place-items: center;
+    font-family: var(--serif); font-size: 2.4rem; color: rgba(255,255,255,0.5);
+    letter-spacing: 0.1em;
+  }
+  @keyframes float { 0%,100%{ transform: translateY(-2%);} 50%{ transform: translateY(3%);} }
+
+  /* ---- section frame ---- */
+  section { position: relative; }
+  .sec-pad { padding-block: clamp(4rem, 11vh, 8rem); }
+  .sec-head { display: flex; align-items: baseline; justify-content: space-between; gap: 2rem; flex-wrap: wrap; margin-bottom: 2.6rem; }
+  .sec-head h2 { font-size: clamp(1.9rem, 4vw, 3rem); margin: 0.5rem 0 0; }
+
+  /* ---- collection ---- */
+  .pieces { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.4rem; }
+  @media (max-width: 900px) { .pieces { grid-template-columns: 1fr; max-width: 420px; margin-inline: auto; } }
+  .piece { padding: 1rem 1rem 1.5rem; overflow: hidden; }
+  .piece .swatch {
+    position: relative; aspect-ratio: 3 / 4; border-radius: 12px; overflow: hidden;
+    border: 1px solid rgba(255,255,255,0.08);
+  }
+  .piece .swatch > span {
+    position: absolute; inset: 0;
+    background-size: 200% 100%;
+    animation: sheen 6s linear infinite;
+  }
+  @keyframes sheen { to { background-position: -200% 0; } }
+  .s1 > span { background-image: linear-gradient(115deg, #14131a, #2a2233 45%, #6a5a44 50%, #2a2233 55%, #14131a), linear-gradient(#1a1720,#1a1720); }
+  .s2 > span { background-image: linear-gradient(115deg, #0f1418, #1b2a30 45%, #b7a681 50%, #1b2a30 55%, #0f1418); }
+  .s3 > span { background-image: linear-gradient(115deg, #17121a, #35202c 45%, #caa9b4 50%, #35202c 55%, #17121a); }
+  .piece:hover .swatch > span { animation-duration: 2.4s; }
+  .piece .cap { display: flex; justify-content: space-between; align-items: baseline; margin-top: 1.1rem; gap: 1rem; }
+  .piece h3 { font-size: 1.35rem; margin: 0; }
+  .piece .ref { font-size: 0.64rem; letter-spacing: 0.2em; color: var(--faint); text-transform: uppercase; }
+  .piece .price { font-size: 0.74rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--gold); margin-top: 0.5rem; }
+
+  /* ---- story ---- */
+  .story { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(2rem, 6vw, 5rem); align-items: center; }
+  @media (max-width: 860px){ .story { grid-template-columns: 1fr; } }
+  .story blockquote {
+    font-family: var(--serif); font-size: clamp(1.6rem, 3.4vw, 2.6rem);
+    line-height: 1.25; margin: 0; font-style: italic;
+  }
+  .story blockquote span { color: var(--gold); }
+  .story .body { color: var(--muted); }
+  .story .body p { margin: 0 0 1.2rem; }
+  .story .figures { display: flex; gap: 2.5rem; margin-top: 2rem; }
+  .story .figures .k { font-family: var(--serif); font-size: 2rem; }
+  .story .figures .v { font-size: 0.66rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--faint); }
+
+  /* ---- values ---- */
+  .values { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.2rem; }
+  @media (max-width: 900px){ .values { grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 520px){ .values { grid-template-columns: 1fr; } }
+  .value { padding: 1.8rem 1.6rem; }
+  .value svg { width: 30px; height: 30px; stroke: var(--gold); fill: none; stroke-width: 1; margin-bottom: 1.1rem; }
+  .value h3 { font-size: 1.2rem; margin: 0 0 0.5rem; }
+  .value p { font-size: 0.9rem; color: var(--muted); margin: 0; }
+
+  /* ---- membership ---- */
+  .cercle { padding: clamp(2.5rem, 6vw, 4.5rem); text-align: center; position: relative; overflow: hidden; }
+  .cercle::after {
+    content:""; position:absolute; inset:0; z-index:-1;
+    background: radial-gradient(60% 90% at 50% 0%, rgba(200,168,107,0.16), transparent 70%);
+  }
+  .cercle .eyebrow { margin-bottom: 1.4rem; }
+  .cercle h2 { font-size: clamp(2rem, 5vw, 3.4rem); margin: 0 auto 1rem; max-width: 16ch; }
+  .cercle p.sub { color: var(--muted); max-width: 44ch; margin: 0 auto 2.2rem; }
+  form.apply { display: flex; gap: 0.7rem; max-width: 460px; margin: 0 auto; flex-wrap: wrap; justify-content: center; }
+  form.apply input {
+    flex: 1 1 240px; min-width: 0;
+    background: rgba(255,255,255,0.05); border: 1px solid var(--glass-brd);
+    color: var(--bone); border-radius: 100px; padding: 0.95em 1.4em;
+    font-family: var(--sans); font-size: 0.9rem; letter-spacing: 0.02em;
+  }
+  form.apply input::placeholder { color: var(--faint); letter-spacing: 0.1em; }
+  form.apply input:focus { outline: none; border-color: var(--gold-soft); box-shadow: 0 0 0 1px var(--gold-soft); }
+  .apply-note { font-size: 0.68rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--faint); margin-top: 1.5rem; }
+  .apply-done { color: var(--gold); font-family: var(--serif); font-style: italic; font-size: 1.15rem; margin-top: 1.6rem; min-height: 1.4em; }
+
+  /* ---- footer ---- */
+  footer { border-top: 1px solid rgba(255,255,255,0.07); margin-top: clamp(3rem,8vh,6rem); }
+  .foot { display: flex; justify-content: space-between; gap: 2rem; flex-wrap: wrap; padding-block: 3rem; color: var(--faint); }
+  .foot .brand { font-size: 1.2rem; color: var(--bone); }
+  .foot .cols { display: flex; gap: 3.5rem; flex-wrap: wrap; }
+  .foot h4 { font-family: var(--sans); font-size: 0.64rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--muted); margin: 0 0 0.9rem; font-weight: 500; }
+  .foot ul { list-style: none; padding: 0; margin: 0; display: grid; gap: 0.55rem; }
+  .foot ul a { font-size: 0.85rem; color: var(--faint); transition: color 0.3s; }
+  .foot ul a:hover { color: var(--bone); }
+  .foot .legal { font-size: 0.7rem; letter-spacing: 0.08em; }
+
+  /* ---- reveal ---- */
+  .reveal { opacity: 0; transform: translateY(26px); transition: opacity 1s cubic-bezier(0.2,0.7,0.2,1), transform 1s cubic-bezier(0.2,0.7,0.2,1); }
+  .reveal.in { opacity: 1; transform: none; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .aurora, .flacon, .piece .swatch > span { animation: none !important; }
+    .reveal { opacity: 1; transform: none; transition: none; }
+  }
+</style>
+</head>
+<body>
+<div class="aurora" aria-hidden="true"></div>
+<div class="grain" aria-hidden="true"></div>
+
+<nav>
+  <div class="row">
+    <a class="brand" href="#">NOCTURNE</a>
+    <div class="navlinks">
+      <a href="#maison">The Maison</a>
+      <a href="#collection">Collection</a>
+      <a href="#cercle">The Cercle</a>
+      <a class="btn" href="#cercle">Request Access</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero">
+  <div class="wrap hero-grid">
+    <div>
+      <p class="eyebrow">Paris — Maison de Couture, est. 1926</p>
+      <h1>Light, worn as <em>shadow</em>.</h1>
+      <p class="lede">
+        Fewer than three hundred pieces leave our atelier each year. Each is
+        cut by a single première d'atelier, numbered by hand, and made for
+        one wardrobe alone. This is couture kept deliberately rare.
+      </p>
+      <div class="ctas">
+        <a class="btn btn-solid" href="#collection">Discover Collection N°VII</a>
+        <a class="btn" href="#cercle">Request an invitation →</a>
+      </div>
+      <div class="meta">
+        <div><div class="k">1926</div><div class="v">Rue Saint-Honoré</div></div>
+        <div><div class="k">280</div><div class="v">Pieces per annum</div></div>
+        <div><div class="k">14</div><div class="v">Mains d'atelier</div></div>
+      </div>
+    </div>
+    <div class="flacon-stage glass">
+      <div class="flacon" aria-hidden="true"></div>
+    </div>
+  </div>
+</header>
+
+<section id="collection" class="sec-pad">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <div>
+        <p class="eyebrow">Collection N°VII — The Autumn Descent</p>
+        <h2>The season, in three gestures.</h2>
+      </div>
+      <a class="btn" href="#cercle">View the atelier book</a>
+    </div>
+    <div class="pieces">
+      <article class="piece glass reveal">
+        <div class="swatch s1"><span></span></div>
+        <div class="cap"><h3>La Robe Obsidienne</h3><span class="ref">Réf. 0472</span></div>
+        <div class="price">Upon request</div>
+      </article>
+      <article class="piece glass reveal">
+        <div class="swatch s2"><span></span></div>
+        <div class="cap"><h3>Le Smoking Liquide</h3><span class="ref">Réf. 0488</span></div>
+        <div class="price">Upon request</div>
+      </article>
+      <article class="piece glass reveal">
+        <div class="swatch s3"><span></span></div>
+        <div class="cap"><h3>Cape Nocturne</h3><span class="ref">Réf. 0501</span></div>
+        <div class="price">Upon request</div>
+      </article>
+    </div>
+  </div>
+</section>
+
+<section id="maison" class="sec-pad">
+  <div class="wrap story reveal">
+    <blockquote>
+      &ldquo;We do not follow the season. We wait for the <span>one woman</span>
+      the garment was always meant for.&rdquo;
+    </blockquote>
+    <div class="body">
+      <p>
+        Founded in a single first-floor atelier on the Rue Saint-Honoré,
+        Nocturne has kept the same refusal for a century: never to make more
+        than the hand can perfect. Every gown begins as a length of raw silk
+        and a single toile, draped on the body it is destined for.
+      </p>
+      <p>
+        Our savoir-faire is not written down. It is passed, seam by seam,
+        from première to apprentice across the long table where the house has
+        always worked. What leaves through the discreet door on the courtyard
+        cannot be reproduced — only remembered.
+      </p>
+      <div class="figures">
+        <div><div class="k">100</div><div class="v">Years, one address</div></div>
+        <div><div class="k">400+</div><div class="v">Hours per gown</div></div>
+        <div><div class="k">1 / 1</div><div class="v">Every piece</div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="sec-pad">
+  <div class="wrap">
+    <p class="eyebrow reveal" style="margin-bottom:2.4rem">The house values</p>
+    <div class="values">
+      <div class="value glass reveal">
+        <svg viewBox="0 0 24 24"><path d="M12 3l7 4v5c0 5-3 7-7 9-4-2-7-4-7-9V7l7-4z"/></svg>
+        <h3>Provenance</h3>
+        <p>Silks traced to a single mill in Lyon; leathers to one tannery in Millau. Named, always.</p>
+      </div>
+      <div class="value glass reveal">
+        <svg viewBox="0 0 24 24"><path d="M4 20l6-6m0 0l6-6 2 2-6 6m-2-2l2 2M14 6l4 4"/></svg>
+        <h3>Savoir-faire</h3>
+        <p>Hand-finishing that survives no factory: rolled hems, plumetis, seams closed by needle alone.</p>
+      </div>
+      <div class="value glass reveal">
+        <svg viewBox="0 0 24 24"><path d="M12 2l2.5 7H22l-6 4.5L18.5 22 12 17.5 5.5 22 8 13.5 2 9h7.5z"/></svg>
+        <h3>Rarity</h3>
+        <p>A capped edition, retired the moment it is complete. No re-issue. No second.</p>
+      </div>
+      <div class="value glass reveal">
+        <svg viewBox="0 0 24 24"><path d="M12 5C6 5 2 12 2 12s4 7 10 7 10-7 10-7-4-7-10-7z"/><circle cx="12" cy="12" r="2.5"/></svg>
+        <h3>Discretion</h3>
+        <p>No logo, no vitrine. The only signature is a number stitched where only the wearer will find it.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="cercle" class="sec-pad">
+  <div class="wrap">
+    <div class="cercle glass reveal">
+      <p class="eyebrow">The Cercle Noir — By invitation</p>
+      <h2>Two hundred members. Not one more.</h2>
+      <p class="sub">
+        Private clients receive the atelier book before each collection, first
+        audience with the première, and the right to commission beyond it.
+        Membership opens only when a place is left vacant.
+      </p>
+      <form class="apply" id="applyForm" novalidate>
+        <input type="email" id="applyEmail" placeholder="YOUR EMAIL" autocomplete="email" aria-label="Your email" required />
+        <button class="btn btn-solid" type="submit">Request an invitation</button>
+      </form>
+      <div class="apply-done" id="applyDone" role="status" aria-live="polite"></div>
+      <p class="apply-note">Applications reviewed by the client office · Paris</p>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap foot">
+    <div>
+      <div class="brand" style="font-family:var(--serif);letter-spacing:0.28em">NOCTURNE</div>
+      <p class="legal" style="max-width:26ch;margin-top:1rem">
+        8 Rue Saint-Honoré, 75001 Paris · Atelier Milano, Via Gesù
+      </p>
+    </div>
+    <div class="cols">
+      <div>
+        <h4>Maison</h4>
+        <ul><li><a href="#maison">Our story</a></li><li><a href="#collection">Collection N°VII</a></li><li><a href="#cercle">The Cercle</a></li></ul>
+      </div>
+      <div>
+        <h4>Client</h4>
+        <ul><li><a href="#cercle">Private appointments</a></li><li><a href="#cercle">Commissions</a></li><li><a href="#">Care &amp; archive</a></li></ul>
+      </div>
+      <div>
+        <h4>Contact</h4>
+        <ul><li><a href="#">Paris atelier</a></li><li><a href="#">Milano atelier</a></li><li><a href="#">Press office</a></li></ul>
+      </div>
+    </div>
+  </div>
+  <div class="wrap" style="padding-bottom:2.5rem">
+    <div class="hairline" style="margin-bottom:1.4rem"></div>
+    <p class="legal" style="color:var(--faint)">© MCMXXVI–MMXXV Maison Nocturne. All rights reserved. Made in France, entirely by hand.</p>
+  </div>
+</footer>
+
+<script>
+  (function () {
+    // Scroll reveals
+    var reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    var items = document.querySelectorAll(".reveal");
+    if (reduce || !("IntersectionObserver" in window)) {
+      items.forEach(function (el) { el.classList.add("in"); });
+    } else {
+      var io = new IntersectionObserver(function (entries) {
+        entries.forEach(function (e, i) {
+          if (e.isIntersecting) {
+            var el = e.target;
+            setTimeout(function () { el.classList.add("in"); }, (i % 3) * 90);
+            io.unobserve(el);
+          }
+        });
+      }, { threshold: 0.16 });
+      items.forEach(function (el) { io.observe(el); });
+    }
+
+    // Membership form
+    var form = document.getElementById("applyForm");
+    var done = document.getElementById("applyDone");
+    form.addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      var email = document.getElementById("applyEmail");
+      var ok = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.value.trim());
+      if (!ok) {
+        done.textContent = "Kindly enter a valid email so we may reply.";
+        email.focus();
+        return;
+      }
+      form.style.display = "none";
+      done.textContent = "Received. The client office will write to you within three days.";
+    });
+  })();
+</script>
+</body>
+</html>
