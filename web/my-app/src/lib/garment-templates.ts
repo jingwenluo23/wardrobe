@@ -528,21 +528,6 @@ export const garmentTemplates: GarmentTemplateDef[] = [
     params: { ...defaultTeeParams, bodyWidth: 51, bodyDepth: 21 },
     features: { ...defaultTeeFeatures },
   },
-  {
-    id: "top-basketball-jersey",
-    label: "Basketball jersey",
-    category: "Tops",
-    params: {
-      ...defaultTeeParams,
-      bodyWidth: 54,
-      bodyLength: 76,
-      neckWidthFront: 19,
-      neckDropFront: 18,
-      armholeDepth: 25,
-      shoulderWidthFactor: 0.66,
-    },
-    features: { ...defaultTeeFeatures, sleeves: false, neckShape: "v" },
-  },
   // Legacy / other-category placeholders (same knit block until their own
   // archetypes land).
   {
@@ -579,6 +564,7 @@ const LEGACY_ALIASES: Record<string, string> = {
   "bottom-straight": "bottom-jeans",
   "top-fitted": "top-standard-tee",
   "top-sports-jersey": "top-gym-tee",
+  "top-basketball-jersey": "top-tank",
 };
 
 export function getTemplate(id: string | null | undefined) {
