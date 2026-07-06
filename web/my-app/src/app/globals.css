@@ -1,9 +1,9 @@
 @import "tailwindcss";
 
 :root {
-  --background: #0b0d10;
-  --foreground: #ece7dd;
-  --gold: #c8a86b;
+  --background: #f5f3ee;
+  --foreground: #24262c;
+  --gold: #9c7a33;
   --serif: "Didot", "Bodoni 72", "Bodoni MT", "Hoefler Text", Garamond,
     "Times New Roman", serif;
 }
@@ -15,7 +15,7 @@
   --font-mono: var(--font-geist-mono);
 }
 
-/* Wardrobe commits to a single dark, liquid-glass identity. */
+/* Wardrobe commits to a single light, frosted-daylight identity. */
 
 body {
   background: var(--background);
@@ -35,23 +35,23 @@ h1, h2, h3 {
   letter-spacing: 0.01em;
 }
 
-/* Ambient light field + film grain, shared by every page via the layout. */
+/* Ambient daylight field + film grain, shared by every page via the layout. */
 .aurora {
   position: fixed;
   inset: -30% -10% -10% -10%;
   z-index: -2;
   pointer-events: none;
-  filter: blur(10px);
+  filter: blur(14px);
+  opacity: 0.7;
   background:
-    radial-gradient(38% 44% at 22% 16%, rgba(96, 62, 120, 0.34), transparent 70%),
-    radial-gradient(34% 40% at 82% 24%, rgba(200, 168, 107, 0.2), transparent 68%),
-    radial-gradient(52% 52% at 50% 96%, rgba(28, 58, 74, 0.34), transparent 72%),
-    radial-gradient(60% 60% at 70% 66%, rgba(120, 40, 58, 0.16), transparent 70%);
+    radial-gradient(40% 46% at 20% 14%, rgba(156, 122, 51, 0.14), transparent 70%),
+    radial-gradient(38% 42% at 84% 22%, rgba(120, 140, 170, 0.16), transparent 68%),
+    radial-gradient(52% 50% at 52% 96%, rgba(190, 175, 150, 0.22), transparent 74%);
   animation: aurora-drift 28s ease-in-out infinite alternate;
 }
 @keyframes aurora-drift {
   0% { transform: translate3d(0, 0, 0) scale(1); }
-  50% { transform: translate3d(-3%, 2%, 0) scale(1.08); }
+  50% { transform: translate3d(-3%, 2%, 0) scale(1.06); }
   100% { transform: translate3d(3%, -2%, 0) scale(1.04); }
 }
 .grain {
@@ -59,8 +59,8 @@ h1, h2, h3 {
   inset: 0;
   z-index: -1;
   pointer-events: none;
-  opacity: 0.4;
-  mix-blend-mode: overlay;
+  opacity: 0.35;
+  mix-blend-mode: multiply;
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix type='saturate' values='0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/></svg>");
 }
 
