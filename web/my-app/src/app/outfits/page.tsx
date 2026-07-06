@@ -184,6 +184,30 @@ export default function OutfitsPage() {
   const [deletingDraftId, setDeletingDraftId] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState("");
 
+  // User-customizable wardrobe title, persisted in the browser.
+  const [wardrobeTitle, setWardrobeTitle] = useState("Wardrobe");
+  const [isEditingTitle, setIsEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState("");
+
+  useEffect(() => {
+    const saved = window.localStorage.getItem("wardrobeTitle");
+    if (saved) {
+      setWardrobeTitle(saved);
+    }
+  }, []);
+
+  function startEditingTitle() {
+    setTitleDraft(wardrobeTitle);
+    setIsEditingTitle(true);
+  }
+
+  function saveTitle() {
+    const next = titleDraft.trim() || "Wardrobe";
+    setWardrobeTitle(next);
+    window.localStorage.setItem("wardrobeTitle", next);
+    setIsEditingTitle(false);
+  }
+
   const loadDrafts = useCallback(async () => {
     const response = await fetch("/api/drafts", { cache: "no-store" });
     if (!response.ok) {
@@ -493,9 +517,51 @@ export default function OutfitsPage() {
               <p className="text-sm font-medium uppercase tracking-[0.18em] text-[#8b9099]">
                 Outfit builder
               </p>
-              <h2 className="mt-2 text-4xl font-semibold leading-tight md:text-5xl">
-                Uploaded clothes
-              </h2>
+              {isEditingTitle ? (
+                <input
+                  autoFocus
+                  aria-label="Wardrobe name"
+                  className="mt-2 w-full max-w-md rounded-lg border border-[#24262c]/15 bg-[#ffffff]/70 px-3 py-1 text-4xl font-semibold leading-tight text-[#24262c] outline-none focus:border-[#9c7a33] md:text-5xl"
+                  value={titleDraft}
+                  onChange={(event) => setTitleDraft(event.target.value)}
+                  onBlur={saveTitle}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      saveTitle();
+                    } else if (event.key === "Escape") {
+                      setIsEditingTitle(false);
+                    }
+                  }}
+                />
+              ) : (
+                <div className="mt-2 flex items-center gap-3">
+                  <h2 className="text-4xl font-semibold leading-tight md:text-5xl">
+                    {wardrobeTitle}
+                  </h2>
+                  <button
+                    aria-label="Rename wardrobe"
+                    className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-[#8b9099] transition hover:bg-[#24262c]/5 hover:text-[#9c7a33]"
+                    onClick={startEditingTitle}
+                    type="button"
+                  >
+                    <svg
+                      aria-hidden="true"
+                      fill="none"
+                      height="18"
+                      stroke="currentColor"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="1.6"
+                      viewBox="0 0 24 24"
+                      width="18"
+                    >
+                      <path d="M12 20h9" />
+                      <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                    </svg>
+                  </button>
+                </div>
+              )}
               <p className="mt-3 max-w-2xl text-[#6b6f77]">
                 Upload a few garment photos and the app fits them onto a known
                 garment template to generate a quick 3D mesh preview.
@@ -565,7 +631,7 @@ export default function OutfitsPage() {
                   )}
                   {item.draftId ? (
                     <button
-                      className="absolute right-3 top-3 rounded-full bg-[#efece4]/85 px-3 py-1 text-[11px] font-semibold text-[#e0a06d] shadow-sm ring-1 ring-[#1e202612] transition hover:bg-[#1e20260a] disabled:cursor-not-allowed disabled:opacity-60"
+                      className="absolute right-3 top-3 rounded-full bg-transparent px-3 py-1 text-[11px] font-semibold text-[#24262c] ring-1 ring-[#24262c]/20 backdrop-blur-sm transition hover:bg-[#24262c]/5 disabled:cursor-not-allowed disabled:opacity-60"
                       disabled={deletingDraftId === item.draftId}
                       onClick={(event) => {
                         event.stopPropagation();
