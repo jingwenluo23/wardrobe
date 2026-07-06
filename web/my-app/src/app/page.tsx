@@ -116,7 +116,7 @@ export default function Home() {
             </span>
           </span>
           <Link
-            className="rounded-md bg-[#9c7a33] px-4 py-2 font-semibold text-[#241c08] transition hover:bg-[#b8934a]"
+            className="rounded-md border border-[#24262c]/15 px-4 py-2 font-semibold text-[#24262c] transition hover:border-[#9c7a33] hover:text-[#9c7a33]"
             href="/outfits"
           >
             Open wardrobe
@@ -144,7 +144,7 @@ export default function Home() {
           </p>
           <div className="mt-8 flex flex-wrap items-center gap-4">
             <Link
-              className="rounded-md bg-[#9c7a33] px-6 py-3.5 text-sm font-semibold text-[#241c08] transition hover:bg-[#b8934a]"
+              className="rounded-md border border-[#24262c]/15 px-6 py-3.5 text-sm font-semibold text-[#24262c] transition hover:border-[#9c7a33] hover:text-[#9c7a33]"
               href="/outfits"
             >
               Digitize your first garment
@@ -332,7 +332,7 @@ export default function Home() {
             </p>
           </div>
           <Link
-            className="rounded-md bg-[#9c7a33] px-6 py-3.5 text-sm font-semibold text-[#241c08] transition hover:bg-[#b8934a]"
+            className="rounded-md border border-[#24262c]/15 px-6 py-3.5 text-sm font-semibold text-[#24262c] transition hover:border-[#9c7a33] hover:text-[#9c7a33]"
             href="/outfits"
           >
             Open my wardrobe

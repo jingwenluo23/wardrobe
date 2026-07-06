@@ -447,7 +447,7 @@ export default function OutfitsPage() {
               Overview
             </Link>
             <Link
-              className="rounded-lg bg-[#9c7a33] px-3 py-2 font-semibold text-[#241c08]"
+              className="rounded-lg border border-[#9c7a33] bg-[#9c7a33]/10 px-3 py-2 font-semibold text-[#9c7a33]"
               href="/outfits"
             >
               Outfits
@@ -502,7 +502,7 @@ export default function OutfitsPage() {
               </p>
             </div>
             <button
-              className="rounded-lg bg-[#9c7a33] px-4 py-3 text-sm font-semibold text-[#241c08] transition hover:bg-[#b8934a]"
+              className="rounded-lg border border-[#24262c]/15 px-4 py-3 text-sm font-semibold text-[#24262c] transition hover:border-[#9c7a33] hover:text-[#9c7a33]"
               onClick={() => setIsUploadOpen(true)}
               type="button"
             >
@@ -618,19 +618,21 @@ export default function OutfitsPage() {
                         </p>
                       </div>
                       <button
-                        className="rounded-lg bg-[#9c7a33] px-3 py-2 text-xs font-semibold text-[#241c08] transition hover:bg-[#b8934a]"
+                        className="rounded-lg border border-[#24262c]/15 px-3 py-2 text-xs font-semibold text-[#24262c] transition hover:border-[#9c7a33] hover:text-[#9c7a33]"
                         onClick={() => setSelectedDraftItem(item)}
                         type="button"
                       >
                         View
                       </button>
                     </div>
-                    <div className="mt-3 h-2 rounded-full bg-[#1e202617]">
-                      <div
-                        className="h-2 rounded-full bg-[#9c7a33] transition-all"
-                        style={{ width: String(item.progress ?? 0) + "%" }}
-                      />
-                    </div>
+                    {item.pipelineStatus !== "ready" ? (
+                      <div className="mt-3 h-2 rounded-full bg-[#1e202617]">
+                        <div
+                          className="h-2 rounded-full bg-[#9c7a33] transition-all"
+                          style={{ width: String(item.progress ?? 0) + "%" }}
+                        />
+                      </div>
+                    ) : null}
                   </div>
                 ) : null}
               </article>
@@ -675,7 +677,7 @@ export default function OutfitsPage() {
                         className={
                           "flex-1 rounded-lg border px-3 py-2.5 text-sm font-semibold capitalize transition " +
                           (itemGender === gender
-                            ? "border-[#9c7a33] bg-[#9c7a33] text-[#241c08]"
+                            ? "border-[#9c7a33] bg-[#9c7a33]/10 text-[#9c7a33]"
                             : "border-[#1e202612] bg-[#ffffff]/70 text-[#6b6f77] hover:text-[#24262c]")
                         }
                         key={gender}
@@ -892,7 +894,7 @@ export default function OutfitsPage() {
                 Cancel
               </button>
               <button
-                className="rounded-lg bg-[#9c7a33] px-4 py-3 text-sm font-semibold text-[#241c08] transition hover:bg-[#b8934a] disabled:cursor-not-allowed disabled:bg-[#d8d5cd]"
+                className="rounded-lg border border-[#24262c]/15 px-4 py-3 text-sm font-semibold text-[#24262c] transition hover:border-[#9c7a33] hover:text-[#9c7a33] disabled:cursor-not-allowed disabled:opacity-50"
                 disabled={!itemName.trim() || !hasRequiredUploadPhotos || isSubmitting}
                 type="submit"
               >
