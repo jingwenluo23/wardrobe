@@ -105,10 +105,14 @@ function makeFabricBump(kind: "knit" | "fleece") {
 }
 
 function TeeModel({ mesh }: { mesh: DraftMesh }) {
-  const geometry = useMemo(
-    () => buildGarmentGeometry(mesh.params, mesh.features),
-    [mesh.params, mesh.features],
-  );
+  const geometry = useMemo(() => {
+    const built = buildGarmentGeometry(mesh.params, mesh.features);
+    // Recenter on the bounding-box center so the orbit pivot (world origin)
+    // sits inside the garment — otherwise rotation circles a point off to
+    // the side of the model.
+    built.center();
+    return built;
+  }, [mesh.params, mesh.features]);
 
   // Geometry groups: 0 = front panel, 1 = back panel, 2 = sleeves/collar.
   // The extracted front photo maps to the front, the back photo to the back,
