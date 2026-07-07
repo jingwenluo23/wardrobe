@@ -429,22 +429,24 @@ function buildTopGeometry(
       .reduce((acc, p) => acc.clone().add(p), new THREE.Vector3())
       .multiplyScalar(1 / arc.length);
 
-    const riseH = 23; // cm the hood stands above the neckline
-    const backLean = 22; // cm the crown curls back toward the spine
-    const belly = 12; // cm the back wall bulges out for pouch volume
+    const riseH = 9; // cm it rolls up over the collar before folding
+    const dropH = 24; // cm it then drapes down the back
+    const backLean = 15; // cm back toward the spine, hugging the back panel
+    const belly = 4; // cm of gentle roundness in the draped flap
 
     const rings: number[][] = [];
     for (let i = 0; i <= HOOD_RINGS; i += 1) {
       const t = i / HOOD_RINGS;
-      const ease = smoothstep(t);
-      // Centreline arcs up (easing to a rounded apex) and leans strongly
-      // back, so the crown sits behind the neck like a real hood at rest.
-      const up = riseH * Math.sin((Math.PI / 2) * Math.pow(t, 0.72));
-      const back = backLean * ease + 5 * Math.sin(Math.PI * t);
-      // Widen past the neck opening, hold through the body, then round the
-      // width closed over the last stretch so the crown is a soft fold.
-      const bulge = 1 + 0.3 * Math.sin(Math.PI * Math.min(1, t * 1.1));
-      const close = t < 0.78 ? 1 : 1 - 0.8 * smoothstep((t - 0.78) / 0.22);
+      // Roll up over the neck to a rounded fold, then drape down the back and
+      // rest against it — the natural pose of an unworn hood, not a raised
+      // crown. `up` peaks early then descends below the neckline.
+      const up =
+        riseH * Math.sin(Math.PI * Math.min(1, t * 2)) -
+        dropH * smoothstep(Math.max(0, t - 0.3) / 0.7);
+      const back = backLean * smoothstep(Math.min(1, t * 1.3));
+      // Fuller through the drape, rounding closed at the bottom fold.
+      const bulge = 1 + 0.22 * Math.sin(Math.PI * Math.min(1, t * 1.1));
+      const close = t < 0.85 ? 1 : 1 - 0.55 * smoothstep((t - 0.85) / 0.15);
       const width = bulge * close;
       const ringCenter = new THREE.Vector3(
         arcCenter.x,
@@ -457,14 +459,11 @@ function buildTopGeometry(
         radial.y = 0;
         const edgeT = j / (arc.length - 1); // 0=one front edge .. 1=other
         const edge = Math.abs(edgeT - 0.5) * 2; // 0 at centre-back, 1 at front
-        // Pouch belly: the centre-back of each ring pushes outward behind the
-        // neck, tapering to nothing at the face-opening edges, so the hood is
-        // a rounded 3D bag instead of a flat wall. Fades in above the collar
-        // and back out as the crown folds closed.
-        const bellyZ =
-          belly * (1 - edge * edge) * Math.sin(Math.PI * t) * close;
-        // Rounded cross-section: edges tuck slightly relative to the crown.
-        const dome = -1.4 * SCALE * edge * edge * Math.sin(Math.PI * t);
+        // A little roundness so the draped flap isn't razor-thin, tapering to
+        // nothing at the side edges.
+        const bellyZ = belly * (1 - edge * edge) * Math.sin(Math.PI * t) * close;
+        // Rounded cross-section: edges tuck slightly relative to the centre.
+        const dome = -1.2 * SCALE * edge * edge * Math.sin(Math.PI * t);
         const p = new THREE.Vector3(
           ringCenter.x + radial.x * width,
           ringCenter.y + dome,
