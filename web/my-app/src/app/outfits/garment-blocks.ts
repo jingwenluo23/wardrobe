@@ -421,46 +421,56 @@ function buildTopGeometry(
       return;
     }
 
-    // Draped cowl: the hood rises from the neckline, folds back over the
-    // shoulders and tapers closed low on the back — the natural resting
-    // pose for an unworn hood.
+    // Standing hood: lofted rings rise tall over the collar and lean back
+    // toward the spine, holding their volume through the body and rounding
+    // closed at the crown — the structured hood in the reference flats,
+    // not a flat cowl slumped on the back.
     const arcCenter = arc
       .reduce((acc, p) => acc.clone().add(p), new THREE.Vector3())
       .multiplyScalar(1 / arc.length);
 
+    const riseH = 23; // cm the hood stands above the neckline
+    const backLean = 22; // cm the crown curls back toward the spine
+    const belly = 12; // cm the back wall bulges out for pouch volume
+
     const rings: number[][] = [];
     for (let i = 0; i <= HOOD_RINGS; i += 1) {
       const t = i / HOOD_RINGS;
-      // Rounded pouch profile: rise over the collar, roll backward and
-      // down, settling low on the back.
-      const lift =
-        12 * Math.sin(Math.PI * Math.min(1, t * 1.05)) -
-        8 * smoothstep((t - 0.5) / 0.5);
-      const back = 15 * smoothstep(t * 0.95);
-      // The cowl spreads wider as it drapes (a resting hood is wider than
-      // the neck opening), keeps its depth for volume, and only closes in
-      // the last stretch so the bottom edge is a soft rounded fold.
-      const widen = 1 + 0.42 * Math.sin(Math.PI * Math.min(1, t * 1.1));
-      const pinch = t < 0.75 ? 1 : 1 - 0.62 * smoothstep((t - 0.75) / 0.25);
+      const ease = smoothstep(t);
+      // Centreline arcs up (easing to a rounded apex) and leans strongly
+      // back, so the crown sits behind the neck like a real hood at rest.
+      const up = riseH * Math.sin((Math.PI / 2) * Math.pow(t, 0.72));
+      const back = backLean * ease + 5 * Math.sin(Math.PI * t);
+      // Widen past the neck opening, hold through the body, then round the
+      // width closed over the last stretch so the crown is a soft fold.
+      const bulge = 1 + 0.3 * Math.sin(Math.PI * Math.min(1, t * 1.1));
+      const close = t < 0.78 ? 1 : 1 - 0.8 * smoothstep((t - 0.78) / 0.22);
+      const width = bulge * close;
       const ringCenter = new THREE.Vector3(
         arcCenter.x,
-        arcCenter.y + lift * SCALE,
+        arcCenter.y + up * SCALE,
         arcCenter.z - back * SCALE,
       );
       const ring: number[] = [];
       for (let j = 0; j < arc.length; j += 1) {
         const radial = arc[j].clone().sub(arcCenter);
         radial.y = 0;
-        // Soft dome: ring edges dip slightly relative to its centre so the
-        // pouch reads as rounded fabric, not a flat slab.
-        const edge = Math.abs(j / (arc.length - 1) - 0.5) * 2;
-        const dome = -1.6 * SCALE * edge * edge * Math.sin(Math.PI * t);
+        const edgeT = j / (arc.length - 1); // 0=one front edge .. 1=other
+        const edge = Math.abs(edgeT - 0.5) * 2; // 0 at centre-back, 1 at front
+        // Pouch belly: the centre-back of each ring pushes outward behind the
+        // neck, tapering to nothing at the face-opening edges, so the hood is
+        // a rounded 3D bag instead of a flat wall. Fades in above the collar
+        // and back out as the crown folds closed.
+        const bellyZ =
+          belly * (1 - edge * edge) * Math.sin(Math.PI * t) * close;
+        // Rounded cross-section: edges tuck slightly relative to the crown.
+        const dome = -1.4 * SCALE * edge * edge * Math.sin(Math.PI * t);
         const p = new THREE.Vector3(
-          ringCenter.x + radial.x * (1 + (widen - 1)) * pinch,
+          ringCenter.x + radial.x * width,
           ringCenter.y + dome,
-          ringCenter.z + radial.z * Math.max(pinch, 0.55),
+          ringCenter.z + radial.z * width - bellyZ * SCALE,
         );
-        ring.push(pushVertex(p.x, p.y, p.z, j / (arc.length - 1), t));
+        ring.push(pushVertex(p.x, p.y, p.z, edgeT, t));
       }
       rings.push(ring);
     }
