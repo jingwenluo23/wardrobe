@@ -432,7 +432,7 @@ function buildTopGeometry(
     const riseH = 8; // cm it rolls up over the collar before folding
     const dropH = 13; // cm it then drapes down the back (kept short)
     const backLean = 11; // cm back toward the spine
-    const pouch = 16; // cm the pouch belly bulges outward from the back
+    const pouch = 26; // cm the pouch belly bulges outward from the back
     const curl = 7; // cm the bottom curls back toward the body to close the bag
 
     const rings: number[][] = [];
@@ -465,13 +465,16 @@ function buildTopGeometry(
         // body into a rounded dome (tapering to nothing at the face-opening
         // edges), so the hood is a real 3D bag, not a flat brick. Swells over
         // the collar and eases off as the bottom rim closes.
+        // Circular (semicircle) falloff instead of a parabola gives a fuller,
+        // rounder dome that holds its depth across the back before tucking in
+        // at the face-opening edges.
         const pouchZ =
           pouch *
-          (1 - edge * edge) *
+          Math.sqrt(Math.max(0, 1 - edge * edge)) *
           Math.sin(Math.PI * Math.min(1, t * 1.15)) *
           close;
         // Rounded cross-section: edges tuck slightly relative to the centre.
-        const dome = -1.0 * SCALE * edge * edge * Math.sin(Math.PI * t);
+        const dome = -1.4 * SCALE * edge * edge * Math.sin(Math.PI * t);
         const p = new THREE.Vector3(
           ringCenter.x + radial.x * width,
           ringCenter.y + dome,
