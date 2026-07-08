@@ -438,23 +438,33 @@ function buildTopGeometry(
       nHalfZ = Math.max(nHalfZ, Math.abs(p.z - arcCenter.z));
     }
 
-    // Hood as an open ellipsoid-dome shell (a real face opening, not a closed
-    // pocket) that is reclined back so it rests toward the shoulders. Rings are
-    // sampled by polar angle from the neckline (theta=90) to the crown
-    // (theta=0); a per-ring fold that is 0 at the base keeps the seam clean and
-    // grows to `foldMax` at the crown so the hood leans back like the flats.
-    const ayH = 21 * SCALE; // crown reach (slightly smaller hood)
-    const ax = nHalfX * 1.05; // half-width
-    const azMax = nHalfX * 0.82; // front-to-back radius (hood volume)
-    const foldMax = 0.5; // radians the crown reclines back (~29deg)
-    const phiMax = 2.2; // half-sweep of each ring; the front opening stays open
+    // Hood built with garment construction logic (see the hood structure
+    // guide): an open dome shell whose volume comes from the ring shaping.
+    //   - Front opening: the rings' end columns form a curved seam around the
+    //     face; the rim is pulled forward as it rises so the opening clearly
+    //     faces forward from front and 3/4 views.
+    //   - Crown: polar-angle sampling gives a smooth rounded dome over the
+    //     head, slightly relaxed (wider than tall) so it reads as collapsed
+    //     fabric rather than a rigid helmet.
+    //   - Back panel: rounded and symmetric (rh -> 0 at the crown leaves no
+    //     split or cat-ears), projecting gently backward via a small recline
+    //     so the hood sits just off the upper back.
+    //   - Neck attachment: the base ring matches the neckline oval exactly.
+    const ayH = 19 * SCALE; // crown height — relaxed, not a tall wizard cone
+    const ax = nHalfX * 1.12; // half-width, a touch oversized (fabric ease)
+    const azMax = nHalfX * 0.85; // front-to-back radius (drape volume)
+    const foldMax = 0.38; // slight backward sit (~22deg), opening stays forward
+    const phiMax = 2.2; // half-sweep of each ring; the face opening stays open
+    const rimForward = 6 * SCALE; // how far the opening rim curves forward
 
     const rings: number[][] = [];
     for (let i = 0; i <= HOOD_RINGS; i += 1) {
       const t = i / HOOD_RINGS;
       const theta = (1 - t) * (Math.PI / 2); // 90deg at base .. 0 at crown
       const rh = Math.sin(theta); // horizontal scale: 1 at base, 0 at crown
-      const ly = ayH * Math.cos(theta); // reach along the dome axis
+      // Soft collapse: the crown eases down slightly instead of a full dome,
+      // like empty fabric settling under gravity.
+      const ly = ayH * Math.cos(theta) * (1 - 0.08 * smoothstep(t));
       const azt =
         nHalfZ + (azMax - nHalfZ) * Math.sin(Math.PI * Math.min(1, t * 0.9));
       // Recline: 0 at the base, growing to foldMax at the crown.
@@ -467,10 +477,15 @@ function buildTopGeometry(
         const phi = -phiMax + 2 * phiMax * f; // one front edge -> back -> other
         const lx = ax * rh * Math.sin(phi);
         const lz = -azt * rh * Math.cos(phi); // back is -z locally
+        // Front opening seam: vertices near the rim (|phi| -> phiMax) pull
+        // forward with height, curving the opening over the face like a sewn
+        // edge instead of letting it tip up or hide.
+        const rim = Math.pow(Math.abs(phi) / phiMax, 3);
+        const zForward = rimForward * rim * smoothstep(t) * rh;
         const p = new THREE.Vector3(
           arcCenter.x + lx,
           arcCenter.y + ly * ca - lz * sa,
-          arcCenter.z + ly * sa + lz * ca,
+          arcCenter.z + ly * sa + lz * ca + zForward,
         );
         ring.push(pushVertex(p.x, p.y, p.z, f, t));
       }
