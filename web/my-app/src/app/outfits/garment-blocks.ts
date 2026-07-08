@@ -429,51 +429,50 @@ function buildTopGeometry(
       .reduce((acc, p) => acc.clone().add(p), new THREE.Vector3())
       .multiplyScalar(1 / arc.length);
 
-    // Hood resting on the back: rings lofted from the neckline arc roll briefly
-    // over the collar, then drape down the back as a big rounded pocket. The
-    // belly bulges down-and-back so it reads as a hood at rest, and the base
-    // ring sits exactly on the neckline so there is no split at the seam.
-    const riseH = 1.5; // cm it rolls up over the collar before folding
-    const dropH = 20; // cm it then drapes down the back
-    const backLean = 14; // cm back toward the spine
-    const pouch = 34; // cm the pouch belly bulges down-and-back (bigger hood)
+    // Measure the neckline opening so the hood base matches it.
+    const N = arc.length;
+    let nHalfX = 0;
+    let nHalfZ = 0;
+    for (const p of arc) {
+      nHalfX = Math.max(nHalfX, Math.abs(p.x - arcCenter.x));
+      nHalfZ = Math.max(nHalfZ, Math.abs(p.z - arcCenter.z));
+    }
+
+    // Hood as an open ellipsoid-dome shell (a real face opening, not a closed
+    // pocket) that is reclined back so it rests toward the shoulders. Rings are
+    // sampled by polar angle from the neckline (theta=90) to the crown
+    // (theta=0); a per-ring fold that is 0 at the base keeps the seam clean and
+    // grows to `foldMax` at the crown so the hood leans back like the flats.
+    const ayH = 21 * SCALE; // crown reach (slightly smaller hood)
+    const ax = nHalfX * 1.05; // half-width
+    const azMax = nHalfX * 0.82; // front-to-back radius (hood volume)
+    const foldMax = 0.5; // radians the crown reclines back (~29deg)
+    const phiMax = 2.2; // half-sweep of each ring; the front opening stays open
 
     const rings: number[][] = [];
     for (let i = 0; i <= HOOD_RINGS; i += 1) {
       const t = i / HOOD_RINGS;
-      const up =
-        riseH * Math.sin(Math.PI * Math.min(1, t * 1.6)) -
-        dropH * smoothstep(Math.max(0, t - 0.25) / 0.75);
-      const back = backLean * smoothstep(Math.min(1, t * 1.2));
-      // Widen the pocket past the neck opening, rounding closed at the bottom.
-      const bulge = 1 + 0.3 * Math.sin(Math.PI * Math.min(1, t * 1.1));
-      const close = t < 0.88 ? 1 : 1 - 0.5 * smoothstep((t - 0.88) / 0.12);
-      const width = bulge * close;
-      const ringCenter = new THREE.Vector3(
-        arcCenter.x,
-        arcCenter.y + up * SCALE,
-        arcCenter.z - back * SCALE,
-      );
+      const theta = (1 - t) * (Math.PI / 2); // 90deg at base .. 0 at crown
+      const rh = Math.sin(theta); // horizontal scale: 1 at base, 0 at crown
+      const ly = ayH * Math.cos(theta); // reach along the dome axis
+      const azt =
+        nHalfZ + (azMax - nHalfZ) * Math.sin(Math.PI * Math.min(1, t * 0.9));
+      // Recline: 0 at the base, growing to foldMax at the crown.
+      const a = -foldMax * smoothstep(t);
+      const ca = Math.cos(a);
+      const sa = Math.sin(a);
       const ring: number[] = [];
-      for (let j = 0; j < arc.length; j += 1) {
-        const radial = arc[j].clone().sub(arcCenter);
-        radial.y = 0;
-        const edgeT = j / (arc.length - 1); // 0=one front edge .. 1=other
-        const edge = Math.abs(edgeT - 0.5) * 2; // 0 at centre-back, 1 at front
-        // Pouch belly: the centre-back bulges into a rounded dome (circular
-        // falloff, tapering to nothing at the opening edges), aimed mostly
-        // DOWN and a little back so the pocket rests on the back.
-        const belly =
-          pouch *
-          Math.sqrt(Math.max(0, 1 - edge * edge)) *
-          Math.sin(Math.PI * Math.min(1, t * 1.1)) *
-          close;
+      for (let j = 0; j < N; j += 1) {
+        const f = j / (N - 1); // 0..1 across the sweep
+        const phi = -phiMax + 2 * phiMax * f; // one front edge -> back -> other
+        const lx = ax * rh * Math.sin(phi);
+        const lz = -azt * rh * Math.cos(phi); // back is -z locally
         const p = new THREE.Vector3(
-          ringCenter.x + radial.x * width,
-          ringCenter.y - belly * 0.8 * SCALE,
-          ringCenter.z + radial.z * width - belly * 0.5 * SCALE,
+          arcCenter.x + lx,
+          arcCenter.y + ly * ca - lz * sa,
+          arcCenter.z + ly * sa + lz * ca,
         );
-        ring.push(pushVertex(p.x, p.y, p.z, edgeT, t));
+        ring.push(pushVertex(p.x, p.y, p.z, f, t));
       }
       rings.push(ring);
     }
