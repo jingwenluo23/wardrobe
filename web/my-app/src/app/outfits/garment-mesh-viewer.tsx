@@ -104,6 +104,72 @@ function makeFabricBump(kind: "knit" | "fleece") {
   return texture;
 }
 
+/**
+ * Stitched-seam relief for the hood: a centre-back seam groove with stitch
+ * dashes, a neckline attachment seam, and edge stitching along the face
+ * opening. Drawn in hood UV space (u: 0..1 across the sweep with 0.5 at the
+ * centre-back, v: 0 at the neckline .. 1 at the crown/tail), clamped so the
+ * lines land exactly on the seams. Fleece speckle keeps the fabric grain
+ * consistent with the body.
+ */
+function makeHoodSeamBump(fleece: boolean) {
+  const size = 512;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const g = canvas.getContext("2d");
+  if (!g) {
+    return null;
+  }
+  g.fillStyle = "#808080";
+  g.fillRect(0, 0, size, size);
+  if (fleece) {
+    let seed = 0x9e3779b9;
+    const rand = () => {
+      seed = (seed * 1664525 + 1013904223) >>> 0;
+      return seed / 0xffffffff;
+    };
+    for (let i = 0; i < 9000; i += 1) {
+      const v = 120 + Math.floor(rand() * 16);
+      g.fillStyle = "rgb(" + v + "," + v + "," + v + ")";
+      g.fillRect(rand() * size, rand() * size, 2, 2);
+    }
+  }
+  const groove = (x: number, w: number) => {
+    // Recessed seam line with a soft highlight on each side.
+    g.fillStyle = "#5c5c5c";
+    g.fillRect(x - w / 2, 0, w, size);
+    g.fillStyle = "#949494";
+    g.fillRect(x - w / 2 - 2, 0, 2, size);
+    g.fillRect(x + w / 2, 0, 2, size);
+  };
+  const stitches = (x: number) => {
+    // Rows of short dashes flanking a seam, like topstitching.
+    g.fillStyle = "#6a6a6a";
+    for (let y = 4; y < size; y += 14) {
+      g.fillRect(x - 1, y, 2, 7);
+    }
+  };
+  // Centre-back seam (u = 0.5) with topstitching either side.
+  groove(size / 2, 4);
+  stitches(size / 2 - 9);
+  stitches(size / 2 + 9);
+  // Face-opening edge stitching (u ~ 0 and 1).
+  stitches(10);
+  stitches(size - 10);
+  // Neckline attachment seam (v ~ 0.05): groove + dashes.
+  g.fillStyle = "#5c5c5c";
+  g.fillRect(0, size * 0.05 - 2, size, 4);
+  g.fillStyle = "#6a6a6a";
+  for (let x = 4; x < size; x += 14) {
+    g.fillRect(x, size * 0.05 + 5, 7, 2);
+  }
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.wrapS = THREE.ClampToEdgeWrapping;
+  texture.wrapT = THREE.ClampToEdgeWrapping;
+  return texture;
+}
+
 function TeeModel({ mesh }: { mesh: DraftMesh }) {
   const geometry = useMemo(() => {
     const built = buildGarmentGeometry(mesh.params, mesh.features);
@@ -135,10 +201,18 @@ function TeeModel({ mesh }: { mesh: DraftMesh }) {
     const bump = bumpTexture
       ? { texture: bumpTexture, scale: fabricKind === "knit" ? 2.2 : 0.7 }
       : null;
+    // Hood (group 3): plain fabric with stitched-seam relief — centre-back
+    // seam, neckline seam, and edge stitching around the face opening.
+    const seamTexture =
+      mesh.features?.neckFinish === "hood"
+        ? makeHoodSeamBump(fabricKind === "fleece")
+        : null;
+    const hoodBump = seamTexture ? { texture: seamTexture, scale: 1.4 } : bump;
     return [
       fabricMaterial(mesh.color, frontTexture, bump),
       fabricMaterial(mesh.color, backTexture, bump),
       fabricMaterial(mesh.color, fabricTexture, bump),
+      fabricMaterial(mesh.color, fabricTexture, hoodBump),
     ];
   }, [
     mesh.color,
@@ -146,6 +220,7 @@ function TeeModel({ mesh }: { mesh: DraftMesh }) {
     mesh.extractedBackTextureUrl,
     mesh.fabricTextureUrl,
     mesh.features?.fabric,
+    mesh.features?.neckFinish,
   ]);
 
   const innerMaterial = useMemo(

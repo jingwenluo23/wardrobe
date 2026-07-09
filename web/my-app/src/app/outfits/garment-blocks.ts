@@ -891,8 +891,14 @@ function buildTopGeometry(
   };
 
   // --- Assemble from features ----------------------------------------------
+  // The hood's index range is tracked so it can carry its own material
+  // (group 3): plain fabric plus a subtle stitched-seam bump texture.
+  let hoodIndexStart = -1;
+  let hoodIndexEnd = -1;
   if (features.neckFinish === "hood") {
+    hoodIndexStart = indices.length;
     buildHood();
+    hoodIndexEnd = indices.length;
   } else if (features.neckFinish === "turtleneck") {
     buildTurtleneck();
   } else if (features.neckFinish === "polo-collar") {
@@ -976,10 +982,21 @@ function buildTopGeometry(
   geometry.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
   geometry.setIndex(indices);
   // Material groups: 0 = front panel (front photo), 1 = back panel (back
-  // photo), 2 = everything else (sleeves, seams, trims -> plain fabric).
+  // photo), 2 = everything else (sleeves, seams, trims -> plain fabric),
+  // 3 = hood (plain fabric with a stitched-seam bump texture).
   geometry.addGroup(0, frontIndexEnd, 0);
   geometry.addGroup(frontIndexEnd, backIndexEnd - frontIndexEnd, 1);
-  geometry.addGroup(backIndexEnd, indices.length - backIndexEnd, 2);
+  if (hoodIndexStart >= 0 && hoodIndexEnd > hoodIndexStart) {
+    if (hoodIndexStart > backIndexEnd) {
+      geometry.addGroup(backIndexEnd, hoodIndexStart - backIndexEnd, 2);
+    }
+    geometry.addGroup(hoodIndexStart, hoodIndexEnd - hoodIndexStart, 3);
+    if (indices.length > hoodIndexEnd) {
+      geometry.addGroup(hoodIndexEnd, indices.length - hoodIndexEnd, 2);
+    }
+  } else {
+    geometry.addGroup(backIndexEnd, indices.length - backIndexEnd, 2);
+  }
   geometry.computeVertexNormals();
   geometry.computeBoundingBox();
   geometry.computeBoundingSphere();
