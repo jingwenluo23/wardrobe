@@ -438,54 +438,55 @@ function buildTopGeometry(
       nHalfZ = Math.max(nHalfZ, Math.abs(p.z - arcCenter.z));
     }
 
-    // Hood built with garment construction logic (see the hood structure
-    // guide): an open dome shell whose volume comes from the ring shaping.
-    //   - Front opening: the rings' end columns form a curved seam around the
-    //     face; the rim is pulled forward as it rises so the opening clearly
-    //     faces forward from front and 3/4 views.
-    //   - Crown: polar-angle sampling gives a smooth rounded dome over the
-    //     head, slightly relaxed (wider than tall) so it reads as collapsed
-    //     fabric rather than a rigid helmet.
-    //   - Back panel: rounded and symmetric (rh -> 0 at the crown leaves no
-    //     split or cat-ears), projecting gently backward via a small recline
-    //     so the hood sits just off the upper back.
-    //   - Neck attachment: the base ring matches the neckline oval exactly.
-    const ayH = 19 * SCALE; // crown height — relaxed, not a tall wizard cone
-    const ax = nHalfX * 1.12; // half-width, a touch oversized (fabric ease)
-    const azMax = nHalfX * 0.85; // front-to-back radius (drape volume)
-    const foldMax = 0.38; // slight backward sit (~22deg), opening stays forward
+    // Empty hood collapsed by gravity (see the hood structure guide): the
+    // hoodie is unworn, so the hood falls backward and settles on the upper
+    // back instead of standing upright.
+    //   - Rings stay horizontal (no rotation) so the opening rim never lifts
+    //     into cat-ear points; the drape comes from the ring-centre path.
+    //   - Path: rises modestly off the collar, peaks at the back crown
+    //     (behind the neck, not above it), then slopes down and back until
+    //     the crown rests just below the neckline on the back panel.
+    //   - Opening: faces forward the whole way; the rim edge sags downward
+    //     with height like a folded-over sewn edge.
+    //   - Base ring matches the neckline oval exactly (clean attachment).
+    const peakH = 9 * SCALE; // modest rise of the collapsed mound
+    const endDrop = 13 * SCALE; // crown settles onto the back panel
+    const backReach = 16 * SCALE; // how far back the hood lies on the back
+    const ax = nHalfX * 1.14; // half-width (relaxed fabric spread)
+    const azMax = nHalfX * 0.9; // front-to-back radius at the fullest point
     const phiMax = 2.2; // half-sweep of each ring; the face opening stays open
-    const rimForward = 6 * SCALE; // how far the opening rim curves forward
+    const rimDrop = 5 * SCALE; // the opening edge folds downward
 
     const rings: number[][] = [];
     for (let i = 0; i <= HOOD_RINGS; i += 1) {
       const t = i / HOOD_RINGS;
-      const theta = (1 - t) * (Math.PI / 2); // 90deg at base .. 0 at crown
-      const rh = Math.sin(theta); // horizontal scale: 1 at base, 0 at crown
-      // Soft collapse: the crown eases down slightly instead of a full dome,
-      // like empty fabric settling under gravity.
-      const ly = ayH * Math.cos(theta) * (1 - 0.08 * smoothstep(t));
+      // Rounded closure: stays full through the drape, then rounds off — the
+      // hanging edge reads as a soft U, not a V point.
+      const rh = Math.sqrt(Math.max(0, 1 - Math.pow(t, 2.8)));
+      // Gravity path: peak near mid-drape, then settle down onto the back
+      // (smoothstep flattens at the end so the tail rests, not plunges).
+      const cy =
+        arcCenter.y +
+        peakH * Math.sin(Math.PI * Math.pow(t, 0.85)) -
+        endDrop * smoothstep(t);
+      const cz = arcCenter.z - backReach * Math.pow(t, 1.1);
       const azt =
-        nHalfZ + (azMax - nHalfZ) * Math.sin(Math.PI * Math.min(1, t * 0.9));
-      // Recline: 0 at the base, growing to foldMax at the crown.
-      const a = -foldMax * smoothstep(t);
-      const ca = Math.cos(a);
-      const sa = Math.sin(a);
+        nHalfZ + (azMax - nHalfZ) * Math.sin(Math.PI * Math.min(1, t * 0.95));
       const ring: number[] = [];
       for (let j = 0; j < N; j += 1) {
         const f = j / (N - 1); // 0..1 across the sweep
         const phi = -phiMax + 2 * phiMax * f; // one front edge -> back -> other
         const lx = ax * rh * Math.sin(phi);
         const lz = -azt * rh * Math.cos(phi); // back is -z locally
-        // Front opening seam: vertices near the rim (|phi| -> phiMax) pull
-        // forward with height, curving the opening over the face like a sewn
-        // edge instead of letting it tip up or hide.
+        // The opening rim (|phi| -> phiMax) folds downward as the hood drapes,
+        // like the front edge of a real empty hood flopping over.
         const rim = Math.pow(Math.abs(phi) / phiMax, 3);
-        const zForward = rimForward * rim * smoothstep(t) * rh;
+        // Fades with rh so the closing tail stays rounded, not pinched.
+        const yFold = rimDrop * rim * smoothstep(t) * rh;
         const p = new THREE.Vector3(
           arcCenter.x + lx,
-          arcCenter.y + ly * ca - lz * sa,
-          arcCenter.z + ly * sa + lz * ca + zForward,
+          cy - yFold,
+          cz + lz,
         );
         ring.push(pushVertex(p.x, p.y, p.z, f, t));
       }
