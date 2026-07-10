@@ -93,38 +93,130 @@ export function inpaintTile(
   size: number,
   fallback: [number, number, number],
 ) {
-  // Vertical pass: fill from the nearest kept pixel above/below, then a
-  // horizontal pass for columns with no fabric at all.
+  // Filling a gap by repeating one edge pixel produces streaks. Instead,
+  // blend each gap between the nearest kept pixels above and below
+  // (vertical pass), then between left and right (horizontal pass, also
+  // covering fully-empty columns), and finally smooth the filled region so
+  // patched areas read as soft fabric rather than smeared stripes.
+  const filled = new Uint8Array(size * size);
+
+  const lerpFill = (
+    ti: number,
+    ai: number,
+    bi: number | null,
+    w: number,
+  ) => {
+    for (let c = 0; c < 3; c += 1) {
+      tileRaw[ti + c] =
+        bi === null
+          ? tileRaw[ai + c]
+          : Math.round(tileRaw[ai + c] * (1 - w) + tileRaw[bi + c] * w);
+    }
+  };
+
+  // Vertical pass: interpolate across each gap in the column.
   for (let x = 0; x < size; x += 1) {
-    let lastY = -1;
-    for (let y = 0; y < size; y += 1) {
+    let prevY = -1;
+    let y = 0;
+    while (y < size) {
       if (keep[y * size + x]) {
-        if (lastY === -1 && y > 0) {
-          // Backfill the run above the first kept pixel.
-          for (let fy = 0; fy < y; fy += 1) {
-            const ti = (fy * size + x) * 3;
-            const si = (y * size + x) * 3;
-            tileRaw[ti] = tileRaw[si];
-            tileRaw[ti + 1] = tileRaw[si + 1];
-            tileRaw[ti + 2] = tileRaw[si + 2];
+        prevY = y;
+        y += 1;
+        continue;
+      }
+      let nextY = y;
+      while (nextY < size && !keep[nextY * size + x]) {
+        nextY += 1;
+      }
+      const hasNext = nextY < size;
+      if (prevY === -1 && !hasNext) {
+        // Whole column empty: leave for the horizontal pass.
+        for (let fy = 0; fy < size; fy += 1) {
+          filled[fy * size + x] = 2;
+        }
+        break;
+      }
+      for (let fy = y; fy < (hasNext ? nextY : size); fy += 1) {
+        const ti = (fy * size + x) * 3;
+        if (prevY === -1) {
+          lerpFill(ti, (nextY * size + x) * 3, null, 0);
+        } else if (!hasNext) {
+          lerpFill(ti, (prevY * size + x) * 3, null, 0);
+        } else {
+          const w = (fy - prevY) / (nextY - prevY);
+          lerpFill(ti, (prevY * size + x) * 3, (nextY * size + x) * 3, w);
+        }
+        filled[fy * size + x] = 1;
+      }
+      y = hasNext ? nextY : size;
+    }
+  }
+
+  // Horizontal pass for columns that had no fabric at all: interpolate
+  // between the nearest filled/kept columns on each side.
+  for (let y = 0; y < size; y += 1) {
+    let prevX = -1;
+    let x = 0;
+    while (x < size) {
+      if (filled[y * size + x] !== 2) {
+        prevX = x;
+        x += 1;
+        continue;
+      }
+      let nextX = x;
+      while (nextX < size && filled[y * size + nextX] === 2) {
+        nextX += 1;
+      }
+      const hasNext = nextX < size;
+      for (let fx = x; fx < (hasNext ? nextX : size); fx += 1) {
+        const ti = (y * size + fx) * 3;
+        if (prevX === -1 && !hasNext) {
+          tileRaw[ti] = fallback[0];
+          tileRaw[ti + 1] = fallback[1];
+          tileRaw[ti + 2] = fallback[2];
+        } else if (prevX === -1) {
+          lerpFill(ti, (y * size + nextX) * 3, null, 0);
+        } else if (!hasNext) {
+          lerpFill(ti, (y * size + prevX) * 3, null, 0);
+        } else {
+          const w = (fx - prevX) / (nextX - prevX);
+          lerpFill(ti, (y * size + prevX) * 3, (y * size + nextX) * 3, w);
+        }
+        filled[y * size + fx] = 1;
+      }
+      x = hasNext ? nextX : size;
+    }
+  }
+
+  // Smooth only the filled pixels (3x3 box, two rounds) so patches blend
+  // into the surrounding fabric without blurring the real print.
+  for (let round = 0; round < 2; round += 1) {
+    const src = Buffer.from(tileRaw);
+    for (let y = 0; y < size; y += 1) {
+      for (let x = 0; x < size; x += 1) {
+        if (!filled[y * size + x]) {
+          continue;
+        }
+        const sums = [0, 0, 0];
+        let n = 0;
+        for (let dy = -1; dy <= 1; dy += 1) {
+          for (let dx = -1; dx <= 1; dx += 1) {
+            const sy = y + dy;
+            const sx = x + dx;
+            if (sy < 0 || sy >= size || sx < 0 || sx >= size) {
+              continue;
+            }
+            const si = (sy * size + sx) * 3;
+            sums[0] += src[si];
+            sums[1] += src[si + 1];
+            sums[2] += src[si + 2];
+            n += 1;
           }
         }
-        lastY = y;
-      } else if (lastY !== -1) {
         const ti = (y * size + x) * 3;
-        const si = (lastY * size + x) * 3;
-        tileRaw[ti] = tileRaw[si];
-        tileRaw[ti + 1] = tileRaw[si + 1];
-        tileRaw[ti + 2] = tileRaw[si + 2];
-      }
-    }
-    if (lastY === -1) {
-      // Whole column empty: mark for the horizontal pass via fallback.
-      for (let y = 0; y < size; y += 1) {
-        const ti = (y * size + x) * 3;
-        tileRaw[ti] = fallback[0];
-        tileRaw[ti + 1] = fallback[1];
-        tileRaw[ti + 2] = fallback[2];
+        tileRaw[ti] = Math.round(sums[0] / n);
+        tileRaw[ti + 1] = Math.round(sums[1] / n);
+        tileRaw[ti + 2] = Math.round(sums[2] / n);
       }
     }
   }
@@ -338,14 +430,33 @@ export function warpGarmentTile(input: {
       }
       const sxi = clampInt(Math.round(sx), 0, width - 1);
       const si = sy * width + sxi;
-      // Colour from the high-res copy; mask/keep from the inference-res grid.
-      const hx = clampInt(Math.round(sx * scaleX), 0, hiWidth - 1);
-      const hy = clampInt(Math.round(sy * scaleY), 0, hiHeight - 1);
-      const hi = hy * hiWidth + hx;
+      // Colour from the high-res copy, sampled bilinearly — nearest-neighbour
+      // duplicates pixels into blocky streaks wherever the panel stretches
+      // the photo. Mask/keep still comes from the inference-res grid.
+      const fx = Math.min(Math.max(sx * scaleX, 0), hiWidth - 1);
+      const fy = Math.min(Math.max(sy * scaleY, 0), hiHeight - 1);
+      const x0 = Math.floor(fx);
+      const y0 = Math.floor(fy);
+      const x1 = Math.min(x0 + 1, hiWidth - 1);
+      const y1 = Math.min(y0 + 1, hiHeight - 1);
+      const wx = fx - x0;
+      const wy = fy - y0;
+      const i00 = (y0 * hiWidth + x0) * 3;
+      const i10 = (y0 * hiWidth + x1) * 3;
+      const i01 = (y1 * hiWidth + x0) * 3;
+      const i11 = (y1 * hiWidth + x1) * 3;
       const ti = (ty * tileSize + tx) * 3;
-      const r = hiData[hi * 3];
-      const g = hiData[hi * 3 + 1];
-      const bch = hiData[hi * 3 + 2];
+      let r = 0;
+      let g = 0;
+      let bch = 0;
+      for (let c = 0; c < 3; c += 1) {
+        const top = hiData[i00 + c] * (1 - wx) + hiData[i10 + c] * wx;
+        const bottom = hiData[i01 + c] * (1 - wx) + hiData[i11 + c] * wx;
+        const value = Math.round(top * (1 - wy) + bottom * wy);
+        if (c === 0) r = value;
+        else if (c === 1) g = value;
+        else bch = value;
+      }
       tileRaw[ti] = r;
       tileRaw[ti + 1] = g;
       tileRaw[ti + 2] = bch;
