@@ -450,15 +450,15 @@ function buildTopGeometry(
     //     down onto the upper back; the tail rounds closed (no point).
     //   - The front wall stays shallow and folds downward, hugging the
     //     collar, so nothing bulges over the chest.
-    const peakH = 11 * SCALE; // soft rise of the collapsed mound
+    const peakH = 12.5 * SCALE; // soft rise of the collapsed mound
     const endDrop = 11 * SCALE; // crown settles onto the back panel
-    const backReach = 15 * SCALE; // how far back the hood lies on the back
-    const ax = nHalfX * 1.12; // half-width (relaxed fabric spread)
-    const azMax = nHalfX * 1.0; // back-wall radius at the fullest point
+    const backReach = 17 * SCALE; // how far back the hood lies on the back
+    const ax = nHalfX * 1.18; // half-width (relaxed fabric spread)
+    const azMax = nHalfX * 1.08; // back-wall radius at the fullest point
     const azFront = nHalfZ * 0.85; // shallow front wall, hugging the collar
     const phiBase = 2.1; // sweep of the neckline arc the base sits on
-    const phiFull = 2.62; // widest sweep: leaves a real face opening in front
-    const frontDrop = 7 * SCALE; // the folded-down front opening edge
+    const phiFull = 2.3; // widest sweep: a clearly open face opening in front
+    const frontDrop = 5 * SCALE; // the folded-down front opening edge
 
     const rings: number[][] = [];
     for (let i = 0; i <= HOOD_RINGS; i += 1) {
