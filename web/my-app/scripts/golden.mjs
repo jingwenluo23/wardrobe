@@ -52,11 +52,25 @@ if (!response.ok) {
 }
 const { templates } = await response.json();
 
+// CHROMIUM_PATH wins; otherwise probe the usual install locations
+// (playwright-core does not download browsers itself).
+const browserCandidates = [
+  "/opt/pw-browsers/chromium-1194/chrome-linux/chrome",
+  "/usr/bin/google-chrome",
+  "/usr/bin/google-chrome-stable",
+  "/usr/bin/chromium-browser",
+  "/usr/bin/chromium",
+  "/snap/bin/chromium",
+  "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+];
 const executablePath =
-  process.env.CHROMIUM_PATH ??
-  (fs.existsSync("/opt/pw-browsers/chromium-1194/chrome-linux/chrome")
-    ? "/opt/pw-browsers/chromium-1194/chrome-linux/chrome"
-    : undefined);
+  process.env.CHROMIUM_PATH ?? browserCandidates.find((p) => fs.existsSync(p));
+if (!executablePath) {
+  console.error(
+    "No Chromium found - install Chrome/Chromium or set CHROMIUM_PATH to a browser binary.",
+  );
+  process.exit(2);
+}
 
 const browser = await chromium.launch({
   executablePath,
