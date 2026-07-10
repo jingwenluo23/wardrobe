@@ -457,7 +457,8 @@ function buildTopGeometry(
     const azMax = nHalfX * 1.0; // back-wall radius at the fullest point
     const azFront = nHalfZ * 0.85; // shallow front wall, hugging the collar
     const phiBase = 2.1; // sweep of the neckline arc the base sits on
-    const frontDrop = 7 * SCALE; // the pressed-shut front seam folds down
+    const phiFull = 2.62; // widest sweep: leaves a real face opening in front
+    const frontDrop = 7 * SCALE; // the folded-down front opening edge
 
     const rings: number[][] = [];
     for (let i = 0; i <= HOOD_RINGS; i += 1) {
@@ -466,7 +467,9 @@ function buildTopGeometry(
       // (closed seam), while the sweep widens from the neckline arc to a full
       // loop so the volume closes with no gap anywhere.
       const blend = smoothstep(Math.min(1, t * 3.5));
-      const phiT = phiBase + (Math.PI - phiBase) * smoothstep(Math.min(1, t * 3));
+      // Widen toward phiFull (short of a full loop): the hood wraps around
+      // but keeps an open face opening between its two front edges.
+      const phiT = phiBase + (phiFull - phiBase) * smoothstep(Math.min(1, t * 3));
       // Rounded closure: stays full through the drape, then rounds off — the
       // hanging edge reads as a soft U, not a V point.
       const rh = Math.sqrt(Math.max(0, 1 - Math.pow(t, 2.8)));
