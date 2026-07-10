@@ -735,28 +735,69 @@ export default function OutfitsPage() {
 
             <div className="mt-5 grid gap-5 lg:grid-cols-[1fr_280px]">
               <div className="space-y-4">
-                <div className="grid gap-2 text-sm font-semibold text-[#6b6f77]">
-                  Collection
-                  <div className="flex gap-2">
-                    {(["female", "male"] as Gender[]).map((gender) => (
-                      <button
-                        className={
-                          "flex-1 rounded-lg border px-3 py-2.5 text-sm font-semibold capitalize transition " +
-                          (itemGender === gender
-                            ? "border-[#9c7a33] bg-[#9c7a33]/10 text-[#9c7a33]"
-                            : "border-[#1e202612] bg-[#ffffff]/70 text-[#6b6f77] hover:text-[#24262c]")
-                        }
-                        key={gender}
-                        onClick={() => selectGender(gender)}
-                        type="button"
+                {/* Step 1 — narrow down to the 3D model: collection filters
+                    categories, category filters garment types. Top-to-bottom,
+                    no backtracking. */}
+                <div className="rounded-lg border border-[#1e202612] bg-[#ffffff]/70 backdrop-blur-xl p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#9c7a33]">
+                    Step 1 · Choose the garment model
+                  </p>
+                  <div className="mt-3 grid gap-2 text-sm font-semibold text-[#6b6f77]">
+                    Collection
+                    <div className="flex gap-2">
+                      {(["female", "male"] as Gender[]).map((gender) => (
+                        <button
+                          className={
+                            "flex-1 rounded-lg border px-3 py-2.5 text-sm font-semibold capitalize transition " +
+                            (itemGender === gender
+                              ? "border-[#9c7a33] bg-[#9c7a33]/10 text-[#9c7a33]"
+                              : "border-[#1e202612] bg-[#ffffff]/70 text-[#6b6f77] hover:text-[#24262c]")
+                          }
+                          key={gender}
+                          onClick={() => selectGender(gender)}
+                          type="button"
+                        >
+                          {gender === "female" ? "Womenswear" : "Menswear"}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                    <label className="grid gap-2 text-sm font-semibold text-[#6b6f77]">
+                      Category
+                      <select
+                        className="rounded-lg border border-[#1e202612] bg-[#ffffff]/70 backdrop-blur-xl px-3 py-3 text-base font-medium text-[#24262c] outline-none focus:border-[#9c7a33]"
+                        onChange={(event) => selectCategory(event.target.value)}
+                        value={itemCategory}
                       >
-                        {gender === "female" ? "Womenswear" : "Menswear"}
-                      </button>
-                    ))}
+                        {genderCategories.map((category) => (
+                          <option key={category}>{category}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="grid gap-2 text-sm font-semibold text-[#6b6f77]">
+                      Garment type
+                      <select
+                        className="rounded-lg border border-[#1e202612] bg-[#ffffff]/70 backdrop-blur-xl px-3 py-3 text-base font-medium text-[#24262c] outline-none focus:border-[#9c7a33]"
+                        onChange={(event) => setItemTemplateId(event.target.value)}
+                        value={itemTemplateId}
+                      >
+                        {typeOptions.map((template) => (
+                          <option key={template.id} value={template.id}>
+                            {template.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
                   </div>
                 </div>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <label className="grid gap-2 text-sm font-semibold text-[#6b6f77]">
+
+                {/* Step 2 — name the item. */}
+                <div className="rounded-lg border border-[#1e202612] bg-[#ffffff]/70 backdrop-blur-xl p-4">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#9c7a33]">
+                    Step 2 · Name it
+                  </p>
+                  <label className="mt-3 grid gap-2 text-sm font-semibold text-[#6b6f77]">
                     Item name
                     <input
                       className="rounded-lg border border-[#1e202612] bg-[#ffffff]/70 backdrop-blur-xl px-3 py-3 text-base font-medium text-[#24262c] outline-none focus:border-[#9c7a33]"
@@ -766,39 +807,13 @@ export default function OutfitsPage() {
                       value={itemName}
                     />
                   </label>
-                  <label className="grid gap-2 text-sm font-semibold text-[#6b6f77]">
-                    Category
-                    <select
-                      className="rounded-lg border border-[#1e202612] bg-[#ffffff]/70 backdrop-blur-xl px-3 py-3 text-base font-medium text-[#24262c] outline-none focus:border-[#9c7a33]"
-                      onChange={(event) => selectCategory(event.target.value)}
-                      value={itemCategory}
-                    >
-                      {genderCategories.map((category) => (
-                        <option key={category}>{category}</option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="grid gap-2 text-sm font-semibold text-[#6b6f77] sm:col-span-2">
-                    Garment type
-                    <select
-                      className="rounded-lg border border-[#1e202612] bg-[#ffffff]/70 backdrop-blur-xl px-3 py-3 text-base font-medium text-[#24262c] outline-none focus:border-[#9c7a33]"
-                      onChange={(event) => setItemTemplateId(event.target.value)}
-                      value={itemTemplateId}
-                    >
-                      {typeOptions.map((template) => (
-                        <option key={template.id} value={template.id}>
-                          {template.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
                 </div>
 
                 <div className="rounded-lg border border-[#1e202612] bg-[#ffffff]/70 backdrop-blur-xl p-4">
                   <div className="flex items-start justify-between gap-4">
                     <div>
-                      <p className="text-base font-semibold text-[#24262c]">
-                        Upload garment photos
+                      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#9c7a33]">
+                        Step 3 · Upload garment photos
                       </p>
                       <p className="mt-1 text-sm text-[#6b6f77]">
                         Front and back are required — depth is reconstructed automatically.
