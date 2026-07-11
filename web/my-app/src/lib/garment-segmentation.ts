@@ -32,18 +32,34 @@ const CLOTHING_LABELS = new Set([
   "Scarf",
 ]);
 
-function labelsForCategory(category: string): Set<string> {
+/**
+ * Class filter for the chosen category. `primary` is the strict match for
+ * the garment the user picked; `fallback` is only consulted when the
+ * primary classes cover almost nothing (e.g. SegFormer labels a longline
+ * hoodie as Dress). Keeping the sets narrow stops other worn items (pants,
+ * an undershirt labelled Dress, a scarf) from bleeding into the texture.
+ */
+function labelsForCategory(category: string): {
+  primary: Set<string>;
+  fallback: Set<string>;
+} {
   const normalized = category.toLowerCase();
   if (normalized.startsWith("top") || normalized.startsWith("outer")) {
-    return new Set(["Upper-clothes", "Dress"]);
+    return { primary: new Set(["Upper-clothes"]), fallback: new Set(["Dress"]) };
   }
   if (normalized.startsWith("bottom")) {
-    return new Set(["Pants", "Skirt", "Dress"]);
+    return { primary: new Set(["Pants", "Skirt"]), fallback: new Set(["Dress"]) };
+  }
+  if (normalized.startsWith("dress")) {
+    return { primary: new Set(["Dress"]), fallback: new Set(["Upper-clothes"]) };
   }
   if (normalized.startsWith("shoe") || normalized.startsWith("sock")) {
-    return new Set(["Left-shoe", "Right-shoe"]);
+    return {
+      primary: new Set(["Left-shoe", "Right-shoe"]),
+      fallback: new Set<string>(),
+    };
   }
-  return CLOTHING_LABELS;
+  return { primary: CLOTHING_LABELS, fallback: new Set<string>() };
 }
 
 // Lazy singleton so the model loads once per server process. A failed load
@@ -555,6 +571,121 @@ function keepLargestComponent(mask: Uint8Array, width: number, height: number) {
 }
 
 /**
+ * Drop layered foreign garments from the mask edge (an undershirt peeking
+ * below the hem, a shirt collar above the neckline). The segmentation model
+ * often gives them the SAME class as the chosen garment, so class filtering
+ * cannot separate them — but they only ever appear along the mask boundary.
+ * Build the garment's colour palette from the eroded core of the mask, then
+ * remove boundary-band pixels whose colour is not in that palette.
+ */
+export function trimForeignLayers(
+  mask: Uint8Array,
+  data: Buffer | Uint8Array,
+  width: number,
+  height: number,
+) {
+  // The palette core is the eroded mask restricted to the CENTRAL band of
+  // the garment's bounding box: a layered garment only ever shows at the
+  // extremes (below the hem, above the collar), so the centre is pure
+  // chosen-garment fabric even when the layer is thick enough to survive
+  // erosion.
+  let minX = width;
+  let maxX = 0;
+  let minY = height;
+  let maxY = 0;
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      if (mask[y * width + x]) {
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      }
+    }
+  }
+  if (maxY - minY < 20 || maxX - minX < 20) {
+    return;
+  }
+  const yLo = minY + (maxY - minY) * 0.15;
+  const yHi = minY + (maxY - minY) * 0.78;
+  const xLo = minX + (maxX - minX) * 0.1;
+  const xHi = maxX - (maxX - minX) * 0.1;
+
+  const core = mask.slice();
+  erodeMask(core, width, height, 6);
+  let coreCount = 0;
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const i = y * width + x;
+      if (core[i] && (y < yLo || y > yHi || x < xLo || x > xHi)) {
+        core[i] = 0;
+      }
+      coreCount += core[i];
+    }
+  }
+  let maskCount = 0;
+  for (let i = 0; i < mask.length; i += 1) {
+    maskCount += mask[i];
+  }
+  // Thin garments erode away; without a trustworthy core, don't trim.
+  if (coreCount < maskCount * 0.15 || coreCount < 500) {
+    return;
+  }
+
+  // Quantised palette (5 bits per channel) of the core fabric. Bins that
+  // cover a meaningful share of the core are "garment colours"; prints are
+  // multi-colour, so every recurring print colour lands in the palette.
+  const bin = (i: number) =>
+    ((data[i * 3] >> 3) << 10) | ((data[i * 3 + 1] >> 3) << 5) | (data[i * 3 + 2] >> 3);
+  const counts = new Map<number, number>();
+  for (let i = 0; i < core.length; i += 1) {
+    if (core[i]) {
+      const key = bin(i);
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+  }
+  const minCount = Math.max(8, coreCount * 0.002);
+  const palette = new Set<number>();
+  for (const [key, count] of counts) {
+    if (count >= minCount) {
+      palette.add(key);
+    }
+  }
+  if (palette.size === 0) {
+    return;
+  }
+
+  // A boundary pixel matches if its bin — or any bin within ±1 level per
+  // channel — is in the palette (tolerance ~±8 RGB levels).
+  const matches = (key: number) => {
+    const r = (key >> 10) & 31;
+    const g = (key >> 5) & 31;
+    const b = key & 31;
+    for (let dr = -1; dr <= 1; dr += 1) {
+      for (let dg = -1; dg <= 1; dg += 1) {
+        for (let db = -1; db <= 1; db += 1) {
+          const rr = r + dr;
+          const gg = g + dg;
+          const bb = b + db;
+          if (rr < 0 || rr > 31 || gg < 0 || gg > 31 || bb < 0 || bb > 31) {
+            continue;
+          }
+          if (palette.has((rr << 10) | (gg << 5) | bb)) {
+            return true;
+          }
+        }
+      }
+    }
+    return false;
+  };
+  for (let i = 0; i < mask.length; i += 1) {
+    if (mask[i] && !core[i] && !matches(bin(i))) {
+      mask[i] = 0;
+    }
+  }
+}
+
+/**
  * RGB skin-tone test, the last guard against skin on the texture.
  * Tightened so warm print colours survive: real skin always has green above
  * blue (pink/magenta prints have blue above green) and only moderate
@@ -617,21 +748,31 @@ export async function segmentGarment(
     const image = new RawImage(new Uint8ClampedArray(data), width, height, 3);
     const results = await segmenter(image);
 
-    // Union of all masks whose label matches the garment category.
+    // Union of the masks matching the chosen category, strictly: only the
+    // primary classes for that category; the fallback set is consulted only
+    // when the primary classes cover almost nothing (e.g. a longline hoodie
+    // that the model labelled Dress).
     const wanted = labelsForCategory(category);
-    const mask = new Uint8Array(width * height);
-    let maskCount = 0;
-    for (const result of results) {
-      if (!wanted.has(result.label)) {
-        continue;
-      }
-      const maskData = result.mask.data;
-      for (let i = 0; i < mask.length; i += 1) {
-        if (maskData[i] > 127 && !mask[i]) {
-          mask[i] = 1;
-          maskCount += 1;
+    const collect = (labels: Set<string>) => {
+      const mask = new Uint8Array(width * height);
+      let maskCount = 0;
+      for (const result of results) {
+        if (!labels.has(result.label)) {
+          continue;
+        }
+        const maskData = result.mask.data;
+        for (let i = 0; i < mask.length; i += 1) {
+          if (maskData[i] > 127 && !mask[i]) {
+            mask[i] = 1;
+            maskCount += 1;
+          }
         }
       }
+      return { mask, maskCount };
+    };
+    let { mask, maskCount } = collect(wanted.primary);
+    if (maskCount < width * height * 0.02 && wanted.fallback.size > 0) {
+      ({ mask, maskCount } = collect(wanted.fallback));
     }
     // Require a meaningful garment area (>2% of the frame).
     if (maskCount < width * height * 0.02) {
@@ -643,7 +784,11 @@ export async function segmentGarment(
     //    seam, background halos) cannot reach the texture.
     // 2. Keep only the largest connected component, dropping stray
     //    misclassified blobs (photo captions, hands near the hem).
+    // 3. Trim layered foreign garments (undershirt below the hem, shirt
+    //    collar at the neck) whose colours don't belong to the garment.
     erodeMask(mask, width, height, 2);
+    keepLargestComponent(mask, width, height);
+    trimForeignLayers(mask, data, width, height);
     keepLargestComponent(mask, width, height);
 
     // Torso-aware crop: the mesh's front/back panels only span the torso
