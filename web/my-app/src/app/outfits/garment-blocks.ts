@@ -989,9 +989,13 @@ function buildTopGeometry(
       previous = ring;
     }
   }
+  let sleeveIndexStart = -1;
+  let sleeveIndexEnd = -1;
   if (features.sleeves !== false) {
+    sleeveIndexStart = indices.length;
     buildSleeve(1);
     buildSleeve(-1);
+    sleeveIndexEnd = indices.length;
   }
 
   const geometry = new THREE.BufferGeometry();
@@ -1002,20 +1006,28 @@ function buildTopGeometry(
   geometry.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
   geometry.setIndex(indices);
   // Material groups: 0 = front panel (front photo), 1 = back panel (back
-  // photo), 2 = everything else (sleeves, seams, trims -> plain fabric),
-  // 3 = hood (plain fabric with a stitched-seam bump texture).
+  // photo), 2 = seams/trims (plain fabric), 3 = hood (extracted hood texture
+  // + stitched-seam bump), 4 = sleeves (extracted sleeve texture).
   geometry.addGroup(0, frontIndexEnd, 0);
   geometry.addGroup(frontIndexEnd, backIndexEnd - frontIndexEnd, 1);
+  const special: Array<[number, number, number]> = [];
   if (hoodIndexStart >= 0 && hoodIndexEnd > hoodIndexStart) {
-    if (hoodIndexStart > backIndexEnd) {
-      geometry.addGroup(backIndexEnd, hoodIndexStart - backIndexEnd, 2);
+    special.push([hoodIndexStart, hoodIndexEnd, 3]);
+  }
+  if (sleeveIndexStart >= 0 && sleeveIndexEnd > sleeveIndexStart) {
+    special.push([sleeveIndexStart, sleeveIndexEnd, 4]);
+  }
+  special.sort((a, b) => a[0] - b[0]);
+  let cursor = backIndexEnd;
+  for (const [start, end, material] of special) {
+    if (start > cursor) {
+      geometry.addGroup(cursor, start - cursor, 2);
     }
-    geometry.addGroup(hoodIndexStart, hoodIndexEnd - hoodIndexStart, 3);
-    if (indices.length > hoodIndexEnd) {
-      geometry.addGroup(hoodIndexEnd, indices.length - hoodIndexEnd, 2);
-    }
-  } else {
-    geometry.addGroup(backIndexEnd, indices.length - backIndexEnd, 2);
+    geometry.addGroup(start, end - start, material);
+    cursor = end;
+  }
+  if (indices.length > cursor) {
+    geometry.addGroup(cursor, indices.length - cursor, 2);
   }
   geometry.computeVertexNormals();
   geometry.computeBoundingBox();

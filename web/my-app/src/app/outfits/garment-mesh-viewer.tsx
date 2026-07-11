@@ -180,19 +180,22 @@ function TeeModel({ mesh }: { mesh: DraftMesh }) {
     return built;
   }, [mesh.params, mesh.features]);
 
-  // Geometry groups: 0 = front panel, 1 = back panel, 2 = sleeves/collar.
-  // The extracted front photo maps to the front, the back photo to the back,
-  // and the trims stay plain fabric colour.
+  // Geometry groups: 0 = front panel, 1 = back panel, 2 = seams/trims,
+  // 3 = hood, 4 = sleeves. Front/back photos map to their panels; the hood
+  // and sleeves get their own extracted regions when available, falling back
+  // to the plain fabric swatch; remaining trims stay plain fabric.
   const materials = useMemo(() => {
     const frontTexture = loadTexture(mesh.extractedTextureUrl);
     const backTexture = loadTexture(mesh.extractedBackTextureUrl) ?? frontTexture;
-    // Sleeves/collar use a plain fabric swatch sampled from the photo, so
-    // their shading matches the torso's real fabric instead of a flat tint.
+    // Trims use a plain fabric swatch sampled from the photo, so their
+    // shading matches the torso's real fabric instead of a flat tint.
     const fabricTexture = loadTexture(mesh.fabricTextureUrl);
     if (fabricTexture) {
       fabricTexture.wrapS = THREE.RepeatWrapping;
       fabricTexture.wrapT = THREE.RepeatWrapping;
     }
+    const sleeveTexture = loadTexture(mesh.sleeveTextureUrl) ?? fabricTexture;
+    const hoodTexture = loadTexture(mesh.hoodTextureUrl) ?? fabricTexture;
     const fabricKind = mesh.features?.fabric;
     const bumpTexture =
       fabricKind === "knit" || fabricKind === "fleece"
@@ -201,8 +204,8 @@ function TeeModel({ mesh }: { mesh: DraftMesh }) {
     const bump = bumpTexture
       ? { texture: bumpTexture, scale: fabricKind === "knit" ? 2.2 : 0.7 }
       : null;
-    // Hood (group 3): plain fabric with stitched-seam relief — centre-back
-    // seam, neckline seam, and edge stitching around the face opening.
+    // Hood (group 3): extracted hood region with stitched-seam relief —
+    // centre-back seam, neckline seam, and edge stitching at the opening.
     const seamTexture =
       mesh.features?.neckFinish === "hood"
         ? makeHoodSeamBump(fabricKind === "fleece")
@@ -212,13 +215,16 @@ function TeeModel({ mesh }: { mesh: DraftMesh }) {
       fabricMaterial(mesh.color, frontTexture, bump),
       fabricMaterial(mesh.color, backTexture, bump),
       fabricMaterial(mesh.color, fabricTexture, bump),
-      fabricMaterial(mesh.color, fabricTexture, hoodBump),
+      fabricMaterial(mesh.color, hoodTexture, hoodBump),
+      fabricMaterial(mesh.color, sleeveTexture, bump),
     ];
   }, [
     mesh.color,
     mesh.extractedTextureUrl,
     mesh.extractedBackTextureUrl,
     mesh.fabricTextureUrl,
+    mesh.sleeveTextureUrl,
+    mesh.hoodTextureUrl,
     mesh.features?.fabric,
     mesh.features?.neckFinish,
   ]);

@@ -72,6 +72,8 @@ type StoredDraft = {
   extractedTextureUrl?: string;
   extractedBackTextureUrl?: string;
   fabricTextureUrl?: string;
+  sleeveTextureUrl?: string;
+  hoodTextureUrl?: string;
   /** False while the background extraction task is still running. */
   extractionReady: boolean;
 };
@@ -114,9 +116,19 @@ function getDb(): Database.Database {
         "photos_json TEXT NOT NULL," +
         "front_texture TEXT," +
         "back_texture TEXT," +
-        "fabric_texture TEXT" +
+        "fabric_texture TEXT," +
+        "sleeve_texture TEXT," +
+        "hood_texture TEXT" +
         ")",
     );
+    // Older databases predate the sleeve/hood columns.
+    for (const column of ["sleeve_texture", "hood_texture"]) {
+      try {
+        db.exec("ALTER TABLE drafts ADD COLUMN " + column + " TEXT");
+      } catch {
+        // Column already exists.
+      }
+    }
     // Recover drafts whose background extraction was lost to a server
     // restart: surface them as ready with whatever they have.
     db.prepare(
@@ -144,6 +156,8 @@ type DraftRow = {
   front_texture: string | null;
   back_texture: string | null;
   fabric_texture: string | null;
+  sleeve_texture: string | null;
+  hood_texture: string | null;
 };
 
 function rowToStored(row: DraftRow): StoredDraft {
@@ -162,6 +176,8 @@ function rowToStored(row: DraftRow): StoredDraft {
     extractedTextureUrl: row.front_texture ?? undefined,
     extractedBackTextureUrl: row.back_texture ?? undefined,
     fabricTextureUrl: row.fabric_texture ?? undefined,
+    sleeveTextureUrl: row.sleeve_texture ?? undefined,
+    hoodTextureUrl: row.hood_texture ?? undefined,
     extractionReady: row.extraction_ready === 1,
   };
 }
@@ -460,13 +476,17 @@ export async function createDraft(input: {
       front?: string;
       back?: string;
       fabric?: string;
+      sleeve?: string;
+      hood?: string;
       confidence?: number;
     } = {};
     try {
       // Preferred path: ML clothes segmentation (SegFormer). Falls back to
       // the colour-heuristic extractor when the model is unavailable.
-      const frontSeg = await segmentGarment(front.buffer, input.category);
-      const backSeg = await segmentGarment(back.buffer, input.category);
+      const wantsHood = features.neckFinish === "hood";
+      const segOptions = { hood: wantsHood };
+      const frontSeg = await segmentGarment(front.buffer, input.category, segOptions);
+      const backSeg = await segmentGarment(back.buffer, input.category, segOptions);
       const usedModel = Boolean(frontSeg);
       const frontResult = frontSeg ?? (await analyzePhoto(front.buffer));
       const backResult = backSeg ?? (await analyzePhoto(back.buffer));
@@ -476,6 +496,9 @@ export async function createDraft(input: {
         front: frontResult.textureUrl,
         back: backResult.textureUrl,
         fabric: frontResult.fabricTextureUrl,
+        sleeve: frontSeg?.sleeveTextureUrl ?? backSeg?.sleeveTextureUrl,
+        // The hood is best seen from behind; prefer the back photo's region.
+        hood: backSeg?.hoodTextureUrl ?? frontSeg?.hoodTextureUrl,
         // Model-based extraction is far more reliable than the heuristic;
         // extra reference views nudge confidence up either way.
         confidence: Math.min(
@@ -495,7 +518,8 @@ export async function createDraft(input: {
             "UPDATE drafts SET extraction_ready = 1, " +
               "color = COALESCE(?, color), " +
               "confidence = COALESCE(?, confidence), " +
-              "front_texture = ?, back_texture = ?, fabric_texture = ? " +
+              "front_texture = ?, back_texture = ?, fabric_texture = ?, " +
+              "sleeve_texture = ?, hood_texture = ? " +
               "WHERE id = ?",
           )
           .run(
@@ -504,6 +528,8 @@ export async function createDraft(input: {
             update.front ?? null,
             update.back ?? null,
             update.fabric ?? null,
+            update.sleeve ?? null,
+            update.hood ?? null,
             id,
           );
       } catch (error) {
@@ -559,6 +585,8 @@ function serializeDraft(stored: StoredDraft): ApiDraft {
         extractedTextureUrl: stored.extractedTextureUrl,
         extractedBackTextureUrl: stored.extractedBackTextureUrl,
         fabricTextureUrl: stored.fabricTextureUrl,
+        sleeveTextureUrl: stored.sleeveTextureUrl,
+        hoodTextureUrl: stored.hoodTextureUrl,
         color: stored.color,
         bounds: boundsFromParams(stored.params, stored.features),
       }

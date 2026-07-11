@@ -96,6 +96,10 @@ export type ExtractionResult = {
   textureUrl: string;
   /** Plain fabric swatch (no print) for sleeves/collar, from the photo. */
   fabricTextureUrl?: string;
+  /** Extracted sleeve texture (data URL), warped from the photo's sleeve. */
+  sleeveTextureUrl?: string;
+  /** Extracted hood texture (data URL), from the region above the shoulders. */
+  hoodTextureUrl?: string;
 };
 
 /**
@@ -655,15 +659,16 @@ export function trimForeignLayers(
     return;
   }
 
-  // A boundary pixel matches if its bin — or any bin within ±1 level per
-  // channel — is in the palette (tolerance ~±8 RGB levels).
+  // A boundary pixel matches if its bin — or any bin within ±2 levels per
+  // channel — is in the palette (tolerance ~±16 RGB levels; looser keeps
+  // print shades near the hem from being over-trimmed into inpaint smears).
   const matches = (key: number) => {
     const r = (key >> 10) & 31;
     const g = (key >> 5) & 31;
     const b = key & 31;
-    for (let dr = -1; dr <= 1; dr += 1) {
-      for (let dg = -1; dg <= 1; dg += 1) {
-        for (let db = -1; db <= 1; db += 1) {
+    for (let dr = -2; dr <= 2; dr += 1) {
+      for (let dg = -2; dg <= 2; dg += 1) {
+        for (let db = -2; db <= 2; db += 1) {
           const rr = r + dr;
           const gg = g + dg;
           const bb = b + db;
@@ -719,6 +724,7 @@ const TILE = 512;
 export async function segmentGarment(
   buffer: Buffer,
   category: string,
+  options?: { hood?: boolean },
 ): Promise<ExtractionResult | null> {
   const segmenter = await getSegmenter();
   if (!segmenter) {
@@ -876,6 +882,105 @@ export async function segmentGarment(
     const { swatch, swatchSize, mean } = pickFabricSwatch(tileRaw, TILE);
     const fabricColor = rgbToHex(mean[0], mean[1], mean[2]);
 
+    // Whole-garment extraction: the mesh maps more than the torso panels, so
+    // pull dedicated tiles for the other regions through the same warp.
+    const regionTile = async (rMinX: number, rMaxX: number, rMask: Uint8Array) => {
+      const region = warpGarmentTile({
+        data,
+        mask: rMask,
+        width,
+        height,
+        minX: rMinX,
+        maxX: rMaxX,
+        tileSize: TILE,
+        exclude: isSkinTone,
+        hiData,
+        hiWidth: hiInfo.width,
+        hiHeight: hiInfo.height,
+      });
+      inpaintTile(region.tileRaw, region.keep, TILE, [gr, gg, gb]);
+      const jpg = await sharp(region.tileRaw, {
+        raw: { width: TILE, height: TILE, channels: 3 },
+      })
+        .clahe({ width: 128, height: 128, maxSlope: 2 })
+        .jpeg({ quality: 86 })
+        .toBuffer();
+      return "data:image/jpeg;base64," + jpg.toString("base64");
+    };
+
+    // Sleeves: the mask columns outside the torso crop. Pick the bigger
+    // sleeve (front photos usually show both; one is enough to texture the
+    // mesh's sleeve loft, which wraps the tile around the arm).
+    let sleeveTextureUrl: string | undefined;
+    {
+      let gMinX = width;
+      let gMaxX = 0;
+      for (let x = 0; x < width; x += 1) {
+        if (colHeight[x] > 0) {
+          if (x < gMinX) gMinX = x;
+          if (x > gMaxX) gMaxX = x;
+        }
+      }
+      const area = (x0: number, x1: number) => {
+        let sum = 0;
+        for (let x = x0; x <= x1; x += 1) {
+          sum += colHeight[x] ?? 0;
+        }
+        return sum;
+      };
+      const leftW = minX - 1 - gMinX;
+      const rightW = gMaxX - (maxX + 1);
+      const leftArea = leftW >= 10 ? area(gMinX, minX - 1) : 0;
+      const rightArea = rightW >= 10 ? area(maxX + 1, gMaxX) : 0;
+      const best =
+        leftArea >= rightArea
+          ? { x0: gMinX, x1: minX - 1, area: leftArea }
+          : { x0: maxX + 1, x1: gMaxX, area: rightArea };
+      if (best.area >= maskCount * 0.03) {
+        sleeveTextureUrl = await regionTile(best.x0, best.x1, mask);
+      }
+    }
+
+    // Hood (only when the chosen template has one): the mask region above
+    // the shoulder line. The shoulder line is where rows first reach most of
+    // the torso width scanning down from the top of the garment.
+    let hoodTextureUrl: string | undefined;
+    if (options?.hood) {
+      const torsoW = maxX - minX + 1;
+      let shoulderY = -1;
+      for (let y = minY; y <= maxY; y += 1) {
+        let rowCount = 0;
+        for (let x = minX; x <= maxX; x += 1) {
+          rowCount += mask[y * width + x];
+        }
+        if (rowCount >= torsoW * 0.72) {
+          shoulderY = y;
+          break;
+        }
+      }
+      if (shoulderY > minY && shoulderY - minY >= (maxY - minY) * 0.06) {
+        const hoodMask = mask.slice();
+        for (let y = shoulderY; y < height; y += 1) {
+          for (let x = 0; x < width; x += 1) {
+            hoodMask[y * width + x] = 0;
+          }
+        }
+        let hLo = width;
+        let hHi = 0;
+        for (let y = minY; y < shoulderY; y += 1) {
+          for (let x = 0; x < width; x += 1) {
+            if (hoodMask[y * width + x]) {
+              if (x < hLo) hLo = x;
+              if (x > hHi) hHi = x;
+            }
+          }
+        }
+        if (hHi - hLo >= 12) {
+          hoodTextureUrl = await regionTile(hLo, hHi, hoodMask);
+        }
+      }
+    }
+
     const [tile, fabricTile] = await Promise.all([
       sharp(tileRaw, { raw: { width: TILE, height: TILE, channels: 3 } })
         // Gentle local contrast so washed/tonal prints stay clearly visible
@@ -897,6 +1002,8 @@ export async function segmentGarment(
       textureUrl: "data:image/jpeg;base64," + tile.toString("base64"),
       fabricTextureUrl:
         "data:image/jpeg;base64," + fabricTile.toString("base64"),
+      sleeveTextureUrl,
+      hoodTextureUrl,
     };
   } catch (error) {
     console.warn(

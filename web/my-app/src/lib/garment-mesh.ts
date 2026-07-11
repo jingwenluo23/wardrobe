@@ -146,6 +146,10 @@ export type DraftMesh = {
   extractedBackTextureUrl?: string;
   /** Plain fabric swatch (data URL) for sleeves/collar, from the photo. */
   fabricTextureUrl?: string;
+  /** Extracted sleeve texture (data URL), warped from the photo's sleeve. */
+  sleeveTextureUrl?: string;
+  /** Extracted hood texture (data URL), from above the shoulder line. */
+  hoodTextureUrl?: string;
   /** Dominant garment colour as a hex string, sampled from the photos. */
   color: string;
   bounds: GarmentBounds;
