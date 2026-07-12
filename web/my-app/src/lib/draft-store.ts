@@ -482,14 +482,32 @@ export async function createDraft(input: {
     } = {};
     try {
       // Preferred path: ML clothes segmentation (SegFormer). Falls back to
-      // the colour-heuristic extractor when the model is unavailable.
+      // the colour-heuristic extractor when the model is unavailable. The
+      // whole thing races a timeout so a hung model download or wedged
+      // decode can never leave the draft "Building..." forever.
       const wantsHood = features.neckFinish === "hood";
       const segOptions = { hood: wantsHood };
-      const frontSeg = await segmentGarment(front.buffer, input.category, segOptions);
-      const backSeg = await segmentGarment(back.buffer, input.category, segOptions);
-      const usedModel = Boolean(frontSeg);
-      const frontResult = frontSeg ?? (await analyzePhoto(front.buffer));
-      const backResult = backSeg ?? (await analyzePhoto(back.buffer));
+      const extract = async () => {
+        const frontSeg = await segmentGarment(front.buffer, input.category, segOptions);
+        const backSeg = await segmentGarment(back.buffer, input.category, segOptions);
+        const usedModel = Boolean(frontSeg);
+        const frontResult = frontSeg ?? (await analyzePhoto(front.buffer));
+        const backResult = backSeg ?? (await analyzePhoto(back.buffer));
+        return { frontSeg, backSeg, usedModel, frontResult, backResult };
+      };
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const timeout = new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new Error("extraction timed out")),
+          EXTRACTION_DEADLINE_MS,
+        );
+      });
+      const { frontSeg, backSeg, usedModel, frontResult, backResult } =
+        await Promise.race([extract(), timeout]).finally(() => {
+          if (timer) {
+            clearTimeout(timer);
+          }
+        });
 
       update = {
         color: frontResult.color,
@@ -607,7 +625,26 @@ function serializeDraft(stored: StoredDraft): ApiDraft {
   };
 }
 
+// If the background extraction crashes or wedges (a hung model download, a
+// killed worker), the draft would show "Building the mesh..." forever. Any
+// read older than this deadline is force-marked ready with whatever it has.
+const EXTRACTION_DEADLINE_MS = 180_000;
+
+function recoverStuckDrafts() {
+  try {
+    getDb()
+      .prepare(
+        "UPDATE drafts SET extraction_ready = 1 " +
+          "WHERE extraction_ready = 0 AND created_at < ?",
+      )
+      .run(Date.now() - EXTRACTION_DEADLINE_MS);
+  } catch {
+    // Recovery is best-effort; reads continue regardless.
+  }
+}
+
 export function listDrafts(): ApiDraft[] {
+  recoverStuckDrafts();
   const rows = getDb()
     .prepare("SELECT * FROM drafts ORDER BY created_at DESC")
     .all() as DraftRow[];
