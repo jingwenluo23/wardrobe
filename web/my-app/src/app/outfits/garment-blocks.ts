@@ -438,68 +438,73 @@ function buildTopGeometry(
       nHalfZ = Math.max(nHalfZ, Math.abs(p.z - arcCenter.z));
     }
 
-    // Open hood with a real head opening. The cross-section is a horseshoe
-    // (a U wrapping the back of the head, OPEN at the front) swept up a spine
-    // that rises off the neckline and leans back. Because the front never
-    // closes and the crown is not pinched to a point, the whole front — from
-    // the neck up over the crown — is one continuous opening a head fits into.
-    // You look straight into the concave cavity from the front, side, or above.
-    //   - Each ring is an open horseshoe: theta runs from one front rim,
-    //     around the back (theta = 0), to the other front rim, leaving a wide
-    //     wedge at the front unfilled = the face opening.
-    //   - The spine rises and leans back, so it stands like a worn hood but
-    //     tips toward the back panel (gravity), not bolt upright.
-    //   - Base ring welds to the exact neckline points for a clean seam.
-    const openHalf = 1.02; // half-angle of the front opening (~58deg each side)
-    const thetaMax = Math.PI - openHalf; // sweep wraps the back, leaves the front
-    const riseH = 23 * SCALE; // crown height above the neckline
-    const backLean = 12 * SCALE; // crown leans back over the shoulders
-    const depthScale = 1.18; // deeper front-to-back (head shape), not a flat disc
-    const rTop = 0.86; // crown pulls in a touch so it rounds over
+    // Dropped hood = a soft bag hanging down the upper back. The mouth (the
+    // face opening) sits at the top by the neckline, gaping UP so you look
+    // straight into the cavity; the bag body hangs down and back to a closed,
+    // rounded bottom that rests on the back panel. It is a closed elliptical
+    // tube swept down a drooping spine — open only at the mouth — so it has
+    // real pouch volume AND a genuine head opening, and it lies down under its
+    // own weight instead of standing upright.
+    //   - Principle: the hood always falls onto the back, never bolt upright.
+    //   - Mouth ring (t=0) is left uncapped = the opening; the bottom converges
+    //     to a closed tip.
+    const cx = arcCenter.x;
+    // Spine: mouth just above the neckline, tip low and back on the panel.
+    const mouthY = arcCenter.y - 1 * SCALE;
+    const mouthZ = arcCenter.z - 1 * SCALE;
+    const tipY = arcCenter.y - 17 * SCALE;
+    const tipZ = arcCenter.z - 21 * SCALE;
+    const spine = (u: number) => ({
+      y: mouthY + (tipY - mouthY) * smoothstep(u),
+      z:
+        mouthZ +
+        (tipZ - mouthZ) * u -
+        4 * SCALE * Math.sin(Math.PI * u), // slight outward belly
+    });
+    const rxBase = nHalfX * 1.16; // mouth half-width ~ head opening
+    const rzBase = nHalfX * 0.98; // front-to-back radius (pouch depth)
 
     const rings: number[][] = [];
     for (let i = 0; i <= HOOD_RINGS; i += 1) {
       const t = i / HOOD_RINGS;
-      const ease = Math.sin((t * Math.PI) / 2); // ease-out rise
-      // Base blends from the exact neckline points into the parametric shell.
-      const blend = smoothstep(Math.min(1, t * 3));
-      // Spine: rises and leans back as it climbs.
-      const cy = arcCenter.y + riseH * ease;
-      const cz = arcCenter.z - backLean * (1 - Math.cos((t * Math.PI) / 2));
-      // Radius: neck width, bulging a little mid-height, drawing in at the crown.
-      const r =
-        nHalfX * (1 + 0.22 * Math.sin(t * Math.PI)) * (1 - (1 - rTop) * t * t);
+      const c = spine(t);
+      const cn = spine(Math.min(1, t + 1e-3));
+      // Tangent down the spine; ring sits in the plane perpendicular to it.
+      const ty = cn.y - c.y;
+      const tz = cn.z - c.z;
+      const tl = Math.hypot(ty, tz) || 1;
+      const uy = ty / tl;
+      const uz = tz / tl;
+      // In-plane "depth" axis (perp to tangent, in the y-z plane); width axis
+      // is world x. Together they orient the ellipse to face along the spine.
+      const dy = -uz;
+      const dz = uy;
+      // Radius: full at the mouth, rounding to a closed tip at the bottom.
+      const rad = Math.sqrt(Math.max(0, 1 - Math.pow(t, 2.2)));
+      const rx = rxBase * rad;
+      const rz = rzBase * rad;
       const ring: number[] = [];
       for (let j = 0; j < N; j += 1) {
-        const s = j / (N - 1); // 0..1 across the horseshoe
-        const theta = -thetaMax + 2 * thetaMax * s; // front rim -> back -> front rim
-        const lx = r * Math.sin(theta);
-        // theta = 0 is the centre-back (most negative z = deepest cavity); the
-        // ends (|theta| -> thetaMax) are the front rim of the opening.
-        const lz = -r * depthScale * Math.cos(theta);
-        const px = arcCenter.x + lx;
-        const py = cy;
-        const pz = cz + lz;
-        // Weld the base onto the real neckline over the first rings.
-        const anchor = arc[j];
-        const p = new THREE.Vector3(
-          anchor.x + (px - anchor.x) * blend,
-          anchor.y + (py - anchor.y) * blend,
-          anchor.z + (pz - anchor.z) * blend,
-        );
-        ring.push(pushVertex(p.x, p.y, p.z, s, t));
+        const a = (2 * Math.PI * j) / N; // closed loop
+        const wx = rx * Math.cos(a);
+        const depth = rz * Math.sin(a);
+        const px = cx + wx;
+        const py = c.y + depth * dy;
+        const pz = c.z + depth * dz;
+        ring.push(pushVertex(px, py, pz, j / N, t));
       }
       rings.push(ring);
     }
-    // Stitch the strip. The front is intentionally left un-wrapped (j only
-    // spans 0..N-2), so the wedge between the two front rims stays open.
+    // Stitch the closed tube (j wraps), leaving the mouth (t=0) open. Wound so
+    // the printed outer fabric faces outward, seam allowance on the inside.
     for (let i = 0; i < HOOD_RINGS; i += 1) {
-      for (let j = 0; j < N - 1; j += 1) {
+      for (let j = 0; j < N; j += 1) {
+        const jn = (j + 1) % N;
         const a = rings[i][j];
-        const b = rings[i][j + 1];
+        const b = rings[i][jn];
         const d = rings[i + 1][j];
-        const e = rings[i + 1][j + 1];
-        indices.push(a, b, d, b, e, d);
+        const e = rings[i + 1][jn];
+        indices.push(a, d, b, b, d, e);
       }
     }
   };
