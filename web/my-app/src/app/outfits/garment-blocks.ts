@@ -465,10 +465,31 @@ function buildTopGeometry(
     // but not fused into, the back).
     const gap = 2 * SCALE; // air gap between the hood's front face and the back
     const mouthY = arcCenter.y - 1 * SCALE;
-    // Centre-z where the pouch hangs: pushed back so pouch front (centre + rz)
-    // lands one gap behind the back panel surface (at z = -depth).
-    const zHang = -depth - gap - rzBase;
     const tipY = arcCenter.y - 19 * SCALE;
+    // Measure the back panel's ACTUAL backmost z over the hood's vertical span.
+    // The panel is not simply at z = -depth (it has its own depth profile), so
+    // guessing clips it. Park the hood one gap behind whatever the real surface
+    // is, so its front face never passes through the back.
+    let backZ = -depth;
+    {
+      let minZ = Infinity;
+      for (let r = 0; r <= ROWS; r += 1) {
+        for (let c = 0; c <= COLS; c += 1) {
+          const bi = (backBase + r * panelStride + c) * 3;
+          if (positions[bi + 1] < tipY - 2 * SCALE) {
+            continue; // outside the hood's vertical span
+          }
+          if (positions[bi + 2] < minZ) {
+            minZ = positions[bi + 2];
+          }
+        }
+      }
+      if (minZ !== Infinity) {
+        backZ = minZ;
+      }
+    }
+    // Pouch front (centre + rzBase) lands one gap behind the real back surface.
+    const zHang = backZ - gap - rzBase;
     const spine = (u: number) => ({
       // Descend under gravity.
       y: mouthY + (tipY - mouthY) * u,
