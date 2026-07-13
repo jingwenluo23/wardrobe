@@ -463,7 +463,7 @@ function buildTopGeometry(
     // it. The hanging portion sits at a fixed depth so its front face clears
     // the back panel by a small air gap (like a real dropped hood resting on,
     // but not fused into, the back).
-    const gap = 2 * SCALE; // air gap between the hood's front face and the back
+    const gap = 3 * SCALE; // air gap between the hood's front face and the back
     const mouthY = arcCenter.y - 1 * SCALE;
     const tipY = arcCenter.y - 19 * SCALE;
     // Measure the back panel's ACTUAL backmost z over the hood's vertical span.
@@ -488,14 +488,14 @@ function buildTopGeometry(
         backZ = minZ;
       }
     }
-    // Pouch front (centre + rzBase) lands one gap behind the real back surface.
+    // The hood hangs straight down at a CONSTANT depth, parked one gap behind
+    // the deepest back surface in its span. A purely vertical spine means the
+    // mouth plane is exactly horizontal (opening faces straight up, 0° tilt)
+    // and the front face is always behind the panel (no clipping anywhere).
     const zHang = backZ - gap - rzBase;
     const spine = (u: number) => ({
-      // Descend under gravity.
       y: mouthY + (tipY - mouthY) * u,
-      // Swing back behind the panel over the first ~45%, then hang straight
-      // down at a constant depth so there's an even gap all the way down.
-      z: arcCenter.z + (zHang - arcCenter.z) * smoothstep(Math.min(1, u / 0.45)),
+      z: zHang,
     });
 
     const rings: number[][] = [];
