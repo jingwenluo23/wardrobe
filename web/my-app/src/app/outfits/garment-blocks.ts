@@ -496,20 +496,9 @@ function buildTopGeometry(
         const a = (2 * Math.PI * j) / N; // closed loop
         const wx = rx * Math.cos(a);
         const depth = rz * Math.sin(a);
-        let px = cx + wx;
-        let py = c.y + depth * dy;
-        let pz = c.z + depth * dz;
-        // Sew the mouth's back half onto the real neckline arc (shoulder to
-        // shoulder) so the hood grows out of the collar seam instead of
-        // floating as a separate pocket. Only the top ring is welded; the
-        // front half stays as the free opening rim.
-        if (i === 0 && Math.sin(a) > 1e-6) {
-          const k = Math.round((1 - a / Math.PI) * (N - 1));
-          const anchor = arc[Math.min(N - 1, Math.max(0, k))];
-          px = anchor.x;
-          py = anchor.y;
-          pz = anchor.z;
-        }
+        const px = cx + wx;
+        const py = c.y + depth * dy;
+        const pz = c.z + depth * dz;
         ring.push(pushVertex(px, py, pz, j / N, t));
       }
       rings.push(ring);
