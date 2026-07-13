@@ -157,7 +157,9 @@ function buildTopGeometry(
       return 1;
     }
     const t = (y - underarmY) / (neckShoulderY - underarmY);
-    return 1 - 0.68 * smoothstep(t);
+    // Draw front and back closer at the very top so the shoulder reads as a
+    // rounded ridge rather than a flat-topped deck between the panels.
+    return 1 - 0.8 * smoothstep(t);
   };
 
   // Front/back separation along the armhole edge: zero at the underarm and
@@ -299,7 +301,7 @@ function buildTopGeometry(
   // shoulder point through a slightly raised midline, so the seam is a soft
   // rounded roll rather than a flat crease. The neckline stays open.
   {
-    const seamRise = 0.75 * SCALE;
+    const seamRise = 1.15 * SCALE; // domes the seam so the shoulder rounds over
     const shoulderMid: Record<number, number> = {};
     for (let c = 0; c <= COLS; c += 1) {
       const s = Math.abs(c / COLS - 0.5) * 2;
@@ -452,25 +454,28 @@ function buildTopGeometry(
     //   - Mouth ring (t=0) is left uncapped = the opening; the bottom converges
     //     to a closed tip.
     const cx = arcCenter.x;
-    // Spine: mouth at the neckline, tip low and back on the panel. It descends
-    // vertically at first — so the mouth plane is horizontal and the opening
-    // faces UP (correct dropped-hood shape) — then curls back so the body lies
-    // on the upper back. Kept compact so it doesn't skew the model's centre.
-    const mouthY = arcCenter.y - 1 * SCALE;
-    const mouthZ = arcCenter.z - 1 * SCALE;
-    const tipY = arcCenter.y - 20 * SCALE;
-    const tipZ = arcCenter.z - 18 * SCALE;
-    const spine = (u: number) => ({
-      // Linear in y => vertical tangent at the mouth => opening faces up.
-      y: mouthY + (tipY - mouthY) * u,
-      // Hold z flat for the top of the drop so the mouth stays level and the
-      // opening faces straight up; the body swings back only lower down.
-      z: mouthZ + (tipZ - mouthZ) * smoothstep(Math.max(0, u - 0.28) / 0.72),
-    });
     // Bigger, proportionate hood: mouth is wider than the neck opening and the
     // pouch is deep, so it reads as a full hood, not a small pocket.
-    const rxBase = nHalfX * 1.42; // mouth half-width
-    const rzBase = nHalfX * 1.22; // front-to-back radius (pouch depth)
+    const rxBase = nHalfX * 1.4; // mouth half-width
+    const rzBase = nHalfX * 0.78; // shallow front-to-back so it lies flat on back
+    // Spine: the hood is sewn at the BACK neckline, then falls back and down
+    // under gravity so it hangs BEHIND the back panel — never pushed through
+    // it. The hanging portion sits at a fixed depth so its front face clears
+    // the back panel by a small air gap (like a real dropped hood resting on,
+    // but not fused into, the back).
+    const gap = 2 * SCALE; // air gap between the hood's front face and the back
+    const mouthY = arcCenter.y - 1 * SCALE;
+    // Centre-z where the pouch hangs: pushed back so pouch front (centre + rz)
+    // lands one gap behind the back panel surface (at z = -depth).
+    const zHang = -depth - gap - rzBase;
+    const tipY = arcCenter.y - 19 * SCALE;
+    const spine = (u: number) => ({
+      // Descend under gravity.
+      y: mouthY + (tipY - mouthY) * u,
+      // Swing back behind the panel over the first ~45%, then hang straight
+      // down at a constant depth so there's an even gap all the way down.
+      z: arcCenter.z + (zHang - arcCenter.z) * smoothstep(Math.min(1, u / 0.45)),
+    });
 
     const rings: number[][] = [];
     for (let i = 0; i <= HOOD_RINGS; i += 1) {
@@ -495,10 +500,10 @@ function buildTopGeometry(
       for (let j = 0; j < N; j += 1) {
         const a = (2 * Math.PI * j) / N; // closed loop
         const wx = rx * Math.cos(a);
-        const depth = rz * Math.sin(a);
+        const depthOff = rz * Math.sin(a);
         const px = cx + wx;
-        const py = c.y + depth * dy;
-        const pz = c.z + depth * dz;
+        const py = c.y + depthOff * dy;
+        const pz = c.z + depthOff * dz;
         ring.push(pushVertex(px, py, pz, j / N, t));
       }
       rings.push(ring);
