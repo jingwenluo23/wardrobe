@@ -449,17 +449,20 @@ function buildTopGeometry(
     //   - Mouth ring (t=0) is left uncapped = the opening; the bottom converges
     //     to a closed tip.
     const cx = arcCenter.x;
-    // Spine: mouth just above the neckline, tip low and back on the panel.
+    // Spine: mouth at the neckline, tip low and back on the panel. It descends
+    // vertically at first — so the mouth plane is horizontal and the opening
+    // faces UP (correct dropped-hood shape) — then curls back so the body lies
+    // on the upper back. Kept compact so it doesn't skew the model's centre.
     const mouthY = arcCenter.y - 1 * SCALE;
     const mouthZ = arcCenter.z - 1 * SCALE;
-    const tipY = arcCenter.y - 17 * SCALE;
-    const tipZ = arcCenter.z - 21 * SCALE;
+    const tipY = arcCenter.y - 14 * SCALE;
+    const tipZ = arcCenter.z - 14 * SCALE;
     const spine = (u: number) => ({
-      y: mouthY + (tipY - mouthY) * smoothstep(u),
-      z:
-        mouthZ +
-        (tipZ - mouthZ) * u -
-        4 * SCALE * Math.sin(Math.PI * u), // slight outward belly
+      // Linear in y => vertical tangent at the mouth => opening faces up.
+      y: mouthY + (tipY - mouthY) * u,
+      // Eased in z (flat at the top) => no backward tilt at the mouth; the
+      // body swings back only as it descends.
+      z: mouthZ + (tipZ - mouthZ) * smoothstep(u),
     });
     const rxBase = nHalfX * 1.16; // mouth half-width ~ head opening
     const rzBase = nHalfX * 0.98; // front-to-back radius (pouch depth)
