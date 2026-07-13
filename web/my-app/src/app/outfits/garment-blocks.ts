@@ -438,69 +438,57 @@ function buildTopGeometry(
       nHalfZ = Math.max(nHalfZ, Math.abs(p.z - arcCenter.z));
     }
 
-    // Dropped, empty hood as a CLOSED soft volume. An unworn hood's opening
-    // is squashed shut against the body, so instead of an open shell (which
-    // always shows a hole from some angle) the hood is a sewn-shut, gravity-
-    // collapsed fabric mound:
-    //   - The base ring is welded to the exact neckline points.
-    //   - Above the base the ring sweep widens to a full 360deg loop, so the
-    //     surface is watertight — the two edge columns meet at the front
-    //     centre like the pressed-shut opening seam of a real empty hood.
-    //   - The centre path rises softly, peaks behind the neck, and settles
-    //     down onto the upper back; the tail rounds closed (no point).
-    //   - The front wall stays shallow and folds downward, hugging the
-    //     collar, so nothing bulges over the chest.
-    const peakH = 12.5 * SCALE; // soft rise of the collapsed mound
-    const endDrop = 11 * SCALE; // crown settles onto the back panel
-    const backReach = 17 * SCALE; // how far back the hood lies on the back
-    const ax = nHalfX * 1.18; // half-width (relaxed fabric spread)
-    const azMax = nHalfX * 1.08; // back-wall radius at the fullest point
-    const azFront = nHalfZ * 0.85; // shallow front wall, hugging the collar
-    const phiBase = 2.1; // sweep of the neckline arc the base sits on
-    const phiFull = 2.3; // widest sweep: a clearly open face opening in front
-    const frontDrop = 5 * SCALE; // the folded-down front opening edge
+    // Dropped, empty hood as an OPEN pouch that rests on the upper back. The
+    // rings are an open C (a gap at the front is the face opening), lofted
+    // from the neckline down and back so the fabric lies against the back
+    // panel — you can see into the rounded cavity from the front/above, like a
+    // real unworn hood.
+    //   - Base ring welded to the exact neckline points (clean seam).
+    //   - Centre path rises just a little off the collar, then drapes down
+    //     AND back so the crown/tail settles onto the back panel — it rests,
+    //     it does not hover above the shoulders.
+    //   - Each ring is a rounded half-oval (real front-to-back depth) so the
+    //     pouch reads as a bag with volume, not a flat flap.
+    //   - The two front edges (the opening rim) fold down softly.
+    const riseH = 2 * SCALE; // barely lifts off the collar — it must not hover
+    const dropH = 21 * SCALE; // drapes well down the back so it rests, not floats
+    const backReach = 13 * SCALE; // stays close in, lying against the back panel
+    const ax = nHalfX * 1.14; // half-width (relaxed fabric spread)
+    const azMax = nHalfX * 1.15; // front-to-back radius (real pouch volume)
+    const phiMax = 1.62; // wider mouth — the cavity reads open from front/above
+    const rimFold = 3 * SCALE; // opening rim folds only slightly (mouth stays open)
 
     const rings: number[][] = [];
     for (let i = 0; i <= HOOD_RINGS; i += 1) {
       const t = i / HOOD_RINGS;
-      // Base blends from the exact neckline points into the parametric mound
-      // (closed seam), while the sweep widens from the neckline arc to a full
-      // loop so the volume closes with no gap anywhere.
+      // Base blends from the exact neckline points into the parametric pouch.
       const blend = smoothstep(Math.min(1, t * 3.5));
-      // Widen toward phiFull (short of a full loop): the hood wraps around
-      // but keeps an open face opening between its two front edges.
-      const phiT = phiBase + (phiFull - phiBase) * smoothstep(Math.min(1, t * 3));
-      // Rounded closure: stays full through the drape, then rounds off — the
-      // hanging edge reads as a soft U, not a V point.
-      const rh = Math.sqrt(Math.max(0, 1 - Math.pow(t, 2.8)));
-      // Gravity path: peak near mid-drape, then settle down onto the back
-      // (smoothstep flattens at the end so the tail rests, not plunges).
+      // Width scale: full through the drape, rounding closed at the tail.
+      const rh = Math.sqrt(Math.max(0, 1 - Math.pow(t, 2.6)));
+      // Gravity path: small rise, then settle down and back onto the back.
       const cy =
         arcCenter.y +
-        peakH * Math.sin(Math.PI * Math.pow(t, 0.85)) -
-        endDrop * smoothstep(t);
-      const cz = arcCenter.z - backReach * Math.pow(t, 1.1);
+        riseH * Math.sin(Math.PI * Math.min(1, t * 2)) -
+        dropH * smoothstep(Math.max(0, t - 0.2) / 0.8);
+      const cz = arcCenter.z - backReach * smoothstep(Math.min(1, t * 1.15));
       const azt =
-        nHalfZ + (azMax - nHalfZ) * Math.sin(Math.PI * Math.min(1, t * 0.95));
+        nHalfZ + (azMax - nHalfZ) * Math.sin(Math.PI * Math.min(1, t * 0.9));
       const ring: number[] = [];
       for (let j = 0; j < N; j += 1) {
-        const f = j / (N - 1); // 0..1 across the sweep
-        const phi = -phiT + 2 * phiT * f; // front edge -> back -> front edge
-        const cosPhi = Math.cos(phi);
+        const f = j / (N - 1); // 0..1 across the open sweep
+        const phi = -phiMax + 2 * phiMax * f; // front edge -> back -> front edge
         const lx = ax * rh * Math.sin(phi);
-        // Back half of each ring uses the full drape radius; the front half
-        // (cos < 0) uses the shallow front-wall radius so the pressed-shut
-        // seam stays over the collar instead of pushing onto the chest.
-        const lz = -(cosPhi >= 0 ? azt : azFront) * rh * cosPhi;
-        // The front wall stays pinned near collar height (a dropped hood's
-        // opening is squashed flat), instead of rising into a standing ring.
-        const front = Math.max(0, -cosPhi);
-        const pinnedY = arcCenter.y - frontDrop * smoothstep(t);
+        // phi=0 is the centre-back: most negative z, so the pouch bulges
+        // outward (behind), giving it real depth; the front edges (|phi| max)
+        // are the opening rim.
+        const lz = -azt * rh * Math.cos(phi);
+        // Opening rim folds downward as the hood drapes.
+        const rim = Math.pow(Math.abs(phi) / phiMax, 3);
+        const yFold = rimFold * rim * smoothstep(t) * rh;
         const px = arcCenter.x + lx;
-        const py = cy + (pinnedY - cy) * front;
+        const py = cy - yFold;
         const pz = cz + lz;
-        // Weld the base onto the real neckline: ring 0 uses the arc points
-        // exactly, easing into the parametric mound over the first rings.
+        // Weld the base onto the real neckline over the first rings.
         const anchor = arc[j];
         const p = new THREE.Vector3(
           anchor.x + (px - anchor.x) * blend,
