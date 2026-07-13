@@ -460,9 +460,9 @@ function buildTopGeometry(
     const spine = (u: number) => ({
       // Linear in y => vertical tangent at the mouth => opening faces up.
       y: mouthY + (tipY - mouthY) * u,
-      // Eased in z (flat at the top) => no backward tilt at the mouth; the
-      // body swings back only as it descends.
-      z: mouthZ + (tipZ - mouthZ) * smoothstep(u),
+      // Hold z flat for the top of the drop so the mouth stays level and the
+      // opening faces straight up; the body swings back only lower down.
+      z: mouthZ + (tipZ - mouthZ) * smoothstep(Math.max(0, u - 0.28) / 0.72),
     });
     const rxBase = nHalfX * 1.16; // mouth half-width ~ head opening
     const rzBase = nHalfX * 0.98; // front-to-back radius (pouch depth)
