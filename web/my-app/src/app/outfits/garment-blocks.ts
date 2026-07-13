@@ -438,55 +438,47 @@ function buildTopGeometry(
       nHalfZ = Math.max(nHalfZ, Math.abs(p.z - arcCenter.z));
     }
 
-    // Dropped, empty hood as an OPEN pouch that rests on the upper back. The
-    // rings are an open C (a gap at the front is the face opening), lofted
-    // from the neckline down and back so the fabric lies against the back
-    // panel — you can see into the rounded cavity from the front/above, like a
-    // real unworn hood.
-    //   - Base ring welded to the exact neckline points (clean seam).
-    //   - Centre path rises just a little off the collar, then drapes down
-    //     AND back so the crown/tail settles onto the back panel — it rests,
-    //     it does not hover above the shoulders.
-    //   - Each ring is a rounded half-oval (real front-to-back depth) so the
-    //     pouch reads as a bag with volume, not a flat flap.
-    //   - The two front edges (the opening rim) fold down softly.
-    const riseH = 2 * SCALE; // barely lifts off the collar — it must not hover
-    const dropH = 21 * SCALE; // drapes well down the back so it rests, not floats
-    const backReach = 13 * SCALE; // stays close in, lying against the back panel
-    const ax = nHalfX * 1.14; // half-width (relaxed fabric spread)
-    const azMax = nHalfX * 1.15; // front-to-back radius (real pouch volume)
-    const phiMax = 1.62; // wider mouth — the cavity reads open from front/above
-    const rimFold = 3 * SCALE; // opening rim folds only slightly (mouth stays open)
+    // Open hood with a real head opening. The cross-section is a horseshoe
+    // (a U wrapping the back of the head, OPEN at the front) swept up a spine
+    // that rises off the neckline and leans back. Because the front never
+    // closes and the crown is not pinched to a point, the whole front — from
+    // the neck up over the crown — is one continuous opening a head fits into.
+    // You look straight into the concave cavity from the front, side, or above.
+    //   - Each ring is an open horseshoe: theta runs from one front rim,
+    //     around the back (theta = 0), to the other front rim, leaving a wide
+    //     wedge at the front unfilled = the face opening.
+    //   - The spine rises and leans back, so it stands like a worn hood but
+    //     tips toward the back panel (gravity), not bolt upright.
+    //   - Base ring welds to the exact neckline points for a clean seam.
+    const openHalf = 1.02; // half-angle of the front opening (~58deg each side)
+    const thetaMax = Math.PI - openHalf; // sweep wraps the back, leaves the front
+    const riseH = 23 * SCALE; // crown height above the neckline
+    const backLean = 12 * SCALE; // crown leans back over the shoulders
+    const depthScale = 1.18; // deeper front-to-back (head shape), not a flat disc
+    const rTop = 0.86; // crown pulls in a touch so it rounds over
 
     const rings: number[][] = [];
     for (let i = 0; i <= HOOD_RINGS; i += 1) {
       const t = i / HOOD_RINGS;
-      // Base blends from the exact neckline points into the parametric pouch.
-      const blend = smoothstep(Math.min(1, t * 3.5));
-      // Width scale: full through the drape, rounding closed at the tail.
-      const rh = Math.sqrt(Math.max(0, 1 - Math.pow(t, 2.6)));
-      // Gravity path: small rise, then settle down and back onto the back.
-      const cy =
-        arcCenter.y +
-        riseH * Math.sin(Math.PI * Math.min(1, t * 2)) -
-        dropH * smoothstep(Math.max(0, t - 0.2) / 0.8);
-      const cz = arcCenter.z - backReach * smoothstep(Math.min(1, t * 1.15));
-      const azt =
-        nHalfZ + (azMax - nHalfZ) * Math.sin(Math.PI * Math.min(1, t * 0.9));
+      const ease = Math.sin((t * Math.PI) / 2); // ease-out rise
+      // Base blends from the exact neckline points into the parametric shell.
+      const blend = smoothstep(Math.min(1, t * 3));
+      // Spine: rises and leans back as it climbs.
+      const cy = arcCenter.y + riseH * ease;
+      const cz = arcCenter.z - backLean * (1 - Math.cos((t * Math.PI) / 2));
+      // Radius: neck width, bulging a little mid-height, drawing in at the crown.
+      const r =
+        nHalfX * (1 + 0.22 * Math.sin(t * Math.PI)) * (1 - (1 - rTop) * t * t);
       const ring: number[] = [];
       for (let j = 0; j < N; j += 1) {
-        const f = j / (N - 1); // 0..1 across the open sweep
-        const phi = -phiMax + 2 * phiMax * f; // front edge -> back -> front edge
-        const lx = ax * rh * Math.sin(phi);
-        // phi=0 is the centre-back: most negative z, so the pouch bulges
-        // outward (behind), giving it real depth; the front edges (|phi| max)
-        // are the opening rim.
-        const lz = -azt * rh * Math.cos(phi);
-        // Opening rim folds downward as the hood drapes.
-        const rim = Math.pow(Math.abs(phi) / phiMax, 3);
-        const yFold = rimFold * rim * smoothstep(t) * rh;
+        const s = j / (N - 1); // 0..1 across the horseshoe
+        const theta = -thetaMax + 2 * thetaMax * s; // front rim -> back -> front rim
+        const lx = r * Math.sin(theta);
+        // theta = 0 is the centre-back (most negative z = deepest cavity); the
+        // ends (|theta| -> thetaMax) are the front rim of the opening.
+        const lz = -r * depthScale * Math.cos(theta);
         const px = arcCenter.x + lx;
-        const py = cy - yFold;
+        const py = cy;
         const pz = cz + lz;
         // Weld the base onto the real neckline over the first rings.
         const anchor = arc[j];
@@ -495,14 +487,14 @@ function buildTopGeometry(
           anchor.y + (py - anchor.y) * blend,
           anchor.z + (pz - anchor.z) * blend,
         );
-        ring.push(pushVertex(p.x, p.y, p.z, f, t));
+        ring.push(pushVertex(p.x, p.y, p.z, s, t));
       }
       rings.push(ring);
     }
-    // Stitch the strip; the edge columns converge at the front centre once
-    // the sweep reaches a full loop, so the surface closes without a gap.
+    // Stitch the strip. The front is intentionally left un-wrapped (j only
+    // spans 0..N-2), so the wedge between the two front rims stays open.
     for (let i = 0; i < HOOD_RINGS; i += 1) {
-      for (let j = 0; j < arc.length - 1; j += 1) {
+      for (let j = 0; j < N - 1; j += 1) {
         const a = rings[i][j];
         const b = rings[i][j + 1];
         const d = rings[i + 1][j];
