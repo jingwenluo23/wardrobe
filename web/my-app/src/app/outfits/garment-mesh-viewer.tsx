@@ -173,10 +173,9 @@ function makeHoodSeamBump(fleece: boolean) {
 function TeeModel({ mesh }: { mesh: DraftMesh }) {
   const geometry = useMemo(() => {
     const built = buildGarmentGeometry(mesh.params, mesh.features);
-    // Recenter on the bounding-box center so the orbit pivot (world origin)
-    // sits inside the garment — otherwise rotation circles a point off to
-    // the side of the model.
-    built.center();
+    // buildGarmentGeometry already centres each garment on its body (the hood
+    // is excluded so it can't drag the orbit pivot off the torso), so no
+    // extra recentre here — doing so would reintroduce the hood-skewed pivot.
     return built;
   }, [mesh.params, mesh.features]);
 

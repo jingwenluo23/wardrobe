@@ -92,9 +92,12 @@ export function buildGarmentGeometry(
   let geometry: THREE.BufferGeometry;
   if (features.archetype === "bottoms") {
     geometry = buildBottomsGeometry(params, features);
+    geometry.center();
   } else if (features.archetype === "skirt") {
     geometry = buildSkirtGeometry(params, features);
+    geometry.center();
   } else {
+    // buildTopGeometry already recenters on the body (excluding the hood).
     geometry = buildTopGeometry(params, features);
   }
   weldNormalsByPosition(geometry);
@@ -455,8 +458,8 @@ function buildTopGeometry(
     // on the upper back. Kept compact so it doesn't skew the model's centre.
     const mouthY = arcCenter.y - 1 * SCALE;
     const mouthZ = arcCenter.z - 1 * SCALE;
-    const tipY = arcCenter.y - 14 * SCALE;
-    const tipZ = arcCenter.z - 14 * SCALE;
+    const tipY = arcCenter.y - 20 * SCALE;
+    const tipZ = arcCenter.z - 18 * SCALE;
     const spine = (u: number) => ({
       // Linear in y => vertical tangent at the mouth => opening faces up.
       y: mouthY + (tipY - mouthY) * u,
@@ -464,8 +467,10 @@ function buildTopGeometry(
       // opening faces straight up; the body swings back only lower down.
       z: mouthZ + (tipZ - mouthZ) * smoothstep(Math.max(0, u - 0.28) / 0.72),
     });
-    const rxBase = nHalfX * 1.16; // mouth half-width ~ head opening
-    const rzBase = nHalfX * 0.98; // front-to-back radius (pouch depth)
+    // Bigger, proportionate hood: mouth is wider than the neck opening and the
+    // pouch is deep, so it reads as a full hood, not a small pocket.
+    const rxBase = nHalfX * 1.42; // mouth half-width
+    const rzBase = nHalfX * 1.22; // front-to-back radius (pouch depth)
 
     const rings: number[][] = [];
     for (let i = 0; i <= HOOD_RINGS; i += 1) {
@@ -491,9 +496,20 @@ function buildTopGeometry(
         const a = (2 * Math.PI * j) / N; // closed loop
         const wx = rx * Math.cos(a);
         const depth = rz * Math.sin(a);
-        const px = cx + wx;
-        const py = c.y + depth * dy;
-        const pz = c.z + depth * dz;
+        let px = cx + wx;
+        let py = c.y + depth * dy;
+        let pz = c.z + depth * dz;
+        // Sew the mouth's back half onto the real neckline arc (shoulder to
+        // shoulder) so the hood grows out of the collar seam instead of
+        // floating as a separate pocket. Only the top ring is welded; the
+        // front half stays as the free opening rim.
+        if (i === 0 && Math.sin(a) > 1e-6) {
+          const k = Math.round((1 - a / Math.PI) * (N - 1));
+          const anchor = arc[Math.min(N - 1, Math.max(0, k))];
+          px = anchor.x;
+          py = anchor.y;
+          pz = anchor.z;
+        }
         ring.push(pushVertex(px, py, pz, j / N, t));
       }
       rings.push(ring);
@@ -903,9 +919,13 @@ function buildTopGeometry(
   // (group 3): plain fabric plus a subtle stitched-seam bump texture.
   let hoodIndexStart = -1;
   let hoodIndexEnd = -1;
+  let hoodVertStart = -1;
+  let hoodVertEnd = -1;
   if (features.neckFinish === "hood") {
     hoodIndexStart = indices.length;
+    hoodVertStart = positions.length / 3;
     buildHood();
+    hoodVertEnd = positions.length / 3;
     hoodIndexEnd = indices.length;
   } else if (features.neckFinish === "turtleneck") {
     buildTurtleneck();
@@ -984,6 +1004,43 @@ function buildTopGeometry(
     buildSleeve(1);
     buildSleeve(-1);
     sleeveIndexEnd = indices.length;
+  }
+
+  // Recenter on the BODY (front/back panels, sleeves, trims) — deliberately
+  // excluding the hood. The hood hangs down and back; if it were included the
+  // bounding-box centre would drift off the torso and the viewer's orbit pivot
+  // would circle a point behind/under the garment. Centring on the body keeps
+  // the spin axis through the middle of the garment regardless of the hood.
+  {
+    let minX = Infinity;
+    let minY = Infinity;
+    let minZ = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    let maxZ = -Infinity;
+    const count = positions.length / 3;
+    for (let v = 0; v < count; v += 1) {
+      if (v >= hoodVertStart && v < hoodVertEnd) {
+        continue; // skip hood vertices
+      }
+      const x = positions[v * 3];
+      const y = positions[v * 3 + 1];
+      const z = positions[v * 3 + 2];
+      if (x < minX) minX = x;
+      if (y < minY) minY = y;
+      if (z < minZ) minZ = z;
+      if (x > maxX) maxX = x;
+      if (y > maxY) maxY = y;
+      if (z > maxZ) maxZ = z;
+    }
+    const cX = (minX + maxX) / 2;
+    const cY = (minY + maxY) / 2;
+    const cZ = (minZ + maxZ) / 2;
+    for (let v = 0; v < count; v += 1) {
+      positions[v * 3] -= cX;
+      positions[v * 3 + 1] -= cY;
+      positions[v * 3 + 2] -= cZ;
+    }
   }
 
   const geometry = new THREE.BufferGeometry();
