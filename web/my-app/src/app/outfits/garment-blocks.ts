@@ -557,8 +557,27 @@ function buildTopGeometry(
         const wx = rx * Math.cos(a);
         const depthOff = rz * Math.sin(a);
         const px = cx + wx;
-        const py = c.y + depthOff * dy;
-        const pz = c.z + depthOff * dz;
+        let py = c.y + depthOff * dy;
+        let pz = c.z + depthOff * dz;
+        // Extend the FRONT edge of the hood down/forward onto the neckline so
+        // the hood's own fabric meets the collar (no separate bridge piece).
+        // Strongest at the mouth's front-centre, fading around to the sides and
+        // down the first part of the tube.
+        const frontness = Math.max(0, -Math.sin(a));
+        const pull = frontness * (1 - smoothstep(Math.min(1, t / 0.35)));
+        if (pull > 0) {
+          let best = arc[0];
+          let bestD = Infinity;
+          for (const p of arc) {
+            const d = Math.abs(p.x - px);
+            if (d < bestD) {
+              bestD = d;
+              best = p;
+            }
+          }
+          py += (best.y - py) * pull;
+          pz += (best.z - pz) * pull;
+        }
         ring.push(pushVertex(px, py, pz, j / N, t));
       }
       rings.push(ring);
@@ -573,42 +592,6 @@ function buildTopGeometry(
         const d = rings[i + 1][j];
         const e = rings[i + 1][jn];
         indices.push(a, d, b, b, d, e);
-      }
-    }
-
-    // Collar bridge: a short fabric gusset sewing the hood to the neckline so
-    // it doesn't float. It lofts from the real back-neckline arc up to the
-    // FRONT rim of the mouth (the edge nearest the body), leaving the mouth
-    // itself open and level. The mouth's front half spans angle a in [pi, 2pi]
-    // (the +z side), mapped left->back->right to match the arc.
-    const zMouthCentre = spine(0).z;
-    const BR = 4;
-    const bridge: number[][] = [];
-    for (let m = 0; m <= BR; m += 1) {
-      const tb = m / BR;
-      const row: number[] = [];
-      for (let k = 0; k < N; k += 1) {
-        const a = Math.PI + Math.PI * (k / (N - 1)); // front rim of the mouth
-        const mx = cx + rxBase * Math.cos(a);
-        const mz = zMouthCentre - rzBase * Math.sin(a);
-        const anchor = arc[k];
-        const x = anchor.x + (mx - anchor.x) * tb;
-        const y = anchor.y + (mouthY - anchor.y) * tb;
-        const z = anchor.z + (mz - anchor.z) * tb;
-        row.push(pushVertex(x, y, z, k / (N - 1), tb));
-      }
-      bridge.push(row);
-    }
-    // Sew the collar to the hood across the FULL width so the gap between the
-    // hood's front rim and the neckline is closed (no hole), joining both
-    // edges all the way around.
-    for (let m = 0; m < BR; m += 1) {
-      for (let k = 0; k < N - 1; k += 1) {
-        const a = bridge[m][k];
-        const b = bridge[m][k + 1];
-        const d = bridge[m + 1][k];
-        const e = bridge[m + 1][k + 1];
-        indices.push(a, b, d, b, e, d);
       }
     }
   };
