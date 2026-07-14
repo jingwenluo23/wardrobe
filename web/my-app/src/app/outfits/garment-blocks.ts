@@ -550,9 +550,13 @@ function buildTopGeometry(
       // is world x. Together they orient the ellipse to face along the spine.
       const dy = -uz;
       const dz = uy;
-      // Radius: full at the mouth, rounding to a closed tip at the bottom.
+      // Radius: rounding to a closed tip at the bottom. The MOUTH stays close
+      // to neck width (a real face opening) so the side walls sit at the
+      // neckline instead of jutting past the shoulders as a collar fin; the
+      // bag widens to full size as it descends.
       const rad = Math.sqrt(Math.max(0, 1 - Math.pow(t, 2.2)));
-      const rx = rxBase * rad;
+      const widen = 0.74 + 0.26 * smoothstep(Math.min(1, t / 0.4));
+      const rx = rxBase * rad * widen;
       const rz = rzBase * rad;
       const ring: number[] = [];
       for (let j = 0; j < N; j += 1) {
@@ -582,21 +586,14 @@ function buildTopGeometry(
           pz += (anchor.z - pz) * pull;
         }
         // A dropped hood's front/side fabric FOLDS DOWN over the neckline
-        // seam — it never stands above it, and it doesn't hang outboard past
-        // the shoulders either. Cap the front half and the side walls of the
-        // upper rings at the local seam height AND tuck them inboard to the
-        // seam, so no loose collar fin sticks out at the neck sides (only the
-        // centre-back cowl edge stays slightly proud).
+        // seam — it never stands above it. Cap the front half and the side
+        // walls of the upper rings at the local seam height so nothing rises
+        // above the neckline (only the centre-back cowl edge stays up).
         if (Math.sin(a) < 0.25) {
+          const capY = anchor.y + 0.8 * SCALE;
           const capBlend = 1 - smoothstep(Math.max(0, t - 0.25) / 0.2);
-          if (capBlend > 0) {
-            const capY = anchor.y + 0.8 * SCALE;
-            if (py > capY) {
-              py -= (py - capY) * capBlend;
-            }
-            const tuck = capBlend * (1 - pull);
-            px += (anchor.x - px) * tuck * 0.9;
-            pz += (anchor.z - pz) * tuck * 0.5;
+          if (py > capY && capBlend > 0) {
+            py -= (py - capY) * capBlend;
           }
         }
         ring.push(pushVertex(px, py, pz, j / N, t));
