@@ -582,14 +582,21 @@ function buildTopGeometry(
           pz += (anchor.z - pz) * pull;
         }
         // A dropped hood's front/side fabric FOLDS DOWN over the neckline
-        // seam — it never stands above it. Cap the front half and the side
-        // walls of the upper rings at the local seam height so nothing rises
-        // above the neckline (only the centre-back cowl edge stays up).
+        // seam — it never stands above it, and it doesn't hang outboard past
+        // the shoulders either. Cap the front half and the side walls of the
+        // upper rings at the local seam height AND tuck them inboard to the
+        // seam, so no loose collar fin sticks out at the neck sides (only the
+        // centre-back cowl edge stays slightly proud).
         if (Math.sin(a) < 0.25) {
-          const capY = anchor.y + 0.8 * SCALE;
           const capBlend = 1 - smoothstep(Math.max(0, t - 0.25) / 0.2);
-          if (py > capY && capBlend > 0) {
-            py -= (py - capY) * capBlend;
+          if (capBlend > 0) {
+            const capY = anchor.y + 0.8 * SCALE;
+            if (py > capY) {
+              py -= (py - capY) * capBlend;
+            }
+            const tuck = capBlend * (1 - pull);
+            px += (anchor.x - px) * tuck * 0.9;
+            pz += (anchor.z - pz) * tuck * 0.5;
           }
         }
         ring.push(pushVertex(px, py, pz, j / N, t));
