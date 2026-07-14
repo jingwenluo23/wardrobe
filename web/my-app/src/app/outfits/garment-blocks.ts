@@ -597,16 +597,17 @@ function buildTopGeometry(
       }
     }
 
-    // Folded-over front: the hood's opening edge continues past each shoulder
-    // and drapes down the CHEST, the two edges crossing in a soft V below the
-    // front neckline (right laid over left) — the dropped-hood look in the
-    // reference flat. Each flap is a tapered band starting exactly at the
-    // hood rim's end (same fabric, welded by position) and hugging the front
-    // panel surface.
+    // Folded-over front: two wide fabric bands hang from the FRONT neckline
+    // seam (their top edge welded to the real neckline points, which meet the
+    // hood rim at its ends — one continuous edge, not a point contact) and
+    // drape down the chest. Each band runs from its shoulder PAST the centre,
+    // so the two overlap in an X below the front neckline, the right one
+    // lifted a touch off the chest so it reads laid OVER the left — the
+    // crossed dropped-hood front from the reference flat.
     {
-      // Front panel surface z per height so the flaps lie on the chest.
+      // Front panel surface z per height so the bands lie on the chest.
       const fBins = 24;
-      const fLo = arcCenter.y - 16 * SCALE;
+      const fLo = arcCenter.y - 18 * SCALE;
       const fHi = arcCenter.y + 4 * SCALE;
       const frontBin = new Array<number>(fBins).fill(-Infinity);
       for (let r = 0; r <= ROWS; r += 1) {
@@ -636,49 +637,59 @@ function buildTopGeometry(
         b = Math.max(0, Math.min(fBins - 1, b));
         return frontBin[b];
       };
-      // Lowest point of the FRONT neckline curve (the centre dip).
-      let fcY = Infinity;
-      for (const p of neckLoop) {
-        if (p.z > centroid.z && p.y < fcY) {
-          fcY = p.y;
-        }
-      }
-      const M = 12;
-      for (const s of [-1, 1] as const) {
-        const start = s < 0 ? arc[0] : arc[N - 1];
-        // The right flap sits a little further off the chest so it reads as
-        // laid OVER the left where they cross.
-        const lift = s < 0 ? 0.8 * SCALE : 2.0 * SCALE;
-        const tip = { x: -s * 2.5 * SCALE, y: fcY - 8 * SCALE };
-        const ctrl = {
-          x: start.x + s * 2 * SCALE,
-          y: (start.y + tip.y) / 2 + 2.5 * SCALE,
-        };
-        const top: number[] = [];
-        const bot: number[] = [];
-        for (let m = 0; m <= M; m += 1) {
-          const u = m / M;
-          const iu = 1 - u;
-          const bx = iu * iu * start.x + 2 * iu * u * ctrl.x + u * u * tip.x;
-          const by = iu * iu * start.y + 2 * iu * u * ctrl.y + u * u * tip.y;
-          const w = (5.5 - 3 * u) * SCALE; // band tapers toward the tip
-          // Blend off the arc end onto the chest surface over the first bit.
-          const settle = smoothstep(Math.min(1, u * 4));
-          const zT = start.z + (frontAtY(by) + lift - start.z) * settle;
-          const zB = frontAtY(by - w) + lift;
-          top.push(pushVertex(bx, by, zT, u, 0.02));
-          bot.push(pushVertex(bx, by - w, zB, u, 0.12));
-        }
-        for (let m = 0; m < M; m += 1) {
-          const a = top[m];
-          const b2 = bot[m];
-          const d = top[m + 1];
-          const e = bot[m + 1];
-          // Wound so the printed face points out (+z) on both sides.
-          if (s < 0) {
-            indices.push(a, b2, d, d, b2, e);
-          } else {
-            indices.push(a, d, b2, d, e, b2);
+      // Front neckline points, left -> right (the loop starts with the front
+      // row), giving the seam the bands hang from.
+      const half = Math.floor(neckLoop.length / 2);
+      const FP = neckLoop.slice(0, half);
+      if (FP.length >= 4) {
+        const M = 14;
+        const reach = 0.62; // each band crosses past centre -> visible overlap
+        for (const s of [-1, 1] as const) {
+          // Right band floats a little higher off the chest: laid OVER left.
+          const lift = s < 0 ? 1.0 * SCALE : 2.6 * SCALE;
+          const top: number[] = [];
+          const mid: number[] = [];
+          const bot: number[] = [];
+          for (let m = 0; m <= M; m += 1) {
+            const u = m / M;
+            const fIdx =
+              s < 0
+                ? u * reach * (FP.length - 1)
+                : (1 - u * reach) * (FP.length - 1);
+            const k = Math.max(
+              0,
+              Math.min(FP.length - 1, Math.round(fIdx)),
+            );
+            const p = FP[k];
+            // Deep fold: shallow at the shoulder, ~10cm at the crossing tip.
+            const drop = (2.5 + 8.5 * smoothstep(u)) * SCALE;
+            const yB = p.y - drop;
+            const yM = p.y - drop * 0.55;
+            // The middle row bulges outward so the band reads as a chunky
+            // rolled fold catching light, not a flat decal on the chest.
+            const bulge = 1.8 * SCALE * (0.5 + 0.5 * smoothstep(u));
+            top.push(pushVertex(p.x, p.y, p.z, u, 0.02));
+            mid.push(
+              pushVertex(p.x, yM, frontAtY(yM) + lift + bulge, u, 0.09),
+            );
+            bot.push(pushVertex(p.x, yB, frontAtY(yB) + lift, u, 0.16));
+          }
+          const rows = [top, mid, bot];
+          for (let rIdx = 0; rIdx < 2; rIdx += 1) {
+            const rowA = rows[rIdx];
+            const rowB = rows[rIdx + 1];
+            for (let m = 0; m < M; m += 1) {
+              const a = rowA[m];
+              const b2 = rowB[m];
+              const d = rowA[m + 1];
+              const e = rowB[m + 1];
+              // Wound so the printed face points out (+z) on both sides.
+              if (s < 0) {
+                indices.push(a, b2, d, d, b2, e);
+              } else {
+                indices.push(a, d, b2, d, e, b2);
+              }
+            }
           }
         }
       }
