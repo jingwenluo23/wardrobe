@@ -572,13 +572,25 @@ function buildTopGeometry(
         const frontness = Math.max(0, -Math.sin(a));
         const pull =
           smoothstep(frontness) * (1 - smoothstep(Math.min(1, t / 0.35)));
+        // Anchor on the neckline arc, mapped 1:1 across the front half (side
+        // vertices clamp to the arc ends at the shoulders).
+        const f = Math.min(1, Math.max(0, (a - Math.PI) / Math.PI));
+        const anchor = arc[Math.min(N - 1, Math.max(0, Math.round(f * (N - 1))))];
         if (pull > 0) {
-          const f = (a - Math.PI) / Math.PI; // 0..1 across the front half
-          const k = Math.min(N - 1, Math.max(0, Math.round(f * (N - 1))));
-          const anchor = arc[k];
           px += (anchor.x - px) * pull;
           py += (anchor.y - py) * pull;
           pz += (anchor.z - pz) * pull;
+        }
+        // A dropped hood's front/side fabric FOLDS DOWN over the neckline
+        // seam — it never stands above it. Cap the front half and the side
+        // walls of the upper rings at the local seam height so nothing rises
+        // above the neckline (only the centre-back cowl edge stays up).
+        if (Math.sin(a) < 0.25) {
+          const capY = anchor.y + 0.8 * SCALE;
+          const capBlend = 1 - smoothstep(Math.max(0, t - 0.25) / 0.2);
+          if (py > capY && capBlend > 0) {
+            py -= (py - capY) * capBlend;
+          }
         }
         ring.push(pushVertex(px, py, pz, j / N, t));
       }
