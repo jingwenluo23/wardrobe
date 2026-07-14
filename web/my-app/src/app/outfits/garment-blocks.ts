@@ -599,18 +599,11 @@ function buildTopGeometry(
       }
       bridge.push(row);
     }
-    // Only sew the LEFT and RIGHT ends of the collar to the hood; leave the
-    // centre-back span open so the mouth reads as one continuous opening
-    // (fabric tabs at the sides, a gap in the middle), like a real dropped hood.
-    const sideFrac = 0.3;
+    // Sew the collar to the hood across the FULL width so the gap between the
+    // hood's front rim and the neckline is closed (no hole), joining both
+    // edges all the way around.
     for (let m = 0; m < BR; m += 1) {
       for (let k = 0; k < N - 1; k += 1) {
-        const f0 = k / (N - 1);
-        const f1 = (k + 1) / (N - 1);
-        const onSide = (f: number) => f < sideFrac || f > 1 - sideFrac;
-        if (!onSide(f0) || !onSide(f1)) {
-          continue; // skip the centre span
-        }
         const a = bridge[m][k];
         const b = bridge[m][k + 1];
         const d = bridge[m + 1][k];
