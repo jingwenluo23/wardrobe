@@ -457,46 +457,53 @@ function buildTopGeometry(
     // Bigger, proportionate hood: mouth is wider than the neck opening and the
     // pouch is deep, so it reads as a full hood, not a small pocket.
     const rxBase = nHalfX * 1.4; // mouth half-width
-    const rzBase = nHalfX * 0.78; // shallow front-to-back so it lies flat on back
+    const rzBase = nHalfX * 0.55; // shallow front-to-back so it lies flat on back
     // Spine: the hood is sewn at the BACK neckline, then falls back and down
     // under gravity so it hangs BEHIND the back panel — never pushed through
     // it. The hanging portion sits at a fixed depth so its front face clears
     // the back panel by a small air gap (like a real dropped hood resting on,
     // but not fused into, the back).
     const gap = 3 * SCALE; // air gap between the hood's front face and the back
-    const mouthY = arcCenter.y - 1 * SCALE;
+    const mouthY = arcCenter.y + 2 * SCALE; // just above the neckline (bridge rises to it)
     const tipY = arcCenter.y - 19 * SCALE;
-    // Measure the back panel's ACTUAL backmost z over the hood's vertical span.
-    // The panel is not simply at z = -depth (it has its own depth profile), so
-    // guessing clips it. Park the hood one gap behind whatever the real surface
-    // is, so its front face never passes through the back.
-    let backZ = -depth;
-    {
-      let minZ = Infinity;
-      for (let r = 0; r <= ROWS; r += 1) {
-        for (let c = 0; c <= COLS; c += 1) {
-          const bi = (backBase + r * panelStride + c) * 3;
-          if (positions[bi + 1] < tipY - 2 * SCALE) {
-            continue; // outside the hood's vertical span
-          }
-          if (positions[bi + 2] < minZ) {
-            minZ = positions[bi + 2];
-          }
+    // Track the back panel's z profile per height: the hood hangs one gap
+    // behind the LOCAL back surface at every level, so it follows the back
+    // closely (connected, small even gap) and can never clip through. Above
+    // the panel's top edge the profile is flat, so the mouth stays level and
+    // the opening faces up.
+    const yBins = 32;
+    const backBin = new Array<number>(yBins).fill(Infinity);
+    const pyLo = tipY;
+    const pyHi = mouthY;
+    for (let r = 0; r <= ROWS; r += 1) {
+      for (let c = 0; c <= COLS; c += 1) {
+        const bi = (backBase + r * panelStride + c) * 3;
+        const bin = Math.floor(((positions[bi + 1] - pyLo) / (pyHi - pyLo)) * yBins);
+        if (bin < 0 || bin >= yBins) {
+          continue;
+        }
+        if (positions[bi + 2] < backBin[bin]) {
+          backBin[bin] = positions[bi + 2];
         }
       }
-      if (minZ !== Infinity) {
-        backZ = minZ;
+    }
+    let lastBin = -depth;
+    for (let i = 0; i < yBins; i += 1) {
+      if (!Number.isFinite(backBin[i])) {
+        backBin[i] = lastBin;
+      } else {
+        lastBin = backBin[i];
       }
     }
-    // The hood hangs straight down at a CONSTANT depth, parked one gap behind
-    // the deepest back surface in its span. A purely vertical spine means the
-    // mouth plane is exactly horizontal (opening faces straight up, 0° tilt)
-    // and the front face is always behind the panel (no clipping anywhere).
-    const zHang = backZ - gap - rzBase;
-    const spine = (u: number) => ({
-      y: mouthY + (tipY - mouthY) * u,
-      z: zHang,
-    });
+    const backAtY = (y: number) => {
+      let b = Math.round(((y - pyLo) / (pyHi - pyLo)) * yBins);
+      b = Math.max(0, Math.min(yBins - 1, b));
+      return backBin[b];
+    };
+    const spine = (u: number) => {
+      const y = mouthY + (tipY - mouthY) * u;
+      return { y, z: backAtY(y) - gap - rzBase };
+    };
 
     const rings: number[][] = [];
     for (let i = 0; i <= HOOD_RINGS; i += 1) {
@@ -539,6 +546,39 @@ function buildTopGeometry(
         const d = rings[i + 1][j];
         const e = rings[i + 1][jn];
         indices.push(a, d, b, b, d, e);
+      }
+    }
+
+    // Collar bridge: a short fabric gusset sewing the hood to the neckline so
+    // it doesn't float. It lofts from the real back-neckline arc up to the
+    // FRONT rim of the mouth (the edge nearest the body), leaving the mouth
+    // itself open and level. The mouth's front half spans angle a in [pi, 2pi]
+    // (the +z side), mapped left->back->right to match the arc.
+    const zMouthCentre = spine(0).z;
+    const BR = 4;
+    const bridge: number[][] = [];
+    for (let m = 0; m <= BR; m += 1) {
+      const tb = m / BR;
+      const row: number[] = [];
+      for (let k = 0; k < N; k += 1) {
+        const a = Math.PI + Math.PI * (k / (N - 1)); // front rim of the mouth
+        const mx = cx + rxBase * Math.cos(a);
+        const mz = zMouthCentre - rzBase * Math.sin(a);
+        const anchor = arc[k];
+        const x = anchor.x + (mx - anchor.x) * tb;
+        const y = anchor.y + (mouthY - anchor.y) * tb;
+        const z = anchor.z + (mz - anchor.z) * tb;
+        row.push(pushVertex(x, y, z, k / (N - 1), tb));
+      }
+      bridge.push(row);
+    }
+    for (let m = 0; m < BR; m += 1) {
+      for (let k = 0; k < N - 1; k += 1) {
+        const a = bridge[m][k];
+        const b = bridge[m][k + 1];
+        const d = bridge[m + 1][k];
+        const e = bridge[m + 1][k + 1];
+        indices.push(a, b, d, b, e, d);
       }
     }
   };
