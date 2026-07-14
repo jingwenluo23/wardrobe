@@ -157,9 +157,10 @@ function buildTopGeometry(
       return 1;
     }
     const t = (y - underarmY) / (neckShoulderY - underarmY);
-    // Draw front and back closer at the very top so the shoulder reads as a
-    // rounded ridge rather than a flat-topped deck between the panels.
-    return 1 - 0.9 * smoothstep(t);
+    // Keep a real front/back gap at the top: the shoulder arch spans that gap,
+    // so leaving it wider gives the arch a bigger radius and the shoulder a
+    // full rounded top instead of a pinched flat ridge.
+    return 1 - 0.62 * smoothstep(t);
   };
 
   // Front/back separation along the armhole edge: zero at the underarm and
@@ -556,27 +557,26 @@ function buildTopGeometry(
         const a = (2 * Math.PI * j) / N; // closed loop
         const wx = rx * Math.cos(a);
         const depthOff = rz * Math.sin(a);
-        const px = cx + wx;
+        let px = cx + wx;
         let py = c.y + depthOff * dy;
         let pz = c.z + depthOff * dz;
-        // Extend the FRONT edge of the hood down/forward onto the neckline so
-        // the hood's own fabric meets the collar (no separate bridge piece).
-        // Strongest at the mouth's front-centre, fading around to the sides and
-        // down the first part of the tube.
+        // Extend the hood's OWN front edge down onto the neckline (no extra
+        // collar piece). The front half of each upper ring maps 1:1 onto the
+        // neckline arc (left end -> left shoulder ... right end -> right
+        // shoulder) and is pulled toward it in x, y AND z together, so the
+        // fabric forms one smooth curtain — mapping by nearest-x snapped many
+        // vertices onto the same arc end and produced crossing spikes that
+        // poked through the back.
         const frontness = Math.max(0, -Math.sin(a));
-        const pull = frontness * (1 - smoothstep(Math.min(1, t / 0.35)));
+        const pull =
+          smoothstep(frontness) * (1 - smoothstep(Math.min(1, t / 0.35)));
         if (pull > 0) {
-          let best = arc[0];
-          let bestD = Infinity;
-          for (const p of arc) {
-            const d = Math.abs(p.x - px);
-            if (d < bestD) {
-              bestD = d;
-              best = p;
-            }
-          }
-          py += (best.y - py) * pull;
-          pz += (best.z - pz) * pull;
+          const f = (a - Math.PI) / Math.PI; // 0..1 across the front half
+          const k = Math.min(N - 1, Math.max(0, Math.round(f * (N - 1))));
+          const anchor = arc[k];
+          px += (anchor.x - px) * pull;
+          py += (anchor.y - py) * pull;
+          pz += (anchor.z - pz) * pull;
         }
         ring.push(pushVertex(px, py, pz, j / N, t));
       }
