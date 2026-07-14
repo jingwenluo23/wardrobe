@@ -307,7 +307,9 @@ function buildTopGeometry(
     // the shoulder reads as a smooth rounded tube from above, not a flat deck
     // or a peaked crease.
     const ARCN = 5;
-    const domeScale = 1.0; // 1.0 = semicircle over the front/back gap
+    // Low ellipse, not a semicircle: the shoulder rounds over without bulging
+    // above the hood base — the seam crowns gently at collar height.
+    const domeScale = 0.45;
     const cols: number[] = [];
     const arches: Record<number, number[]> = {};
     for (let c = 0; c <= COLS; c += 1) {
