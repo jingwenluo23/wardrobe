@@ -159,7 +159,7 @@ function buildTopGeometry(
     const t = (y - underarmY) / (neckShoulderY - underarmY);
     // Draw front and back closer at the very top so the shoulder reads as a
     // rounded ridge rather than a flat-topped deck between the panels.
-    return 1 - 0.8 * smoothstep(t);
+    return 1 - 0.9 * smoothstep(t);
   };
 
   // Front/back separation along the armhole edge: zero at the underarm and
@@ -301,41 +301,68 @@ function buildTopGeometry(
   // shoulder point through a slightly raised midline, so the seam is a soft
   // rounded roll rather than a flat crease. The neckline stays open.
   {
-    const seamRise = 1.15 * SCALE; // domes the seam so the shoulder rounds over
-    const shoulderMid: Record<number, number> = {};
+    // Bridge each column's front and back top edge with a rounded ARCH (a
+    // half-ellipse of ARCN segments) instead of a single raised midline, so
+    // the shoulder reads as a smooth rounded tube from above, not a flat deck
+    // or a peaked crease.
+    const ARCN = 5;
+    const domeScale = 1.0; // 1.0 = semicircle over the front/back gap
+    const cols: number[] = [];
+    const arches: Record<number, number[]> = {};
     for (let c = 0; c <= COLS; c += 1) {
       const s = Math.abs(c / COLS - 0.5) * 2;
-      // Start one column inside the neck arc so the bridge overlaps the
-      // neck trim; otherwise the straddling quad belongs to neither and
-      // leaves a slit at the neckline.
       if (s < neckFrac - 2.5 / COLS) {
-        continue;
+        continue; // neckline stays open
       }
-      // The rounded roll fades out toward the shoulder tip, where the sleeve
-      // cap takes over — a full-height ridge there sticks up as a loose fin.
-      const rise = seamRise * (1 - smoothstep((s - 0.78) / 0.22));
+      // Fade the dome height out toward the shoulder tip where the sleeve cap
+      // takes over, so it doesn't stick up as a fin.
+      const fade = 1 - smoothstep((s - 0.78) / 0.22);
       const fi = (frontBase + topRow + c) * 3;
       const bi = (backBase + topRow + c) * 3;
-      shoulderMid[c] = pushVertex(
-        (positions[fi] + positions[bi]) / 2,
-        (positions[fi + 1] + positions[bi + 1]) / 2 + rise,
-        (positions[fi + 2] + positions[bi + 2]) / 2,
-        c / COLS,
-        1,
-      );
-    }
-    for (let c = 0; c < COLS; c += 1) {
-      const m0 = shoulderMid[c];
-      const m1 = shoulderMid[c + 1];
-      if (m0 === undefined || m1 === undefined) {
-        continue;
+      const fx = positions[fi];
+      const fy = positions[fi + 1];
+      const fz = positions[fi + 2];
+      const bx = positions[bi];
+      const by = positions[bi + 1];
+      const bz = positions[bi + 2];
+      const half = Math.abs(fz - bz) / 2; // radius of the arch
+      const arch: number[] = [];
+      for (let p = 1; p < ARCN; p += 1) {
+        const tp = p / ARCN;
+        const rise = half * domeScale * fade * Math.sin(Math.PI * tp);
+        arch.push(
+          pushVertex(
+            fx + (bx - fx) * tp,
+            fy + (by - fy) * tp + rise,
+            fz + (bz - fz) * tp,
+            c / COLS,
+            1,
+          ),
+        );
       }
+      arches[c] = arch;
+      cols.push(c);
+    }
+    for (let ci = 0; ci < cols.length - 1; ci += 1) {
+      const c = cols[ci];
+      if (cols[ci + 1] !== c + 1) {
+        continue; // only bridge adjacent columns
+      }
+      const a0 = arches[c];
+      const a1 = arches[c + 1];
       const f0 = frontBase + topRow + c;
       const f1 = frontBase + topRow + c + 1;
       const b0 = backBase + topRow + c;
       const b1 = backBase + topRow + c + 1;
-      indices.push(f0, f1, m0, f1, m1, m0);
-      indices.push(m0, m1, b0, m1, b1, b0);
+      // front edge -> first arch point
+      indices.push(f0, f1, a0[0], f1, a1[0], a0[0]);
+      // arch interior
+      for (let p = 0; p < a0.length - 1; p += 1) {
+        indices.push(a0[p], a1[p], a0[p + 1], a1[p], a1[p + 1], a0[p + 1]);
+      }
+      // last arch point -> back edge
+      const last = a0.length - 1;
+      indices.push(a0[last], a1[last], b0, a1[last], b1, b0);
     }
   }
 
@@ -572,8 +599,18 @@ function buildTopGeometry(
       }
       bridge.push(row);
     }
+    // Only sew the LEFT and RIGHT ends of the collar to the hood; leave the
+    // centre-back span open so the mouth reads as one continuous opening
+    // (fabric tabs at the sides, a gap in the middle), like a real dropped hood.
+    const sideFrac = 0.3;
     for (let m = 0; m < BR; m += 1) {
       for (let k = 0; k < N - 1; k += 1) {
+        const f0 = k / (N - 1);
+        const f1 = (k + 1) / (N - 1);
+        const onSide = (f: number) => f < sideFrac || f > 1 - sideFrac;
+        if (!onSide(f0) || !onSide(f1)) {
+          continue; // skip the centre span
+        }
         const a = bridge[m][k];
         const b = bridge[m][k + 1];
         const d = bridge[m + 1][k];
