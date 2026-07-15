@@ -573,27 +573,41 @@ function buildTopGeometry(
         // fabric forms one smooth curtain — mapping by nearest-x snapped many
         // vertices onto the same arc end and produced crossing spikes that
         // poked through the back.
-        const frontness = Math.max(0, -Math.sin(a));
-        const pull =
-          smoothstep(frontness) * (1 - smoothstep(Math.min(1, t / 0.35)));
-        // Anchor on the neckline arc, mapped 1:1 across the front half (side
-        // vertices clamp to the arc ends at the shoulders).
+        const sinA = Math.sin(a);
+        const rowFade = 1 - smoothstep(Math.min(1, t / 0.32));
+        // Weld the WHOLE front half of the upper rings onto the neckline arc
+        // (mapped 1:1, left rim end -> left shoulder ... right rim end ->
+        // right shoulder). With the front rim ON the seam there is no apron
+        // shelf standing in front of the mouth — no "front collar".
         const f = Math.min(1, Math.max(0, (a - Math.PI) / Math.PI));
-        const anchor = arc[Math.min(N - 1, Math.max(0, Math.round(f * (N - 1))))];
-        if (pull > 0) {
-          px += (anchor.x - px) * pull;
-          py += (anchor.y - py) * pull;
-          pz += (anchor.z - pz) * pull;
-        }
-        // A dropped hood's front/side fabric FOLDS DOWN over the neckline
-        // seam — it never stands above it. Cap the front half and the side
-        // walls of the upper rings at the local seam height so nothing rises
-        // above the neckline (only the centre-back cowl edge stays up).
-        if (Math.sin(a) < 0.25) {
-          const capY = anchor.y + 0.8 * SCALE;
-          const capBlend = 1 - smoothstep(Math.max(0, t - 0.25) / 0.2);
-          if (py > capY && capBlend > 0) {
-            py -= (py - capY) * capBlend;
+        // Interpolate along the arc (snapping to the nearest point serrates
+        // the welded rim).
+        const fIdx = f * (N - 1);
+        const i0 = Math.floor(fIdx);
+        const i1 = Math.min(N - 1, i0 + 1);
+        const it = fIdx - i0;
+        const anchor = {
+          x: arc[i0].x + (arc[i1].x - arc[i0].x) * it,
+          y: arc[i0].y + (arc[i1].y - arc[i0].y) * it,
+          z: arc[i0].z + (arc[i1].z - arc[i0].z) * it,
+        };
+        if (sinA < 0 && rowFade > 0) {
+          px += (anchor.x - px) * rowFade;
+          py += (anchor.y - py) * rowFade;
+          pz += (anchor.z - pz) * rowFade;
+        } else if (sinA >= 0) {
+          // Gather the narrow side bands of the back half onto the SHOULDER
+          // ends so the hood's left/right edges connect to the shoulder line.
+          // Anchored per side (right band -> right shoulder, left -> left);
+          // anchoring across the centre is what tore the tube before.
+          const sideW =
+            (1 - smoothstep(Math.min(1, Math.abs(sinA) / 0.3))) * rowFade;
+          if (sideW > 0) {
+            const sAnchor =
+              a < Math.PI / 2 || a > 1.5 * Math.PI ? arc[N - 1] : arc[0];
+            px += (sAnchor.x - px) * sideW;
+            py += (sAnchor.y - py) * sideW;
+            pz += (sAnchor.z - pz) * sideW;
           }
         }
         ring.push(pushVertex(px, py, pz, j / N, t));
