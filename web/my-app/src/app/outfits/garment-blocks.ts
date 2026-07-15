@@ -974,20 +974,30 @@ function buildTopGeometry(
       previousRing = ring;
     }
 
+    // Cuffs continue along the sleeve's END tangent — the sleeve droops as it
+    // descends, so extending along the average axis would kink the cuff off
+    // at an angle from the wrist.
+    const dEnd = droopAt(1);
+    const endAxis = new THREE.Vector3(
+      side * Math.cos(dEnd),
+      -Math.sin(dEnd),
+      0,
+    );
+
     // Optional ribbed cuff: a short, snugger band past the sleeve end.
     if (features.cuff === "ribbed" && previousRing) {
       const cuffLen = 3 * SCALE * trimScale;
       const cuffScale = taper * 0.8;
       const endCenter = ringCenter.clone();
       const rib1 = emitRing(
-        endCenter.clone().addScaledVector(axis, cuffLen * 0.15),
+        endCenter.clone().addScaledVector(endAxis, cuffLen * 0.15),
         cuffScale,
         1,
         1,
       );
       stitchRings(previousRing, rib1);
       const rib2 = emitRing(
-        endCenter.clone().addScaledVector(axis, cuffLen),
+        endCenter.clone().addScaledVector(endAxis, cuffLen),
         cuffScale,
         1,
         1,
@@ -1005,14 +1015,14 @@ function buildTopGeometry(
       // Sharp gather where the blousy sleeve pleats into the band, with a
       // raised fold ridge so the cuff seam reads clearly even textured.
       const gather = emitRing(
-        endCenter.clone().addScaledVector(axis, 0.4 * SCALE),
+        endCenter.clone().addScaledVector(endAxis, 0.4 * SCALE),
         cuffScale,
         1,
         1,
       );
       stitchRings(previousRing, gather);
       const ridge = emitRing(
-        endCenter.clone().addScaledVector(axis, 1.1 * SCALE),
+        endCenter.clone().addScaledVector(endAxis, 1.1 * SCALE),
         cuffScale * 1.07,
         1,
         1,
@@ -1020,7 +1030,7 @@ function buildTopGeometry(
       stitchRings(gather, ridge);
       // Straight crisp band to the wrist edge.
       const band = emitRing(
-        endCenter.clone().addScaledVector(axis, cuffLen),
+        endCenter.clone().addScaledVector(endAxis, cuffLen),
         cuffScale * 0.98,
         1,
         1,
@@ -1040,7 +1050,7 @@ function buildTopGeometry(
       const ax2 = positions[anchor * 3];
       const ay2 = positions[anchor * 3 + 1];
       const az2 = positions[anchor * 3 + 2];
-      const along = axis.clone().normalize();
+      const along = endAxis.clone().normalize();
       const perp = new THREE.Vector3()
         .crossVectors(along, new THREE.Vector3(0, 0, 1))
         .normalize();
