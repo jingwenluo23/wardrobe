@@ -50,6 +50,9 @@ export type GarmentFeatures = {
    *  jersey = light knit (default), fleece = thick sweatshirt fabric,
    *  knit = chunky visible-rib sweater knit. */
   fabric?: "jersey" | "fleece" | "knit";
+  /** Fitted silhouette: pinch the torso at the waist (0 = straight cut,
+   *  ~0.12 = women's fitted shirt) so chest and hip read fuller. */
+  waistPinch?: number;
 };
 
 export const defaultTeeFeatures: GarmentFeatures = {

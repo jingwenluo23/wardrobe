@@ -50,6 +50,7 @@ function wovenShirtPresets(): GarmentTemplateDef[] {
     id,
     label,
     category: "Tops",
+    gender: "male",
     params: {
       ...defaultTeeParams,
       ...longSleeve,
@@ -69,7 +70,25 @@ function wovenShirtPresets(): GarmentTemplateDef[] {
       placket: "full",
     },
   });
-  return [
+  // Women's cut: same construction (collar, placket, barrel cuffs), fitted
+  // silhouette — pinched waist so chest and hip read fuller, slightly
+  // narrower shoulders and shorter body.
+  const makeFitted = (base: GarmentTemplateDef): GarmentTemplateDef => ({
+    ...base,
+    id: base.id + "-f",
+    gender: "female",
+    params: {
+      ...base.params,
+      bodyWidth: base.params.bodyWidth - 4,
+      bodyLength: base.params.bodyLength - 4,
+      shoulderWidthFactor: 0.76,
+    },
+    features: {
+      ...base.features,
+      waistPinch: 0.13,
+    },
+  });
+  const straight = [
     make("top-dress-shirt", "Dress shirt", { bodyWidth: 52 }),
     make("top-casual-shirt", "Casual shirt"),
     make("top-flannel-shirt", "Flannel shirt", { bodyWidth: 56, bodyDepth: 24 }),
@@ -77,6 +96,7 @@ function wovenShirtPresets(): GarmentTemplateDef[] {
     make("top-oxford-shirt", "Oxford shirt", { bodyWidth: 53 }),
     make("top-button-down-shirt", "Button-down shirt", { bodyWidth: 53 }),
   ];
+  return [...straight, ...straight.map(makeFitted)];
 }
 
 /**

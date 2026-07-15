@@ -139,11 +139,23 @@ function buildTopGeometry(
   // Panel half-width as a function of height. Below the underarm this is the
   // (slightly tapered) side seam; above it, the concave armhole curve pulls
   // the edge inward until it reaches the shoulder point.
+  // Fitted silhouette: a soft bell-shaped pinch centred on the natural
+  // waist, so the chest and hip read fuller against a narrower middle.
+  const waistPinch = features.waistPinch ?? 0;
+  const pinchAt = (y: number) => {
+    if (waistPinch <= 0 || y > underarmY) {
+      return 1;
+    }
+    const t = (y - hemY) / (underarmY - hemY);
+    const bell = Math.exp(-Math.pow((t - 0.48) / 0.24, 2));
+    return 1 - waistPinch * bell;
+  };
+
   const widthAt = (y: number) => {
     if (y <= underarmY) {
       // Gentle A-line: a touch wider at the hem than at the chest.
       const t = (y - hemY) / (underarmY - hemY);
-      return halfW * (1.03 - 0.03 * smoothstep(t));
+      return halfW * (1.03 - 0.03 * smoothstep(t)) * pinchAt(y);
     }
     const t = clamp((y - underarmY) / (shoulderPtY - underarmY), 0, 1);
     return halfW - (halfW - shoulderX) * smoothstep(t);
@@ -154,7 +166,9 @@ function buildTopGeometry(
   // reads as a narrow rounded ridge from above instead of a flat deck.
   const depthTaper = (y: number) => {
     if (y <= underarmY) {
-      return 1;
+      // The fitted waist pinches depth too (softer than width) so the
+      // silhouette stays rounded, not flattened.
+      return 1 - (1 - pinchAt(y)) * 0.6;
     }
     const t = (y - underarmY) / (neckShoulderY - underarmY);
     // Keep a real front/back gap at the top: the shoulder arch spans that gap,
