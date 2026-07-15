@@ -1012,8 +1012,8 @@ function buildTopGeometry(
       const cuffLen = 6 * SCALE;
       const cuffScale = taper * 0.8;
       const endCenter = ringCenter.clone();
-      // Sharp gather where the blousy sleeve pleats into the band, with a
-      // raised fold ridge so the cuff seam reads clearly even textured.
+      // Sharp gather where the blousy sleeve pleats into a clean, smooth
+      // band — no ridge line across the cuff.
       const gather = emitRing(
         endCenter.clone().addScaledVector(endAxis, 0.4 * SCALE),
         cuffScale,
@@ -1021,13 +1021,6 @@ function buildTopGeometry(
         1,
       );
       stitchRings(previousRing, gather);
-      const ridge = emitRing(
-        endCenter.clone().addScaledVector(endAxis, 1.1 * SCALE),
-        cuffScale * 1.07,
-        1,
-        1,
-      );
-      stitchRings(gather, ridge);
       // Straight crisp band to the wrist edge.
       const band = emitRing(
         endCenter.clone().addScaledVector(endAxis, cuffLen),
@@ -1035,7 +1028,7 @@ function buildTopGeometry(
         1,
         1,
       );
-      stitchRings(ridge, band);
+      stitchRings(gather, band);
       // Buttons sit on the front face of the cuff: anchor at the band's
       // front-most vertex, spaced along the sleeve axis.
       let anchor = gather[0];
