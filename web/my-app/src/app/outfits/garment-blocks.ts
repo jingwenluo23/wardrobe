@@ -1104,6 +1104,73 @@ function buildTopGeometry(
         );
       }
     }
+
+    // Collar points: per classic shirt construction, the fold-over extends
+    // past the stand's front ends into two triangular tips that angle down
+    // toward the placket and lie on the chest.
+    const frontRowEnd = Math.floor(loopCount / 2); // front row = first half
+    let jL = -1;
+    let jR = -1;
+    for (let j = 0; j < frontRowEnd; j += 1) {
+      if (thetas[j] <= -frontGap) {
+        jL = j; // last column left of the gap
+      }
+    }
+    for (let j = frontRowEnd - 1; j >= 0; j -= 1) {
+      if (thetas[j] >= frontGap) {
+        jR = j; // first column right of the gap
+      }
+    }
+    const mkPoint = (jEnd: number, sx: number) => {
+      if (jEnd < 0) {
+        return;
+      }
+      const base = neckLoop[jEnd];
+      const tipY = base.y - 3.4 * SCALE;
+      const tip = {
+        x: sx * 2.2 * SCALE,
+        y: tipY,
+        z: depth * 1.05 * depthTaper(tipY) + 0.35 * SCALE,
+      };
+      const EXT = 3;
+      const colIdx: number[][] = [];
+      for (let m = 0; m <= EXT; m += 1) {
+        const w = m / EXT;
+        const col: number[] = [];
+        for (let k = 1; k < stages.length; k += 1) {
+          if (m === 0) {
+            col.push(rings[k][jEnd]);
+          } else {
+            const bi = rings[k][jEnd] * 3;
+            col.push(
+              pushVertex(
+                positions[bi] + (tip.x - positions[bi]) * w,
+                positions[bi + 1] + (tip.y - positions[bi + 1]) * w,
+                positions[bi + 2] + (tip.z - positions[bi + 2]) * w,
+                0.5 + sx * 0.5 * w,
+                (k - 1) / 2,
+              ),
+            );
+          }
+        }
+        colIdx.push(col);
+      }
+      for (let m = 0; m < EXT; m += 1) {
+        for (let k = 0; k < 2; k += 1) {
+          const a = colIdx[m][k];
+          const b = colIdx[m + 1][k];
+          const d = colIdx[m][k + 1];
+          const e = colIdx[m + 1][k + 1];
+          if (sx > 0) {
+            indices.push(a, b, d, b, e, d);
+          } else {
+            indices.push(a, d, b, b, d, e);
+          }
+        }
+      }
+    };
+    mkPoint(jL, -1);
+    mkPoint(jR, 1);
   };
 
   // --- Block: placket ---------------------------------------------------------
