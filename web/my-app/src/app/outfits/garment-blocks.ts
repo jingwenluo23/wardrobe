@@ -1010,7 +1010,10 @@ function buildTopGeometry(
     // two on the band and one gauntlet button up the sleeve placket.
     if (features.cuff === "barrel" && previousRing) {
       const cuffLen = 6 * SCALE;
-      const cuffScale = taper * 0.8;
+      // Nearly the sleeve-end width: a real cuff is only slightly snugger
+      // than the sleeve it gathers out of — a drastic step reads as two
+      // mismatched tubes.
+      const cuffScale = taper * 0.94;
       const endCenter = ringCenter.clone();
       // Sharp gather where the blousy sleeve pleats into a clean, smooth
       // band — no ridge line across the cuff.
