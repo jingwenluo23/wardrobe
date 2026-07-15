@@ -15,7 +15,7 @@ import {
 } from "./garment-mesh";
 
 /** Bump when geometry/param semantics change so stored drafts can migrate. */
-export const GARMENT_TEMPLATE_VERSION = 2;
+export const GARMENT_TEMPLATE_VERSION = 3;
 
 export type Gender = "male" | "female";
 
@@ -296,7 +296,7 @@ function dressPresets(): GarmentTemplateDef[] {
         ...defaultTeeFeatures,
         neckFinish: "shirt-collar",
         placket: "full",
-        cuff: "ribbed",
+        cuff: "barrel",
         skirtLength: 46,
         skirtFlare: 0.3,
       },

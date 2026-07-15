@@ -23,6 +23,7 @@ import {
 } from "./garment-mesh";
 import {
   GARMENT_TEMPLATE_VERSION,
+  getTemplate,
   resolveTemplate,
   templateLabel,
 } from "./garment-templates";
@@ -590,6 +591,19 @@ function serializeDraft(stored: StoredDraft): ApiDraft {
     ? "Mesh ready"
     : STAGE_LABELS[activeIndex] ?? STAGE_LABELS[0];
 
+  // Drafts snapshot their template's params/features at creation. When the
+  // registry has moved on (new collars, cuffs, ...), refresh stale drafts
+  // from the current template so improvements reach existing wardrobe items.
+  let params = stored.params;
+  let features = stored.features;
+  if (stored.templateVersion !== GARMENT_TEMPLATE_VERSION) {
+    const current = getTemplate(stored.templateId);
+    if (current) {
+      params = current.params;
+      features = current.features;
+    }
+  }
+
   const mesh: DraftMesh | undefined = isReady
     ? {
         assetUrl: "db://" + stored.id,
@@ -597,8 +611,8 @@ function serializeDraft(stored: StoredDraft): ApiDraft {
         template: stored.templateId,
         templateLabel: templateLabel(stored.templateId),
         templateVersion: stored.templateVersion,
-        params: stored.params,
-        features: stored.features,
+        params,
+        features,
         segmentation: { confidence: stored.segmentationConfidence },
         extractedTextureUrl: stored.extractedTextureUrl,
         extractedBackTextureUrl: stored.extractedBackTextureUrl,
@@ -606,7 +620,7 @@ function serializeDraft(stored: StoredDraft): ApiDraft {
         sleeveTextureUrl: stored.sleeveTextureUrl,
         hoodTextureUrl: stored.hoodTextureUrl,
         color: stored.color,
-        bounds: boundsFromParams(stored.params, stored.features),
+        bounds: boundsFromParams(params, features),
       }
     : undefined;
 
