@@ -999,25 +999,33 @@ function buildTopGeometry(
     // slightly snugger straight band at the wrist, finished with buttons —
     // two on the band and one gauntlet button up the sleeve placket.
     if (features.cuff === "barrel" && previousRing) {
-      const cuffLen = 5.5 * SCALE;
-      const cuffScale = taper * 0.86;
+      const cuffLen = 6 * SCALE;
+      const cuffScale = taper * 0.8;
       const endCenter = ringCenter.clone();
-      // Quick pinch where the blousy sleeve gathers into the band.
+      // Sharp gather where the blousy sleeve pleats into the band, with a
+      // raised fold ridge so the cuff seam reads clearly even textured.
       const gather = emitRing(
-        endCenter.clone().addScaledVector(axis, 0.5 * SCALE),
+        endCenter.clone().addScaledVector(axis, 0.4 * SCALE),
         cuffScale,
         1,
         1,
       );
       stitchRings(previousRing, gather);
-      // Straight band to the wrist edge.
-      const band = emitRing(
-        endCenter.clone().addScaledVector(axis, cuffLen),
-        cuffScale * 0.985,
+      const ridge = emitRing(
+        endCenter.clone().addScaledVector(axis, 1.1 * SCALE),
+        cuffScale * 1.07,
         1,
         1,
       );
-      stitchRings(gather, band);
+      stitchRings(gather, ridge);
+      // Straight crisp band to the wrist edge.
+      const band = emitRing(
+        endCenter.clone().addScaledVector(axis, cuffLen),
+        cuffScale * 0.98,
+        1,
+        1,
+      );
+      stitchRings(ridge, band);
       // Buttons sit on the front face of the cuff: anchor at the band's
       // front-most vertex, spaced along the sleeve axis.
       let anchor = gather[0];
@@ -1036,11 +1044,11 @@ function buildTopGeometry(
       const perp = new THREE.Vector3()
         .crossVectors(along, new THREE.Vector3(0, 0, 1))
         .normalize();
-      const bh = 0.55 * SCALE;
+      const bh = 0.8 * SCALE;
       const mkButton = (dist: number) => {
         const cx2 = ax2 + along.x * dist;
         const cy2 = ay2 + along.y * dist;
-        const cz2 = az2 + 0.18 * SCALE;
+        const cz2 = az2 + 0.3 * SCALE;
         const a2 = pushVertex(
           cx2 - perp.x * bh - along.x * bh,
           cy2 - perp.y * bh - along.y * bh,
