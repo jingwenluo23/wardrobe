@@ -1029,23 +1029,54 @@ function buildTopGeometry(
     if (loopCount < 4) {
       return;
     }
-    const stages: Array<[number, number]> = [
-      [0, 1], // rim
-      [standH, 0.96], // stand
-      [standH - foldDrop * 0.35, foldScale * 0.55 + 0.45], // roll
-      [standH - foldDrop, foldScale], // fold-over edge
+    // Loop centre and extents, for rounding the collar toward an ellipse —
+    // the raw neck opening is nearly rectangular, and scaling it directly
+    // makes the folded collar read as a square box.
+    let ccx = 0;
+    let ccz = 0;
+    for (const q of neckLoop) {
+      ccx += q.x;
+      ccz += q.z;
+    }
+    ccx /= loopCount;
+    ccz /= loopCount;
+    let ex = 0;
+    let ez = 0;
+    for (const q of neckLoop) {
+      ex = Math.max(ex, Math.abs(q.x - ccx));
+      ez = Math.max(ez, Math.abs(q.z - ccz));
+    }
+    // [rise, scale, roundness]: the stand keeps the neckline shape, the
+    // fold-over is fully rounded so the collar drapes as a soft oval.
+    const stages: Array<[number, number, number]> = [
+      [0, 1, 0], // rim
+      [standH, 0.97, 0.3], // stand
+      [standH - foldDrop * 0.35, foldScale * 0.55 + 0.45, 0.75], // roll
+      [standH - foldDrop, foldScale, 1], // fold-over edge
     ];
     const rings: number[][] = [];
+    const thetas: number[] = [];
+    for (let j = 0; j < loopCount; j += 1) {
+      const q = neckLoop[j];
+      // Angle from the front centre (+z), for the front opening.
+      thetas.push(Math.atan2(q.x - ccx, q.z - ccz));
+    }
     for (let k = 0; k < stages.length; k += 1) {
-      const [rise, scale] = stages[k];
+      const [rise, scale, round] = stages[k];
       const ring: number[] = [];
       for (let j = 0; j < loopCount; j += 1) {
         const q = neckLoop[j];
+        const ang = thetas[j];
+        // Blend the raw loop point toward its ellipse projection.
+        const rxp = ccx + Math.sin(ang) * ex;
+        const rzp = ccz + Math.cos(ang) * ez;
+        const bx = q.x + (rxp - q.x) * round;
+        const bz = q.z + (rzp - q.z) * round;
         ring.push(
           pushVertex(
-            q.x * scale,
+            ccx + (bx - ccx) * scale,
             q.y + rise * SCALE,
-            q.z * scale,
+            ccz + (bz - ccz) * scale,
             j / loopCount,
             k / (stages.length - 1),
           ),
@@ -1053,9 +1084,16 @@ function buildTopGeometry(
       }
       rings.push(ring);
     }
+    // Stitch, leaving the collar OPEN at the front centre (a real shirt
+    // collar's ends meet the placket with a notch — it is not a continuous
+    // wall across the front).
+    const frontGap = 0.38; // half-angle of the front opening (rad)
     for (let k = 0; k < rings.length - 1; k += 1) {
       for (let j = 0; j < loopCount; j += 1) {
         const jn = (j + 1) % loopCount;
+        if (Math.abs(thetas[j]) < frontGap && Math.abs(thetas[jn]) < frontGap) {
+          continue;
+        }
         indices.push(
           rings[k][j],
           rings[k][jn],
@@ -1072,8 +1110,10 @@ function buildTopGeometry(
   // A raised button strip down the centre front: polo half-placket or a full
   // button front (shirts, cardigans), with small button bumps.
   const buildPlacket = (half: boolean) => {
-    const stripHalf = 1.6 * SCALE;
-    const raise = 0.7 * SCALE;
+    // A soft, low strip: narrow, barely raised, with chamfered edges so it
+    // reads as a sewn button band pressed into the front, not a box glued on.
+    const stripHalf = 1.25 * SCALE;
+    const raise = 0.3 * SCALE;
     const yTop = topEdgeY(0, neckDropF) + 0.4 * SCALE;
     const yBottom = half ? yTop - 16 * SCALE : hemY + 0.5 * SCALE;
     const rows = 14;
@@ -1085,8 +1125,8 @@ function buildTopGeometry(
       const zSurf = frontZ(y);
       const v = r / rows;
       cols[0].push(pushVertex(-stripHalf, y, zSurf, 0, v));
-      cols[1].push(pushVertex(-stripHalf, y, zSurf + raise, 0.05, v));
-      cols[2].push(pushVertex(stripHalf, y, zSurf + raise, 0.1, v));
+      cols[1].push(pushVertex(-stripHalf * 0.55, y, zSurf + raise, 0.05, v));
+      cols[2].push(pushVertex(stripHalf * 0.55, y, zSurf + raise, 0.1, v));
       cols[3].push(pushVertex(stripHalf, y, zSurf, 0.15, v));
     }
     for (let c = 0; c < 3; c += 1) {
@@ -1130,7 +1170,8 @@ function buildTopGeometry(
   } else if (features.neckFinish === "polo-collar") {
     buildFoldedCollar(2.6, 1.32, 1.8);
   } else if (features.neckFinish === "shirt-collar") {
-    buildFoldedCollar(3.2, 1.5, 2.6);
+    // Lower stand, flatter fold: a relaxed casual-shirt collar.
+    buildFoldedCollar(2.8, 1.42, 3.0);
   } else {
     buildNeckband();
   }
