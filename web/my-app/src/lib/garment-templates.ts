@@ -64,7 +64,7 @@ function wovenShirtPresets(): GarmentTemplateDef[] {
     features: {
       neckFinish: "shirt-collar",
       hemBand: false,
-      cuff: "ribbed",
+      cuff: "barrel",
       sleeveTaper: 0.6,
       placket: "full",
     },

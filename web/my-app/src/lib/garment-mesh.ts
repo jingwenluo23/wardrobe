@@ -26,8 +26,9 @@ export type GarmentFeatures = {
   patchPockets?: boolean;
   /** Ribbed sweatshirt-style band at the bottom hem. */
   hemBand: boolean;
-  /** Sleeve/leg-end finish: raw edge or a snug ribbed cuff (joggers). */
-  cuff: "raw" | "ribbed";
+  /** Sleeve/leg-end finish: raw edge, a snug ribbed cuff (joggers), or a
+   *  buttoned barrel cuff (woven shirts). */
+  cuff: "raw" | "ribbed" | "barrel";
   /** Sleeve width at the opening relative to the root (1 = straight tube). */
   sleeveTaper: number;
   /** Front placket strip with buttons: polo half-placket or full button front. */

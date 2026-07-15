@@ -994,6 +994,88 @@ function buildTopGeometry(
       );
       stitchRings(rib1, rib2);
     }
+
+    // Barrel cuff (woven button shirts): the sleeve gathers into a crisp,
+    // slightly snugger straight band at the wrist, finished with buttons —
+    // two on the band and one gauntlet button up the sleeve placket.
+    if (features.cuff === "barrel" && previousRing) {
+      const cuffLen = 5.5 * SCALE;
+      const cuffScale = taper * 0.86;
+      const endCenter = ringCenter.clone();
+      // Quick pinch where the blousy sleeve gathers into the band.
+      const gather = emitRing(
+        endCenter.clone().addScaledVector(axis, 0.5 * SCALE),
+        cuffScale,
+        1,
+        1,
+      );
+      stitchRings(previousRing, gather);
+      // Straight band to the wrist edge.
+      const band = emitRing(
+        endCenter.clone().addScaledVector(axis, cuffLen),
+        cuffScale * 0.985,
+        1,
+        1,
+      );
+      stitchRings(gather, band);
+      // Buttons sit on the front face of the cuff: anchor at the band's
+      // front-most vertex, spaced along the sleeve axis.
+      let anchor = gather[0];
+      let bestZ = -Infinity;
+      for (const vi of gather) {
+        const z = positions[vi * 3 + 2];
+        if (z > bestZ) {
+          bestZ = z;
+          anchor = vi;
+        }
+      }
+      const ax2 = positions[anchor * 3];
+      const ay2 = positions[anchor * 3 + 1];
+      const az2 = positions[anchor * 3 + 2];
+      const along = axis.clone().normalize();
+      const perp = new THREE.Vector3()
+        .crossVectors(along, new THREE.Vector3(0, 0, 1))
+        .normalize();
+      const bh = 0.55 * SCALE;
+      const mkButton = (dist: number) => {
+        const cx2 = ax2 + along.x * dist;
+        const cy2 = ay2 + along.y * dist;
+        const cz2 = az2 + 0.18 * SCALE;
+        const a2 = pushVertex(
+          cx2 - perp.x * bh - along.x * bh,
+          cy2 - perp.y * bh - along.y * bh,
+          cz2,
+          0,
+          0,
+        );
+        const b2 = pushVertex(
+          cx2 + perp.x * bh - along.x * bh,
+          cy2 + perp.y * bh - along.y * bh,
+          cz2,
+          0.02,
+          0,
+        );
+        const c2 = pushVertex(
+          cx2 + perp.x * bh + along.x * bh,
+          cy2 + perp.y * bh + along.y * bh,
+          cz2,
+          0.02,
+          0.02,
+        );
+        const d2 = pushVertex(
+          cx2 - perp.x * bh + along.x * bh,
+          cy2 - perp.y * bh + along.y * bh,
+          cz2,
+          0,
+          0.02,
+        );
+        indices.push(a2, b2, c2, a2, c2, d2);
+        indices.push(a2, c2, b2, a2, d2, c2);
+      };
+      mkButton(1.6 * SCALE); // cuff button
+      mkButton(3.9 * SCALE); // second cuff button
+      mkButton(-3.5 * SCALE); // gauntlet button up the sleeve placket
+    }
   };
 
   // --- Block: turtleneck ------------------------------------------------------
