@@ -297,6 +297,30 @@ function buildTopGeometry(
 
   const topRow = ROWS * panelStride;
 
+  // Round the neck opening in plan view. The raw panel top edges leave a
+  // near-square hole: straight front/back edges meeting the side columns at
+  // hard corners. Pull the top-edge depth toward the centreline as the
+  // columns approach the neck sides (elliptical profile), and feather the
+  // row below so the opening wall stays smooth. The neckLoop (and therefore
+  // the collar, neckband and hood) is built from these vertices, so every
+  // neck finish inherits the rounded opening.
+  for (let c = 0; c <= COLS; c += 1) {
+    const s = (Math.abs(c / COLS - 0.5) * 2) / neckFrac;
+    if (s > 1) {
+      continue;
+    }
+    const round = Math.sqrt(Math.max(0, 1 - s * s));
+    const k = 0.22 + 0.78 * round;
+    const fi = (frontBase + topRow + c) * 3;
+    const bi = (backBase + topRow + c) * 3;
+    positions[fi + 2] *= k;
+    positions[bi + 2] *= k;
+    const fi2 = (frontBase + (ROWS - 1) * panelStride + c) * 3;
+    const bi2 = (backBase + (ROWS - 1) * panelStride + c) * 3;
+    positions[fi2 + 2] *= (1 + k) / 2;
+    positions[bi2 + 2] *= (1 + k) / 2;
+  }
+
   // --- Block: shoulder seam ----------------------------------------------
   // Bridge the front and back top edges between the neck edge and the
   // shoulder point through a slightly raised midline, so the seam is a soft
