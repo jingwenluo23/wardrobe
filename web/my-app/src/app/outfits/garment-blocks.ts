@@ -1113,23 +1113,55 @@ function buildTopGeometry(
     if (loopCount < 4) {
       return;
     }
+    // Loop centre and extents, to round the tube toward an ellipse — the raw
+    // neck opening is squarish, and a turtleneck must read as a smooth round
+    // funnel, not a boxy chimney.
+    let ccx = 0;
+    let ccz = 0;
+    for (const q of neckLoop) {
+      ccx += q.x;
+      ccz += q.z;
+    }
+    ccx /= loopCount;
+    ccz /= loopCount;
+    let ex = 0;
+    let ez = 0;
+    for (const q of neckLoop) {
+      ex = Math.max(ex, Math.abs(q.x - ccx));
+      ez = Math.max(ez, Math.abs(q.z - ccz));
+    }
+    // The neckline slopes up toward the shoulders; a roll neck's top edge is
+    // LEVEL, so the upper rings blend to a flat height (the neckline's high
+    // point) instead of inheriting the slope as raised side "ears".
+    let ccy = -Infinity;
+    for (const q of neckLoop) {
+      ccy = Math.max(ccy, q.y);
+    }
     const rings: number[][] = [];
-    const stages: Array<[number, number]> = [
-      [0, 1], // rim
-      [5, 0.97],
-      [8.5, 0.99],
-      [10, 1.04], // folded-over lip
+    // [rise, scale, roundness, level]: welded to the real neckline at the
+    // rim, fully elliptical and level by mid-height.
+    const stages: Array<[number, number, number, number]> = [
+      [0, 1, 0, 0], // rim
+      [5, 0.97, 0.75, 0.8],
+      [8.5, 0.99, 1, 1],
+      [10, 1.04, 1, 1], // folded-over lip
     ];
     for (let k = 0; k < stages.length; k += 1) {
-      const [rise, scale] = stages[k];
+      const [rise, scale, round, level] = stages[k];
       const ring: number[] = [];
       for (let j = 0; j < loopCount; j += 1) {
         const q = neckLoop[j];
+        const ang = Math.atan2(q.x - ccx, q.z - ccz);
+        const rxp = ccx + Math.sin(ang) * ex;
+        const rzp = ccz + Math.cos(ang) * ez;
+        const bx = q.x + (rxp - q.x) * round;
+        const bz = q.z + (rzp - q.z) * round;
+        const by = q.y + (ccy - q.y) * level + rise * SCALE;
         ring.push(
           pushVertex(
-            q.x * scale,
-            q.y + rise * SCALE,
-            q.z * scale,
+            ccx + (bx - ccx) * scale,
+            by,
+            ccz + (bz - ccz) * scale,
             j / loopCount,
             k / (stages.length - 1),
           ),

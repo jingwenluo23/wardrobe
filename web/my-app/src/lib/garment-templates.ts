@@ -429,7 +429,9 @@ export const garmentTemplates: GarmentTemplateDef[] = [
     features: {
       neckFinish: "turtleneck",
       hemBand: false,
-      cuff: "ribbed",
+      // Straight sleeve end — the chunky ribbed band belongs to hoodies and
+      // pullovers only.
+      cuff: "raw",
       sleeveTaper: 0.58,
       fabric: "knit",
     },
