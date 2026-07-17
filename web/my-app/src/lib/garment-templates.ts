@@ -417,6 +417,7 @@ export const garmentTemplates: GarmentTemplateDef[] = [
     id: "top-turtleneck",
     label: "Turtleneck / roll neck",
     category: "Tops",
+    gender: "male",
     params: {
       ...defaultTeeParams,
       ...longSleeve,
@@ -434,6 +435,34 @@ export const garmentTemplates: GarmentTemplateDef[] = [
       cuff: "raw",
       sleeveTaper: 0.58,
       fabric: "knit",
+    },
+  },
+  {
+    id: "top-turtleneck-f",
+    label: "Turtleneck / roll neck",
+    category: "Tops",
+    gender: "female",
+    // Slim women's roll neck: narrower body, fitted waist shaping, closer
+    // shoulders and sleeves, shorter length — a streamlined silhouette, not
+    // the relaxed men's tube.
+    params: {
+      ...defaultTeeParams,
+      ...longSleeve,
+      bodyWidth: 43,
+      bodyDepth: 18,
+      bodyLength: 62,
+      neckWidthFront: 14,
+      neckDropFront: 3.5,
+      neckDropBack: 2,
+      shoulderWidthFactor: 0.72,
+    },
+    features: {
+      neckFinish: "turtleneck",
+      hemBand: false,
+      cuff: "raw",
+      sleeveTaper: 0.5,
+      fabric: "knit",
+      waistPinch: 0.16,
     },
   },
   {
