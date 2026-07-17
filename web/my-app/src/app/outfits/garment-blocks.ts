@@ -1139,21 +1139,77 @@ function buildTopGeometry(
     }
     const rings: number[][] = [];
     // [rise, scale, roundness, level]: welded to the real neckline at the
-    // rim, fully elliptical and level by mid-height.
+    // rim, fully elliptical and level by mid-height. The wall eases in as it
+    // rises, then the top FOLDS OVER — the crest rounds outward and the last
+    // ring comes back DOWN outside the wall, the doubled-over roll of a real
+    // roll neck instead of a stiff open-ended cylinder.
     const stages: Array<[number, number, number, number]> = [
-      [0, 1, 0, 0], // rim
-      [5, 0.97, 0.75, 0.8],
-      [8.5, 0.99, 1, 1],
-      [10, 1.04, 1, 1], // folded-over lip
+      [0, 1, 0, 0], // rim, welded to the neckline seam
+      [1.8, 0.99, 0.85, 0.55], // eases round and part-way level
+      [4.5, 0.96, 1, 1], // fully round and level
+      [7, 0.955, 1, 1], // upper wall
+      [8.4, 0.99, 1, 1], // rounded crest of the fold
+      [7.4, 1.05, 1, 1], // folded-over edge rolls down outside
     ];
+    // The loop only samples the front and back necklines — the SIDES of the
+    // opening have no points, so lofting per loop column stretches one giant
+    // quad across each side (a hard vertical crease). Resample the tube at
+    // dense angles: the loop's own angles (exact weld at the rim) merged
+    // with a uniform sweep (smooth walls everywhere).
+    const angs: number[] = [];
+    {
+      let prev = -Infinity;
+      for (let j = 0; j < loopCount; j += 1) {
+        const q = neckLoop[j];
+        let a2 = Math.atan2(q.x - ccx, q.z - ccz);
+        if (j > 0 && a2 < prev - Math.PI) {
+          a2 += 2 * Math.PI; // unwrap across the +/-PI cut
+        }
+        if (a2 < prev) {
+          a2 = prev + 1e-3; // enforce monotonic ordering
+        }
+        angs.push(a2);
+        prev = a2;
+      }
+    }
+    const a0 = angs[0];
+    const samples: number[] = [...angs];
+    const UNIFORM = 64;
+    for (let i = 0; i < UNIFORM; i += 1) {
+      const t = a0 + (2 * Math.PI * i) / UNIFORM;
+      // Skip samples that nearly coincide with a loop angle.
+      if (angs.every((v) => Math.abs(v - t) > 0.02)) {
+        samples.push(t);
+      }
+    }
+    samples.sort((p, q2) => p - q2);
+    // Rim position at any angle: piecewise-linear along the loop polyline.
+    const rimAt = (theta: number) => {
+      let j = 0;
+      while (j < loopCount - 1 && angs[j + 1] < theta) {
+        j += 1;
+      }
+      const jn = (j + 1) % loopCount;
+      const aA = angs[j];
+      const aB = j + 1 < loopCount ? angs[j + 1] : a0 + 2 * Math.PI;
+      const f = aB > aA ? Math.min(1, Math.max(0, (theta - aA) / (aB - aA))) : 0;
+      const A = neckLoop[j];
+      const B = neckLoop[jn];
+      return {
+        x: A.x + (B.x - A.x) * f,
+        y: A.y + (B.y - A.y) * f,
+        z: A.z + (B.z - A.z) * f,
+      };
+    };
+    const segs = samples.length;
     for (let k = 0; k < stages.length; k += 1) {
       const [rise, scale, round, level] = stages[k];
       const ring: number[] = [];
-      for (let j = 0; j < loopCount; j += 1) {
-        const q = neckLoop[j];
-        const ang = Math.atan2(q.x - ccx, q.z - ccz);
-        const rxp = ccx + Math.sin(ang) * ex;
-        const rzp = ccz + Math.cos(ang) * ez;
+      for (let i = 0; i < segs; i += 1) {
+        const theta = samples[i];
+        const q = rimAt(theta);
+        const rxp = ccx + Math.sin(theta) * ex;
+        const rzp = ccz + Math.cos(theta) * ez;
         const bx = q.x + (rxp - q.x) * round;
         const bz = q.z + (rzp - q.z) * round;
         const by = q.y + (ccy - q.y) * level + rise * SCALE;
@@ -1162,7 +1218,7 @@ function buildTopGeometry(
             ccx + (bx - ccx) * scale,
             by,
             ccz + (bz - ccz) * scale,
-            j / loopCount,
+            (theta - a0) / (2 * Math.PI),
             k / (stages.length - 1),
           ),
         );
@@ -1170,15 +1226,15 @@ function buildTopGeometry(
       rings.push(ring);
     }
     for (let k = 0; k < rings.length - 1; k += 1) {
-      for (let j = 0; j < loopCount; j += 1) {
-        const jn = (j + 1) % loopCount;
+      for (let i = 0; i < segs; i += 1) {
+        const inx = (i + 1) % segs;
         indices.push(
-          rings[k][j],
-          rings[k][jn],
-          rings[k + 1][j],
-          rings[k][jn],
-          rings[k + 1][jn],
-          rings[k + 1][j],
+          rings[k][i],
+          rings[k][inx],
+          rings[k + 1][i],
+          rings[k][inx],
+          rings[k + 1][inx],
+          rings[k + 1][i],
         );
       }
     }
