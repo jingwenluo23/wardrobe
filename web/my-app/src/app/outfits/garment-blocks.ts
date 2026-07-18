@@ -1143,13 +1143,18 @@ function buildTopGeometry(
     // rises, then the top FOLDS OVER — the crest rounds outward and the last
     // ring comes back DOWN outside the wall, the doubled-over roll of a real
     // roll neck instead of a stiff open-ended cylinder.
+    // A roll neck is a tall knit tube FOLDED IN HALF: the inner wall rises to
+    // the crest, then the fabric folds over and comes back DOWN the outside,
+    // so a doubled band sits folded around the neck (visible fold at the top,
+    // free hem hanging down the outside).
     const stages: Array<[number, number, number, number]> = [
       [0, 1, 0, 0], // rim, welded to the neckline seam
-      [1.8, 0.99, 0.85, 0.55], // eases round and part-way level
-      [4.5, 0.96, 1, 1], // fully round and level
-      [7, 0.955, 1, 1], // upper wall
-      [8.4, 0.99, 1, 1], // rounded crest of the fold
-      [7.4, 1.05, 1, 1], // folded-over edge rolls down outside
+      [1.5, 0.97, 0.85, 0.55], // eases round and part-way level
+      [4, 0.95, 1, 1], // fully round and level — inner wall
+      [6.5, 0.95, 1, 1], // upper inner wall
+      [7.6, 1.0, 1, 1], // rounded crest where it folds over
+      [5, 1.07, 1, 1], // outer layer folds back down outside the wall
+      [2.4, 1.07, 1, 1], // free hem of the fold hangs down the neck
     ];
     // The loop only samples the front and back necklines — the SIDES of the
     // opening have no points, so lofting per loop column stretches one giant
