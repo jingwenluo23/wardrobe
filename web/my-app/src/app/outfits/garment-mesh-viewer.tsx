@@ -186,15 +186,19 @@ function TeeModel({ mesh }: { mesh: DraftMesh }) {
   const materials = useMemo(() => {
     const frontTexture = loadTexture(mesh.extractedTextureUrl);
     const backTexture = loadTexture(mesh.extractedBackTextureUrl) ?? frontTexture;
-    // Trims use a plain fabric swatch sampled from the photo, so their
-    // shading matches the torso's real fabric instead of a flat tint.
+    // Trims (neckbands, collars, plackets, cuffs) use a plain fabric swatch
+    // sampled from the photo so their shading matches the real fabric. When
+    // no swatch was extracted, fall back to the FRONT body texture rather than
+    // the flat dominant colour — otherwise a big trim like a turtleneck collar
+    // renders a different colour than the body it is knit from.
     const fabricTexture = loadTexture(mesh.fabricTextureUrl);
     if (fabricTexture) {
       fabricTexture.wrapS = THREE.RepeatWrapping;
       fabricTexture.wrapT = THREE.RepeatWrapping;
     }
-    const sleeveTexture = loadTexture(mesh.sleeveTextureUrl) ?? fabricTexture;
-    const hoodTexture = loadTexture(mesh.hoodTextureUrl) ?? fabricTexture;
+    const trimTexture = fabricTexture ?? frontTexture;
+    const sleeveTexture = loadTexture(mesh.sleeveTextureUrl) ?? trimTexture;
+    const hoodTexture = loadTexture(mesh.hoodTextureUrl) ?? trimTexture;
     const fabricKind = mesh.features?.fabric;
     const bumpTexture =
       fabricKind === "knit" || fabricKind === "fleece"
@@ -213,7 +217,7 @@ function TeeModel({ mesh }: { mesh: DraftMesh }) {
     return [
       fabricMaterial(mesh.color, frontTexture, bump),
       fabricMaterial(mesh.color, backTexture, bump),
-      fabricMaterial(mesh.color, fabricTexture, bump),
+      fabricMaterial(mesh.color, trimTexture, bump),
       fabricMaterial(mesh.color, hoodTexture, hoodBump),
       fabricMaterial(mesh.color, sleeveTexture, bump),
     ];

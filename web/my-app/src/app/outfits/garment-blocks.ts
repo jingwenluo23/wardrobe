@@ -139,16 +139,25 @@ function buildTopGeometry(
   // Panel half-width as a function of height. Below the underarm this is the
   // (slightly tapered) side seam; above it, the concave armhole curve pulls
   // the edge inward until it reaches the shoulder point.
-  // Fitted silhouette: a soft bell-shaped pinch centred on the natural
-  // waist, so the chest and hip read fuller against a narrower middle.
+  // Fitted silhouette: an hourglass — the waist nips in on a bell curve
+  // centred on the natural waist (upper third of the torso), while the hip
+  // (hem) and bust (chest) flare slightly WIDER, so it reads as a curvy
+  // female block, not just a narrower straight tube.
   const waistPinch = features.waistPinch ?? 0;
   const pinchAt = (y: number) => {
     if (waistPinch <= 0 || y > underarmY) {
       return 1;
     }
-    const t = (y - hemY) / (underarmY - hemY);
-    const bell = Math.exp(-Math.pow((t - 0.48) / 0.24, 2));
-    return 1 - waistPinch * bell;
+    const t = (y - hemY) / (underarmY - hemY); // 0 = hem, 1 = underarm
+    const waist = Math.exp(-Math.pow((t - 0.6) / 0.22, 2)); // nip at the waist
+    const hip = Math.exp(-Math.pow(t / 0.3, 2)); // flare at the hip/hem
+    const bust = Math.exp(-Math.pow((t - 0.82) / 0.16, 2)); // flare below bust
+    const dev = -waistPinch * waist + 0.4 * waistPinch * (0.7 * hip + bust);
+    // Fade the whole deviation to 0 right at the underarm so the torso meets
+    // the chest with no step/crease, and taper it in gently at the hem.
+    const fade =
+      smoothstep(Math.min(1, (1 - t) / 0.14)) * smoothstep(Math.min(1, t / 0.1 + 0.2));
+    return 1 + dev * fade;
   };
 
   const widthAt = (y: number) => {
