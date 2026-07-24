@@ -85,7 +85,7 @@ function wovenShirtPresets(): GarmentTemplateDef[] {
     },
     features: {
       ...base.features,
-      waistPinch: 0.2,
+      waistPinch: 0.15,
     },
   });
   const straight = [
@@ -462,7 +462,7 @@ export const garmentTemplates: GarmentTemplateDef[] = [
       cuff: "raw",
       sleeveTaper: 0.5,
       fabric: "knit",
-      waistPinch: 0.24,
+      waistPinch: 0.14,
     },
   },
   {

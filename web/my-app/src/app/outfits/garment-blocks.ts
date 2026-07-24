@@ -149,10 +149,13 @@ function buildTopGeometry(
       return 1;
     }
     const t = (y - hemY) / (underarmY - hemY); // 0 = hem, 1 = underarm
-    const waist = Math.exp(-Math.pow((t - 0.6) / 0.22, 2)); // nip at the waist
-    const hip = Math.exp(-Math.pow(t / 0.3, 2)); // flare at the hip/hem
-    const bust = Math.exp(-Math.pow((t - 0.82) / 0.16, 2)); // flare below bust
-    const dev = -waistPinch * waist + 0.4 * waistPinch * (0.7 * hip + bust);
+    // Subtle shaping, per the reference flats: one wide, gentle waist curve
+    // with a whisper of hip/bust fullness — aggressive bells turn the side
+    // seam into an unnatural S-wave.
+    const waist = Math.exp(-Math.pow((t - 0.6) / 0.3, 2)); // nip at the waist
+    const hip = Math.exp(-Math.pow(t / 0.32, 2)); // slight ease at the hem
+    const bust = Math.exp(-Math.pow((t - 0.85) / 0.2, 2)); // slight bust ease
+    const dev = -waistPinch * waist + 0.18 * waistPinch * (0.6 * hip + bust);
     // Fade the whole deviation to 0 right at the underarm so the torso meets
     // the chest with no step/crease, and taper it in gently at the hem.
     const fade =

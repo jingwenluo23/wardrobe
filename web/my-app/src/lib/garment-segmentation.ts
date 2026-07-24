@@ -1071,7 +1071,20 @@ export async function segmentGarment(
 
     // Plain fabric swatch for the sleeves/collar; the base colour IS the
     // fabric colour now, so trims match the panels exactly.
-    const { swatch, swatchSize } = pickFabricSwatch(tileRaw, TILE);
+    const { swatch, swatchSize, mean } = pickFabricSwatch(tileRaw, TILE);
+    // The swatch patch can land in a shadowed corner of the photo, which
+    // renders trims (turtleneck collar, cuffs) visibly darker than the body.
+    // Scale it channel-by-channel so its mean matches the garment's median.
+    {
+      const kx = Math.min(2, Math.max(0.5, gr / Math.max(1, mean[0])));
+      const ky = Math.min(2, Math.max(0.5, gg / Math.max(1, mean[1])));
+      const kz = Math.min(2, Math.max(0.5, gb / Math.max(1, mean[2])));
+      for (let i = 0; i < swatch.length; i += 3) {
+        swatch[i] = clampInt(Math.round(swatch[i] * kx), 0, 255);
+        swatch[i + 1] = clampInt(Math.round(swatch[i + 1] * ky), 0, 255);
+        swatch[i + 2] = clampInt(Math.round(swatch[i + 2] * kz), 0, 255);
+      }
+    }
     const fabricColor = rgbToHex(
       Math.round(baseColor[0]),
       Math.round(baseColor[1]),
