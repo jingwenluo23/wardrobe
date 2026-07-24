@@ -896,8 +896,11 @@ function buildTopGeometry(
     // vertical along the length, like fabric falling under gravity. A
     // straight steep axis pinched the armpit right at the root.
     const lengthT = smoothstep((params.sleeveLength - 21) / 35);
-    const droopStart = slopeRad + (14 * Math.PI) / 180;
-    const droopEnd = droopRad + (lengthT * 26 * Math.PI) / 180;
+    // Long sleeves hang DOWN under their weight — near vertical at the
+    // wrist, falling from early in the arm — while short cap sleeves keep
+    // their slight outward flare.
+    const droopStart = slopeRad + ((14 + lengthT * 12) * Math.PI) / 180;
+    const droopEnd = droopRad + (lengthT * 44 * Math.PI) / 180;
     const droopAt = (t: number) =>
       droopStart + (droopEnd - droopStart) * smoothstep(Math.min(1, t * 1.4));
     // Average axis for the ring frame.
