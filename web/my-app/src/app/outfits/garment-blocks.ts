@@ -897,12 +897,13 @@ function buildTopGeometry(
     // straight steep axis pinched the armpit right at the root.
     const lengthT = smoothstep((params.sleeveLength - 21) / 35);
     // Long sleeves hang DOWN under their weight — near vertical at the
-    // wrist, falling from early in the arm — while short cap sleeves keep
-    // their slight outward flare.
-    const droopStart = slopeRad + ((14 + lengthT * 12) * Math.PI) / 180;
+    // wrist — while short cap sleeves keep their slight outward flare. The
+    // root continues the shoulder line and the bend spreads over the WHOLE
+    // arm; front-loading the turn kinks a visible pinch into the cap.
+    const droopStart = slopeRad + (14 * Math.PI) / 180;
     const droopEnd = droopRad + (lengthT * 44 * Math.PI) / 180;
     const droopAt = (t: number) =>
-      droopStart + (droopEnd - droopStart) * smoothstep(Math.min(1, t * 1.4));
+      droopStart + (droopEnd - droopStart) * smoothstep(t);
     // Average axis for the ring frame.
     const droopMid = droopAt(0.5);
     const axis = new THREE.Vector3(
