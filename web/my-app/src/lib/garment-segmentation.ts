@@ -228,7 +228,7 @@ export function flattenTile(
     const dg = g - s * bg;
     const db = b - s * bb;
     const res2 = dr * dr + dg * dg + db * db;
-    if (res2 > 46 * 46) {
+    if (res2 > 34 * 34) {
       print[i] = 1;
     } else {
       // Residual of "fabric" pixels: near zero for solid cloth (sensor
@@ -239,7 +239,10 @@ export function flattenTile(
       resCount += 1;
     }
   }
-  // Despeckle: isolated print pixels are noise or shadow edges, not graphics.
+  // Despeckle: drop only truly ISOLATED print pixels (noise, shadow edges).
+  // A thin line — a pinstripe, a seam, fine text — has just two neighbours
+  // along its run, so the threshold must stay at <2 or stripes are erased and
+  // the garment renders blank.
   const cleaned = new Uint8Array(print);
   for (let y = 1; y < size - 1; y += 1) {
     for (let x = 1; x < size - 1; x += 1) {
@@ -256,7 +259,7 @@ export function flattenTile(
         print[i - size + 1] +
         print[i + size - 1] +
         print[i + size + 1];
-      if (nb < 3) {
+      if (nb < 2) {
         cleaned[i] = 0;
       }
     }
@@ -270,7 +273,27 @@ export function flattenTile(
     printCount += cleaned[i];
   }
   const rmsResidual = resCount > 0 ? Math.sqrt(resSum / resCount) : 0;
-  const shouldApply = apply ?? (printCount / n <= 0.3 && rmsResidual <= 10);
+  // High-frequency luminance energy: a neutral stripe/plaid/heather on a
+  // neutral fabric is invisible to the multiplicative residual test (grey =
+  // white x small factor looks exactly like shading), so it would be
+  // flattened to blank cloth. But its sharp edges make the local luminance
+  // jump; smooth shading does not. Mean absolute adjacent-luma difference
+  // separates the two — high energy => patterned, keep the photo tile.
+  let energy = 0;
+  let energyCount = 0;
+  for (let y = 0; y < size; y += 1) {
+    for (let x = 0; x < size - 1; x += 1) {
+      const i = y * size + x;
+      const l0 = tile[i * 3] + tile[i * 3 + 1] + tile[i * 3 + 2];
+      const l1 = tile[(i + 1) * 3] + tile[(i + 1) * 3 + 1] + tile[(i + 1) * 3 + 2];
+      energy += Math.abs(l0 - l1) / 3;
+      energyCount += 1;
+    }
+  }
+  const hfEnergy = energyCount > 0 ? energy / energyCount : 0;
+  const shouldApply =
+    apply ??
+    (printCount / n <= 0.3 && rmsResidual <= 10 && hfEnergy <= 9);
   if (shouldApply) {
     const R = Math.round(br);
     const G = Math.round(bg);

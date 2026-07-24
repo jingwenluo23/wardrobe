@@ -901,9 +901,12 @@ function buildTopGeometry(
     // root continues the shoulder line and the bend spreads over the WHOLE
     // arm; front-loading the turn kinks a visible pinch into the cap.
     const droopStart = slopeRad + (14 * Math.PI) / 180;
-    const droopEnd = droopRad + (lengthT * 44 * Math.PI) / 180;
+    const droopEnd = droopRad + (lengthT * 52 * Math.PI) / 180;
+    // Root stays on the shoulder line (no pinch); the fall reaches vertical a
+    // little sooner so the forearm and cuff tuck in CLOSER to the torso
+    // instead of splaying out to the sides.
     const droopAt = (t: number) =>
-      droopStart + (droopEnd - droopStart) * smoothstep(t);
+      droopStart + (droopEnd - droopStart) * smoothstep(Math.min(1, t * 1.18));
     // Average axis for the ring frame.
     const droopMid = droopAt(0.5);
     const axis = new THREE.Vector3(
