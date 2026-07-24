@@ -125,7 +125,8 @@ export function flattenTile(
   tile: Buffer,
   size: number,
   base?: [number, number, number],
-): [number, number, number] {
+  apply?: boolean,
+): { base: [number, number, number]; applied: boolean } {
   const n = size * size;
   let br: number;
   let bg: number;
@@ -215,6 +216,8 @@ export function flattenTile(
   }
   const baseNorm = br * br + bg * bg + bb * bb || 1;
   const print = new Uint8Array(n);
+  let resSum = 0;
+  let resCount = 0;
   for (let i = 0; i < n; i += 1) {
     const r = tile[i * 3];
     const g = tile[i * 3 + 1];
@@ -224,8 +227,16 @@ export function flattenTile(
     const dr = r - s * br;
     const dg = g - s * bg;
     const db = b - s * bb;
-    if (dr * dr + dg * dg + db * db > 46 * 46) {
+    const res2 = dr * dr + dg * dg + db * db;
+    if (res2 > 46 * 46) {
       print[i] = 1;
+    } else {
+      // Residual of "fabric" pixels: near zero for solid cloth (sensor
+      // noise), large for patterned fabric whose tones hover under the
+      // print threshold (camo, plaid, heather). RMS weighting makes the
+      // pattern deviations count more than flat noise.
+      resSum += res2;
+      resCount += 1;
     }
   }
   // Despeckle: isolated print pixels are noise or shadow edges, not graphics.
@@ -250,17 +261,29 @@ export function flattenTile(
       }
     }
   }
-  const R = Math.round(br);
-  const G = Math.round(bg);
-  const B = Math.round(bb);
+  // All-over patterned fabric (camo, plaid, floral) shares chroma with the
+  // base, so flattening erases the pattern and leaves only streaks. When a
+  // large share of pixels reads as print — or when the fabric bin itself is
+  // a minority — this is patterned fabric: keep the photo tile untouched.
+  let printCount = 0;
   for (let i = 0; i < n; i += 1) {
-    if (!cleaned[i]) {
-      tile[i * 3] = R;
-      tile[i * 3 + 1] = G;
-      tile[i * 3 + 2] = B;
+    printCount += cleaned[i];
+  }
+  const rmsResidual = resCount > 0 ? Math.sqrt(resSum / resCount) : 0;
+  const shouldApply = apply ?? (printCount / n <= 0.3 && rmsResidual <= 10);
+  if (shouldApply) {
+    const R = Math.round(br);
+    const G = Math.round(bg);
+    const B = Math.round(bb);
+    for (let i = 0; i < n; i += 1) {
+      if (!cleaned[i]) {
+        tile[i * 3] = R;
+        tile[i * 3 + 1] = G;
+        tile[i * 3 + 2] = B;
+      }
     }
   }
-  return [br, bg, bb];
+  return { base: [br, bg, bb], applied: shouldApply };
 }
 
 /**
@@ -1041,7 +1064,10 @@ export async function segmentGarment(
     // Decompose into base fabric + print layer and recompose as clean flat
     // fabric with the graphics composited back — the pasted-photo look
     // (baked shading, wrinkles, gap seams) is replaced by uniform fabric.
-    const baseColor = flattenTile(tileRaw, TILE);
+    // Auto-skips for all-over patterned fabric (camo, plaid), where
+    // flattening would erase the pattern; those keep the photo tile.
+    const flat = flattenTile(tileRaw, TILE);
+    const baseColor = flat.base;
 
     // Plain fabric swatch for the sleeves/collar; the base colour IS the
     // fabric colour now, so trims match the panels exactly.
@@ -1069,13 +1095,18 @@ export async function segmentGarment(
         hiHeight: hiInfo.height,
       });
       inpaintTile(region.tileRaw, region.keep, TILE, [gr, gg, gb]);
-      // Share the torso's base so every region is the exact same fabric.
-      flattenTile(region.tileRaw, TILE, baseColor);
-      const jpg = await sharp(region.tileRaw, {
+      // Share the torso's base AND its flatten/keep decision, so every
+      // region of the garment is treated as the same fabric.
+      flattenTile(region.tileRaw, TILE, baseColor, flat.applied);
+      let pipeline = sharp(region.tileRaw, {
         raw: { width: TILE, height: TILE, channels: 3 },
-      })
-        .jpeg({ quality: 86 })
-        .toBuffer();
+      });
+      if (!flat.applied) {
+        // Photo tiles (patterned fabric) keep the gentle local contrast so
+        // washed prints stay visible; flattened tiles must stay uniform.
+        pipeline = pipeline.clahe({ width: 128, height: 128, maxSlope: 2 });
+      }
+      const jpg = await pipeline.jpeg({ quality: 86 }).toBuffer();
       return "data:image/jpeg;base64," + jpg.toString("base64");
     };
 
@@ -1152,12 +1183,17 @@ export async function segmentGarment(
       }
     }
 
+    let mainPipeline = sharp(tileRaw, {
+      raw: { width: TILE, height: TILE, channels: 3 },
+    });
+    if (!flat.applied) {
+      // Photo tile (patterned fabric): gentle local contrast so washed
+      // prints stay visible. Flattened tiles must stay uniform — CLAHE
+      // would blotch the flat base.
+      mainPipeline = mainPipeline.clahe({ width: 128, height: 128, maxSlope: 2 });
+    }
     const [tile, fabricTile] = await Promise.all([
-      // No CLAHE here: local contrast enhancement would blotch the uniform
-      // flattened base; prints keep their own photo contrast.
-      sharp(tileRaw, { raw: { width: TILE, height: TILE, channels: 3 } })
-        .jpeg({ quality: 86 })
-        .toBuffer(),
+      mainPipeline.jpeg({ quality: 86 }).toBuffer(),
       sharp(swatch, {
         raw: { width: swatchSize, height: swatchSize, channels: 3 },
       })
