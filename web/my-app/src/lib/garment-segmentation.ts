@@ -103,6 +103,167 @@ export type ExtractionResult = {
 };
 
 /**
+ * Decompose a warped tile into base fabric + print layer, then recompose it
+ * as clean flat fabric with the print composited back at its coordinates —
+ * instead of pasting the photo crop, whose baked-in shading, wrinkles and
+ * gap-fill seams read as a sticker on the mesh.
+ *
+ * 1. Scan every pixel to find the BASE colour: the dominant quantised colour
+ *    (the fabric), refined to the mean of its neighbourhood.
+ * 2. Classify each pixel as base fabric vs print/decoration with a
+ *    shading-invariant test: photo shading scales the fabric colour
+ *    multiplicatively, so darker/lighter fabric has a small residual against
+ *    the scaled base, while graphics differ in hue and keep a large one.
+ * 3. Recompose: flat base everywhere (gaps included — they now match
+ *    perfectly), print pixels keep their photo colours; isolated speckles
+ *    (noise, shadow edges) are dropped.
+ *
+ * Pass `base` to reuse the torso's base for sleeve/hood tiles so the whole
+ * garment shares one exact fabric colour.
+ */
+export function flattenTile(
+  tile: Buffer,
+  size: number,
+  base?: [number, number, number],
+): [number, number, number] {
+  const n = size * size;
+  let br: number;
+  let bg: number;
+  let bb: number;
+  if (base) {
+    [br, bg, bb] = base;
+  } else {
+    // Bin by CHROMATICITY, not raw RGB: shading spreads the fabric across
+    // many RGB bins while a solid logo concentrates in one, so a raw
+    // histogram can crown the logo. All shades of the fabric share one
+    // chroma bin, so the fabric always wins on area.
+    const CH = 40;
+    const chromaKey = (r: number, g: number, b: number) => {
+      const sum = r + g + b;
+      if (sum < 24) {
+        return -1; // near-black: chroma unstable
+      }
+      const cu = Math.min(CH - 1, Math.floor((r / sum) * CH));
+      const cv = Math.min(CH - 1, Math.floor((g / sum) * CH));
+      return cu * CH + cv;
+    };
+    const counts = new Map<number, number>();
+    for (let i = 0; i < n; i += 1) {
+      const key = chromaKey(tile[i * 3], tile[i * 3 + 1], tile[i * 3 + 2]);
+      if (key >= 0) {
+        counts.set(key, (counts.get(key) ?? 0) + 1);
+      }
+    }
+    let bestKey = -1;
+    let bestCount = -1;
+    for (const [k, c] of counts) {
+      if (c > bestCount) {
+        bestCount = c;
+        bestKey = k;
+      }
+    }
+    const ku = Math.floor(bestKey / CH);
+    const kv = bestKey % CH;
+    // Within the winning chroma, pick the dominant LUMINANCE band — this
+    // separates white fabric from a black print that shares its chroma.
+    const lumCounts = new Array<number>(16).fill(0);
+    for (let i = 0; i < n; i += 1) {
+      const r = tile[i * 3];
+      const g = tile[i * 3 + 1];
+      const b = tile[i * 3 + 2];
+      const key = chromaKey(r, g, b);
+      if (key < 0) {
+        continue;
+      }
+      if (Math.abs(Math.floor(key / CH) - ku) <= 1 && Math.abs((key % CH) - kv) <= 1) {
+        lumCounts[Math.min(15, Math.floor((r + g + b) / 48))] += 1;
+      }
+    }
+    let bestLum = 0;
+    for (let l = 1; l < 16; l += 1) {
+      if (lumCounts[l] > lumCounts[bestLum]) {
+        bestLum = l;
+      }
+    }
+    let sr = 0;
+    let sg = 0;
+    let sb = 0;
+    let sc = 0;
+    for (let i = 0; i < n; i += 1) {
+      const r = tile[i * 3];
+      const g = tile[i * 3 + 1];
+      const b = tile[i * 3 + 2];
+      const key = chromaKey(r, g, b);
+      if (key < 0) {
+        continue;
+      }
+      const lum = Math.min(15, Math.floor((r + g + b) / 48));
+      if (
+        Math.abs(Math.floor(key / CH) - ku) <= 1 &&
+        Math.abs((key % CH) - kv) <= 1 &&
+        Math.abs(lum - bestLum) <= 1
+      ) {
+        sr += r;
+        sg += g;
+        sb += b;
+        sc += 1;
+      }
+    }
+    br = sc ? sr / sc : 128;
+    bg = sc ? sg / sc : 128;
+    bb = sc ? sb / sc : 128;
+  }
+  const baseNorm = br * br + bg * bg + bb * bb || 1;
+  const print = new Uint8Array(n);
+  for (let i = 0; i < n; i += 1) {
+    const r = tile[i * 3];
+    const g = tile[i * 3 + 1];
+    const b = tile[i * 3 + 2];
+    let s = (r * br + g * bg + b * bb) / baseNorm;
+    s = Math.min(1.9, Math.max(0.35, s));
+    const dr = r - s * br;
+    const dg = g - s * bg;
+    const db = b - s * bb;
+    if (dr * dr + dg * dg + db * db > 46 * 46) {
+      print[i] = 1;
+    }
+  }
+  // Despeckle: isolated print pixels are noise or shadow edges, not graphics.
+  const cleaned = new Uint8Array(print);
+  for (let y = 1; y < size - 1; y += 1) {
+    for (let x = 1; x < size - 1; x += 1) {
+      const i = y * size + x;
+      if (!print[i]) {
+        continue;
+      }
+      const nb =
+        print[i - 1] +
+        print[i + 1] +
+        print[i - size] +
+        print[i + size] +
+        print[i - size - 1] +
+        print[i - size + 1] +
+        print[i + size - 1] +
+        print[i + size + 1];
+      if (nb < 3) {
+        cleaned[i] = 0;
+      }
+    }
+  }
+  const R = Math.round(br);
+  const G = Math.round(bg);
+  const B = Math.round(bb);
+  for (let i = 0; i < n; i += 1) {
+    if (!cleaned[i]) {
+      tile[i * 3] = R;
+      tile[i * 3 + 1] = G;
+      tile[i * 3 + 2] = B;
+    }
+  }
+  return [br, bg, bb];
+}
+
+/**
  * Fill non-garment tile pixels with nearby fabric instead of a flat colour,
  * so painted regions (neck opening, seams) blend into the shirt's real
  * shading rather than reading as a ghost collar or patch.
@@ -877,10 +1038,19 @@ export async function segmentGarment(
     });
     inpaintTile(tileRaw, keep, TILE, [gr, gg, gb]);
 
-    // Plain fabric swatch for the sleeves/collar, and the base colour from
-    // it — so untextured parts match the torso's real shading, not a median.
-    const { swatch, swatchSize, mean } = pickFabricSwatch(tileRaw, TILE);
-    const fabricColor = rgbToHex(mean[0], mean[1], mean[2]);
+    // Decompose into base fabric + print layer and recompose as clean flat
+    // fabric with the graphics composited back — the pasted-photo look
+    // (baked shading, wrinkles, gap seams) is replaced by uniform fabric.
+    const baseColor = flattenTile(tileRaw, TILE);
+
+    // Plain fabric swatch for the sleeves/collar; the base colour IS the
+    // fabric colour now, so trims match the panels exactly.
+    const { swatch, swatchSize } = pickFabricSwatch(tileRaw, TILE);
+    const fabricColor = rgbToHex(
+      Math.round(baseColor[0]),
+      Math.round(baseColor[1]),
+      Math.round(baseColor[2]),
+    );
 
     // Whole-garment extraction: the mesh maps more than the torso panels, so
     // pull dedicated tiles for the other regions through the same warp.
@@ -899,10 +1069,11 @@ export async function segmentGarment(
         hiHeight: hiInfo.height,
       });
       inpaintTile(region.tileRaw, region.keep, TILE, [gr, gg, gb]);
+      // Share the torso's base so every region is the exact same fabric.
+      flattenTile(region.tileRaw, TILE, baseColor);
       const jpg = await sharp(region.tileRaw, {
         raw: { width: TILE, height: TILE, channels: 3 },
       })
-        .clahe({ width: 128, height: 128, maxSlope: 2 })
         .jpeg({ quality: 86 })
         .toBuffer();
       return "data:image/jpeg;base64," + jpg.toString("base64");
@@ -982,10 +1153,9 @@ export async function segmentGarment(
     }
 
     const [tile, fabricTile] = await Promise.all([
+      // No CLAHE here: local contrast enhancement would blotch the uniform
+      // flattened base; prints keep their own photo contrast.
       sharp(tileRaw, { raw: { width: TILE, height: TILE, channels: 3 } })
-        // Gentle local contrast so washed/tonal prints stay clearly visible
-        // on the mesh instead of sinking into the fabric colour.
-        .clahe({ width: 128, height: 128, maxSlope: 2 })
         .jpeg({ quality: 86 })
         .toBuffer(),
       sharp(swatch, {
