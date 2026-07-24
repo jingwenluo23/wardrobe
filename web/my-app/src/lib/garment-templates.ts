@@ -15,7 +15,7 @@ import {
 } from "./garment-mesh";
 
 /** Bump when geometry/param semantics change so stored drafts can migrate. */
-export const GARMENT_TEMPLATE_VERSION = 3;
+export const GARMENT_TEMPLATE_VERSION = 4;
 
 export type Gender = "male" | "female";
 
