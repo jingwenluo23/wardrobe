@@ -89,6 +89,8 @@ export type GarmentParams = {
   sleeveLength: number;
   /** Opening width of the sleeve hem relative to the armhole. */
   sleeveOpening: number;
+  /** Hem width relative to the chest width (1 = straight side seams). */
+  hemWidthFactor?: number;
 
   // --- Bottoms archetype (present when features.archetype === "bottoms") ---
   /** Flat waist width. */
@@ -106,6 +108,19 @@ export type GarmentParams = {
   /** Shoulder width as a fraction of body half-width (default 0.8);
    *  small values give narrow tank/undershirt straps. */
   shoulderWidthFactor?: number;
+};
+
+/** View-normalized measurements recovered from a segmented garment mask. */
+export type GarmentShapeEstimate = {
+  bodyAspectRatio: number;
+  spanRatio: number;
+  shoulderRatio: number;
+  chestRatio: number;
+  waistRatio: number;
+  hemRatio: number;
+  neckWidthRatio: number;
+  neckDepthRatio: number;
+  confidence: number;
 };
 
 export const defaultTeeParams: GarmentParams = {
@@ -154,6 +169,10 @@ export type DraftMesh = {
   sleeveTextureUrl?: string;
   /** Extracted hood texture (data URL), from above the shoulder line. */
   hoodTextureUrl?: string;
+  /** Optional photographed or front/back-synthesized side surface. */
+  extractedSideTextureUrl?: string;
+  /** Whether the side surface came from a photo or automatic synthesis. */
+  sideTextureMode?: "photo" | "synthesized";
   /** Dominant garment colour as a hex string, sampled from the photos. */
   color: string;
   bounds: GarmentBounds;

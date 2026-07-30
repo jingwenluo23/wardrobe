@@ -167,7 +167,8 @@ function buildTopGeometry(
     if (y <= underarmY) {
       // Gentle A-line: a touch wider at the hem than at the chest.
       const t = (y - hemY) / (underarmY - hemY);
-      return halfW * (1.03 - 0.03 * smoothstep(t)) * pinchAt(y);
+      const hemFactor = params.hemWidthFactor ?? 1.03;
+      return halfW * (hemFactor + (1 - hemFactor) * smoothstep(t)) * pinchAt(y);
     }
     const t = clamp((y - underarmY) / (shoulderPtY - underarmY), 0, 1);
     return halfW - (halfW - shoulderX) * smoothstep(t);

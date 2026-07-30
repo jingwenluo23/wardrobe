@@ -21,12 +21,17 @@ import {
   type GarmentFeatures,
   type GarmentParams,
 } from "./garment-mesh";
+import { fitGarmentToShape } from "./garment-fit";
 import {
   GARMENT_TEMPLATE_VERSION,
   getTemplate,
   resolveTemplate,
   templateLabel,
 } from "./garment-templates";
+import {
+  blendSideIntoPanel,
+  synthesizeSideTexture,
+} from "./side-texture";
 
 export type DraftPipelineStatus = "processing" | "ready" | "failed";
 export type DraftStageStatus = "pending" | "active" | "done";
@@ -75,6 +80,8 @@ type StoredDraft = {
   fabricTextureUrl?: string;
   sleeveTextureUrl?: string;
   hoodTextureUrl?: string;
+  extractedSideTextureUrl?: string;
+  sideTextureMode?: "photo" | "synthesized";
   /** False while the background extraction task is still running. */
   extractionReady: boolean;
 };
@@ -119,11 +126,18 @@ function getDb(): Database.Database {
         "back_texture TEXT," +
         "fabric_texture TEXT," +
         "sleeve_texture TEXT," +
-        "hood_texture TEXT" +
+        "hood_texture TEXT," +
+        "side_texture TEXT," +
+        "side_texture_mode TEXT" +
         ")",
     );
-    // Older databases predate the sleeve/hood columns.
-    for (const column of ["sleeve_texture", "hood_texture"]) {
+    // Older databases predate the regional texture columns.
+    for (const column of [
+      "sleeve_texture",
+      "hood_texture",
+      "side_texture",
+      "side_texture_mode",
+    ]) {
       try {
         db.exec("ALTER TABLE drafts ADD COLUMN " + column + " TEXT");
       } catch {
@@ -159,6 +173,8 @@ type DraftRow = {
   fabric_texture: string | null;
   sleeve_texture: string | null;
   hood_texture: string | null;
+  side_texture: string | null;
+  side_texture_mode: string | null;
 };
 
 function rowToStored(row: DraftRow): StoredDraft {
@@ -179,6 +195,12 @@ function rowToStored(row: DraftRow): StoredDraft {
     fabricTextureUrl: row.fabric_texture ?? undefined,
     sleeveTextureUrl: row.sleeve_texture ?? undefined,
     hoodTextureUrl: row.hood_texture ?? undefined,
+    extractedSideTextureUrl: row.side_texture ?? undefined,
+    sideTextureMode:
+      row.side_texture_mode === "photo" ||
+      row.side_texture_mode === "synthesized"
+        ? row.side_texture_mode
+        : undefined,
     extractionReady: row.extraction_ready === 1,
   };
 }
@@ -479,7 +501,11 @@ export async function createDraft(input: {
       fabric?: string;
       sleeve?: string;
       hood?: string;
+      side?: string;
+      sideMode?: "photo" | "synthesized";
       confidence?: number;
+      params?: GarmentParams;
+      features?: GarmentFeatures;
     } = {};
     try {
       // Preferred path: ML clothes segmentation (SegFormer). Falls back to
@@ -491,10 +517,23 @@ export async function createDraft(input: {
       const extract = async () => {
         const frontSeg = await segmentGarment(front.buffer, input.category, segOptions);
         const backSeg = await segmentGarment(back.buffer, input.category, segOptions);
+        const sideSeg = side
+          ? await segmentGarment(side.buffer, input.category, segOptions)
+          : null;
         const usedModel = Boolean(frontSeg);
         const frontResult = frontSeg ?? (await analyzePhoto(front.buffer));
         const backResult = backSeg ?? (await analyzePhoto(back.buffer));
-        return { frontSeg, backSeg, usedModel, frontResult, backResult };
+        const sideResult = side
+          ? sideSeg ?? (await analyzePhoto(side.buffer))
+          : null;
+        return {
+          frontSeg,
+          backSeg,
+          usedModel,
+          frontResult,
+          backResult,
+          sideResult,
+        };
       };
       let timer: ReturnType<typeof setTimeout> | undefined;
       const timeout = new Promise<never>((_, reject) => {
@@ -503,26 +542,65 @@ export async function createDraft(input: {
           EXTRACTION_DEADLINE_MS,
         );
       });
-      const { frontSeg, backSeg, usedModel, frontResult, backResult } =
+      const {
+        frontSeg,
+        backSeg,
+        usedModel,
+        frontResult,
+        backResult,
+        sideResult,
+      } =
         await Promise.race([extract(), timeout]).finally(() => {
           if (timer) {
             clearTimeout(timer);
           }
         });
 
+      const sideTextureUrl =
+        sideResult?.textureUrl ??
+        (await synthesizeSideTexture({
+          frontTextureUrl: frontResult.textureUrl,
+          backTextureUrl: backResult.textureUrl,
+          fabricTextureUrl: frontResult.fabricTextureUrl,
+        }));
+      const [projectedFront, projectedBack] = await Promise.all([
+        blendSideIntoPanel({
+          panelTextureUrl: frontResult.textureUrl,
+          sideTextureUrl,
+          surface: "front",
+        }),
+        blendSideIntoPanel({
+          panelTextureUrl: backResult.textureUrl,
+          sideTextureUrl,
+          surface: "back",
+        }),
+      ]);
+      const fitted = fitGarmentToShape(
+        params,
+        features,
+        frontSeg?.shape,
+        backSeg?.shape,
+      );
+
       update = {
         color: frontResult.color,
-        front: frontResult.textureUrl,
-        back: backResult.textureUrl,
+        front: projectedFront,
+        back: projectedBack,
         fabric: frontResult.fabricTextureUrl,
         sleeve: frontSeg?.sleeveTextureUrl ?? backSeg?.sleeveTextureUrl,
         // The hood is best seen from behind; prefer the back photo's region.
         hood: backSeg?.hoodTextureUrl ?? frontSeg?.hoodTextureUrl,
+        side: sideTextureUrl,
+        sideMode: sideResult ? "photo" : "synthesized",
+        params: fitted.params,
+        features: fitted.features,
         // Model-based extraction is far more reliable than the heuristic;
         // extra reference views nudge confidence up either way.
         confidence: Math.min(
           0.99,
-          (usedModel ? 0.93 : 0.78) + photos.length * 0.02,
+          (usedModel
+            ? 0.84 + fitted.confidence * 0.1
+            : 0.78) + photos.length * 0.02,
         ),
       };
     } catch (error) {
@@ -538,7 +616,10 @@ export async function createDraft(input: {
               "color = COALESCE(?, color), " +
               "confidence = COALESCE(?, confidence), " +
               "front_texture = ?, back_texture = ?, fabric_texture = ?, " +
-              "sleeve_texture = ?, hood_texture = ? " +
+              "sleeve_texture = ?, hood_texture = ?, side_texture = ?, " +
+              "side_texture_mode = ?, " +
+              "params_json = COALESCE(?, params_json), " +
+              "features_json = COALESCE(?, features_json) " +
               "WHERE id = ?",
           )
           .run(
@@ -549,6 +630,10 @@ export async function createDraft(input: {
             update.fabric ?? null,
             update.sleeve ?? null,
             update.hood ?? null,
+            update.side ?? null,
+            update.sideMode ?? null,
+            update.params ? JSON.stringify(update.params) : null,
+            update.features ? JSON.stringify(update.features) : null,
             id,
           );
       } catch (error) {
@@ -619,6 +704,8 @@ function serializeDraft(stored: StoredDraft): ApiDraft {
         fabricTextureUrl: stored.fabricTextureUrl,
         sleeveTextureUrl: stored.sleeveTextureUrl,
         hoodTextureUrl: stored.hoodTextureUrl,
+        extractedSideTextureUrl: stored.extractedSideTextureUrl,
+        sideTextureMode: stored.sideTextureMode,
         color: stored.color,
         bounds: boundsFromParams(params, features),
       }

@@ -12,6 +12,7 @@
 // network), callers fall back to the colour-heuristic extractor.
 
 import sharp from "sharp";
+import type { GarmentShapeEstimate } from "./garment-mesh";
 
 type SegmenterOutput = Array<{
   label: string;
@@ -100,7 +101,83 @@ export type ExtractionResult = {
   sleeveTextureUrl?: string;
   /** Extracted hood texture (data URL), from the region above the shoulders. */
   hoodTextureUrl?: string;
+  /** Relative silhouette measurements recovered from the cleaned mask. */
+  shape?: GarmentShapeEstimate;
 };
+
+function estimateShape(
+  mask: Uint8Array,
+  width: number,
+  height: number,
+  torso: { minX: number; maxX: number; minY: number; maxY: number },
+): GarmentShapeEstimate {
+  const bodyW = Math.max(1, torso.maxX - torso.minX + 1);
+  const bodyH = Math.max(1, torso.maxY - torso.minY + 1);
+  let allMinX = width;
+  let allMaxX = 0;
+  let area = 0;
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      if (!mask[y * width + x]) continue;
+      area += 1;
+      allMinX = Math.min(allMinX, x);
+      allMaxX = Math.max(allMaxX, x);
+    }
+  }
+  const rowWidth = (fraction: number) => {
+    const center = torso.minY + fraction * (bodyH - 1);
+    const radius = Math.max(1, Math.round(bodyH * 0.025));
+    const samples: number[] = [];
+    for (
+      let y = Math.max(torso.minY, Math.round(center) - radius);
+      y <= Math.min(torso.maxY, Math.round(center) + radius);
+      y += 1
+    ) {
+      let lo = width;
+      let hi = -1;
+      for (let x = torso.minX; x <= torso.maxX; x += 1) {
+        if (mask[y * width + x]) {
+          lo = Math.min(lo, x);
+          hi = Math.max(hi, x);
+        }
+      }
+      if (hi >= lo) samples.push(hi - lo + 1);
+    }
+    samples.sort((a, b) => a - b);
+    return (samples[Math.floor(samples.length / 2)] ?? bodyW) / bodyW;
+  };
+
+  // The neck is the central background run above the first solid chest row.
+  let maxNeckWidth = 0;
+  let neckBottom = torso.minY;
+  const centerX = Math.round((torso.minX + torso.maxX) / 2);
+  for (let y = torso.minY; y <= torso.minY + bodyH * 0.3; y += 1) {
+    if (mask[y * width + centerX]) continue;
+    let lo = centerX;
+    let hi = centerX;
+    while (lo > torso.minX && !mask[y * width + lo - 1]) lo -= 1;
+    while (hi < torso.maxX && !mask[y * width + hi + 1]) hi += 1;
+    maxNeckWidth = Math.max(maxNeckWidth, hi - lo + 1);
+    neckBottom = y;
+  }
+  const solidity = area / Math.max(1, (allMaxX - allMinX + 1) * bodyH);
+  const frameCoverage = area / (width * height);
+  const confidence = Math.max(
+    0.25,
+    Math.min(0.98, 0.45 + solidity * 0.35 + Math.min(0.18, frameCoverage)),
+  );
+  return {
+    bodyAspectRatio: bodyH / bodyW,
+    spanRatio: (allMaxX - allMinX + 1) / bodyW,
+    shoulderRatio: rowWidth(0.1),
+    chestRatio: rowWidth(0.3),
+    waistRatio: rowWidth(0.62),
+    hemRatio: rowWidth(0.94),
+    neckWidthRatio: maxNeckWidth / bodyW,
+    neckDepthRatio: Math.max(0, neckBottom - torso.minY) / bodyH,
+    confidence,
+  };
+}
 
 /**
  * Decompose a warped tile into base fabric + print layer, then recompose it
@@ -1042,6 +1119,12 @@ export async function segmentGarment(
     if (minX >= maxX || minY >= maxY) {
       return null;
     }
+    const shape = estimateShape(mask, width, height, {
+      minX,
+      maxX,
+      minY,
+      maxY,
+    });
 
     // Garment colour: median of the masked pixels.
     const rs: number[] = [];
@@ -1246,6 +1329,7 @@ export async function segmentGarment(
         "data:image/jpeg;base64," + fabricTile.toString("base64"),
       sleeveTextureUrl,
       hoodTextureUrl,
+      shape,
     };
   } catch (error) {
     console.warn(

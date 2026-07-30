@@ -97,7 +97,7 @@ function garmentPhotoLabel(role: UploadRole) {
   return "Side";
 }
 
-const uploadRoles: UploadRole[] = ["front", "back"];
+const uploadRoles: UploadRole[] = ["front", "back", "side"];
 
 const GarmentMeshViewer = dynamic(() => import("./garment-mesh-viewer"), {
   ssr: false,
@@ -374,6 +374,9 @@ export default function OutfitsPage() {
     }
     if (uploadPhotos.back) {
       formData.append("backPhoto", uploadPhotos.back.file);
+    }
+    if (uploadPhotos.side) {
+      formData.append("sidePhoto", uploadPhotos.side.file);
     }
 
     try {
@@ -816,7 +819,8 @@ export default function OutfitsPage() {
                         Step 3 · Upload garment photos
                       </p>
                       <p className="mt-1 text-sm text-[#6b6f77]">
-                        Front and back are required — depth is reconstructed automatically.
+                        Front and back are required. Add a side photo only when
+                        it contains details you want to preserve.
                       </p>
                     </div>
                     <div className="rounded-full bg-[#ffffff]/70 backdrop-blur-xl px-3 py-1 text-xs font-semibold text-[#6b6f77]">
@@ -824,7 +828,7 @@ export default function OutfitsPage() {
                     </div>
                   </div>
 
-                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  <div className="mt-4 grid gap-3 sm:grid-cols-3">
                     {uploadRoles.map((role) => {
                       const photo = uploadPhotos[role];
                       const isRequired = role !== "side";
@@ -864,10 +868,10 @@ export default function OutfitsPage() {
                                 </p>
                                 <p className="mt-1 text-xs leading-5 text-[#8b9099]">
                                   {role === "front"
-                                    ? "Flat front view of the garment."
+                                    ? "Any clear front photo, including a try-on."
                                     : role === "back"
-                                      ? "Flat back view of the garment."
-                                      : "Optional side profile for depth fitting."}
+                                      ? "Any clear back photo, including a store display."
+                                      : "Optional side photo for prints or details under the arm."}
                                 </p>
                               </div>
                             )}
@@ -1071,7 +1075,12 @@ export default function OutfitsPage() {
                       </p>
                       <p className="mt-1 font-semibold text-[#24262c]">
                         {selectedDraftItem.mesh.extractedTextureUrl
-                          ? "Extracted garment"
+                          ? selectedDraftItem.mesh.sideTextureMode === "photo"
+                            ? "Garment + side photo"
+                            : selectedDraftItem.mesh.sideTextureMode ===
+                                "synthesized"
+                              ? "Garment + synthesized sides"
+                              : "Extracted garment"
                           : "Full reference"}
                       </p>
                     </div>
