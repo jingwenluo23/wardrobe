@@ -556,53 +556,75 @@ export async function createDraft(input: {
           }
         });
 
-      const sideTextureUrl =
-        sideResult?.textureUrl ??
-        (await synthesizeSideTexture({
-          frontTextureUrl: frontResult.textureUrl,
-          backTextureUrl: backResult.textureUrl,
-          fabricTextureUrl: frontResult.fabricTextureUrl,
-        }));
-      const [projectedFront, projectedBack] = await Promise.all([
-        blendSideIntoPanel({
-          panelTextureUrl: frontResult.textureUrl,
-          sideTextureUrl,
-          surface: "front",
-        }),
-        blendSideIntoPanel({
-          panelTextureUrl: backResult.textureUrl,
-          sideTextureUrl,
-          surface: "back",
-        }),
-      ]);
-      const fitted = fitGarmentToShape(
-        params,
-        features,
-        frontSeg?.shape,
-        backSeg?.shape,
-      );
-
+      // Baseline: the raw extracted (or heuristic) panel textures. These are
+      // committed first so that a failure in any of the optional enhancement
+      // steps below (side synthesis, edge blend, shape fit) can never discard
+      // the real garment texture and leave a blank mesh — the enhancement
+      // steps only ever UPGRADE this baseline.
       update = {
         color: frontResult.color,
-        front: projectedFront,
-        back: projectedBack,
+        front: frontResult.textureUrl,
+        back: backResult.textureUrl,
         fabric: frontResult.fabricTextureUrl,
         sleeve: frontSeg?.sleeveTextureUrl ?? backSeg?.sleeveTextureUrl,
         // The hood is best seen from behind; prefer the back photo's region.
         hood: backSeg?.hoodTextureUrl ?? frontSeg?.hoodTextureUrl,
-        side: sideTextureUrl,
-        sideMode: sideResult ? "photo" : "synthesized",
-        params: fitted.params,
-        features: fitted.features,
+        params,
+        features,
         // Model-based extraction is far more reliable than the heuristic;
         // extra reference views nudge confidence up either way.
         confidence: Math.min(
           0.99,
-          (usedModel
-            ? 0.84 + fitted.confidence * 0.1
-            : 0.78) + photos.length * 0.02,
+          (usedModel ? 0.84 : 0.78) + photos.length * 0.02,
         ),
       };
+
+      // Best-effort: bake a synthesized/photographed side band into the panel
+      // edges and refine the silhouette from the segmentation. Isolated so a
+      // throw here degrades to the baseline panels rather than a blank mesh.
+      try {
+        const sideTextureUrl =
+          sideResult?.textureUrl ??
+          (await synthesizeSideTexture({
+            frontTextureUrl: frontResult.textureUrl,
+            backTextureUrl: backResult.textureUrl,
+            fabricTextureUrl: frontResult.fabricTextureUrl,
+          }));
+        const [projectedFront, projectedBack] = await Promise.all([
+          blendSideIntoPanel({
+            panelTextureUrl: frontResult.textureUrl,
+            sideTextureUrl,
+            surface: "front",
+          }),
+          blendSideIntoPanel({
+            panelTextureUrl: backResult.textureUrl,
+            sideTextureUrl,
+            surface: "back",
+          }),
+        ]);
+        const fitted = fitGarmentToShape(
+          params,
+          features,
+          frontSeg?.shape,
+          backSeg?.shape,
+        );
+        update.front = projectedFront;
+        update.back = projectedBack;
+        update.side = sideTextureUrl;
+        update.sideMode = sideResult ? "photo" : "synthesized";
+        update.params = fitted.params;
+        update.features = fitted.features;
+        update.confidence = Math.min(
+          0.99,
+          (usedModel ? 0.84 + fitted.confidence * 0.1 : 0.78) +
+            photos.length * 0.02,
+        );
+      } catch (error) {
+        console.warn(
+          "[draft-store] side/fit enhancement skipped, keeping panels:",
+          error instanceof Error ? error.message : error,
+        );
+      }
     } catch (error) {
       console.warn(
         "[draft-store] extraction failed, keeping plain colour:",
