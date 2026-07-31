@@ -80,13 +80,6 @@ const categoryNames = [
 
 const clothes: WardrobeItem[] = [];
 
-const reconstructionStages = [
-  "Extract garment region",
-  "Build standard base mesh",
-  "Fit neutral garment proportions",
-  "Project garment texture",
-];
-
 function garmentPhotoLabel(role: UploadRole) {
   if (role === "front") {
     return "Front";
@@ -271,15 +264,6 @@ export default function OutfitsPage() {
         categoryMatches(selectedCategory, item.category),
       ),
     [selectedCategory, wardrobeItems],
-  );
-
-  const orderedUploadPhotos = useMemo(
-    () =>
-      uploadRoles.flatMap((role) => {
-        const photo = uploadPhotos[role];
-        return photo ? [photo] : [];
-      }),
-    [uploadPhotos],
   );
 
   const hasRequiredUploadPhotos = Boolean(uploadPhotos.front && uploadPhotos.back);
@@ -714,15 +698,15 @@ export default function OutfitsPage() {
       {isUploadOpen ? (
         <div className="fixed inset-0 z-50 grid place-items-center bg-[#24262c]/45 p-4">
           <form
-            className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-lg bg-[#ffffff]/70 backdrop-blur-xl p-5 shadow-2xl"
+            className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-lg bg-[#ffffff]/70 backdrop-blur-xl p-4 shadow-2xl"
             onSubmit={handleGenerateModel}
           >
-            <div className="flex items-start justify-between gap-4 border-b border-[#1e202617] pb-4">
+            <div className="flex items-start justify-between gap-4 border-b border-[#1e202617] pb-3">
               <div>
-                <p className="text-sm font-medium uppercase tracking-[0.18em] text-[#8b9099]">
+                <p className="text-xs font-medium uppercase tracking-[0.18em] text-[#8b9099]">
                   New garment
                 </p>
-                <h2 className="mt-1 text-3xl font-semibold">
+                <h2 className="mt-0.5 text-2xl font-semibold">
                   Add clothing photos
                 </h2>
               </div>
@@ -736,22 +720,22 @@ export default function OutfitsPage() {
               </button>
             </div>
 
-            <div className="mt-5 grid gap-5 lg:grid-cols-[1fr_280px]">
-              <div className="space-y-4">
+            <div className="mt-4">
+              <div className="space-y-3">
                 {/* Step 1 — narrow down to the 3D model: collection filters
                     categories, category filters garment types. Top-to-bottom,
                     no backtracking. */}
-                <div className="rounded-lg border border-[#1e202612] bg-[#ffffff]/70 backdrop-blur-xl p-4">
+                <div className="rounded-lg border border-[#1e202612] bg-[#ffffff]/70 backdrop-blur-xl p-3">
                   <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#9c7a33]">
                     Step 1 · Choose the garment model
                   </p>
-                  <div className="mt-3 grid gap-2 text-sm font-semibold text-[#6b6f77]">
+                  <div className="mt-2 grid gap-1.5 text-sm font-semibold text-[#6b6f77]">
                     Collection
                     <div className="flex gap-2">
                       {(["female", "male"] as Gender[]).map((gender) => (
                         <button
                           className={
-                            "flex-1 rounded-lg border px-3 py-2.5 text-sm font-semibold capitalize transition " +
+                            "flex-1 rounded-lg border px-3 py-2 text-sm font-semibold capitalize transition " +
                             (itemGender === gender
                               ? "border-[#9c7a33] bg-[#9c7a33]/10 text-[#9c7a33]"
                               : "border-[#1e202612] bg-[#ffffff]/70 text-[#6b6f77] hover:text-[#24262c]")
@@ -765,11 +749,14 @@ export default function OutfitsPage() {
                       ))}
                     </div>
                   </div>
-                  <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                    <label className="grid gap-2 text-sm font-semibold text-[#6b6f77]">
+                  {/* min-w-0 on both the grid cell and the select: without it a
+                      long garment-type label sets the select's intrinsic width
+                      and overflows the column instead of truncating. */}
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                    <label className="grid min-w-0 gap-1.5 text-sm font-semibold text-[#6b6f77]">
                       Category
                       <select
-                        className="rounded-lg border border-[#1e202612] bg-[#ffffff]/70 backdrop-blur-xl px-3 py-3 text-base font-medium text-[#24262c] outline-none focus:border-[#9c7a33]"
+                        className="w-full min-w-0 truncate rounded-lg border border-[#1e202612] bg-[#ffffff]/70 backdrop-blur-xl px-3 py-2.5 text-sm font-medium text-[#24262c] outline-none focus:border-[#9c7a33]"
                         onChange={(event) => selectCategory(event.target.value)}
                         value={itemCategory}
                       >
@@ -778,10 +765,10 @@ export default function OutfitsPage() {
                         ))}
                       </select>
                     </label>
-                    <label className="grid gap-2 text-sm font-semibold text-[#6b6f77]">
+                    <label className="grid min-w-0 gap-1.5 text-sm font-semibold text-[#6b6f77]">
                       Garment type
                       <select
-                        className="rounded-lg border border-[#1e202612] bg-[#ffffff]/70 backdrop-blur-xl px-3 py-3 text-base font-medium text-[#24262c] outline-none focus:border-[#9c7a33]"
+                        className="w-full min-w-0 truncate rounded-lg border border-[#1e202612] bg-[#ffffff]/70 backdrop-blur-xl px-3 py-2.5 text-sm font-medium text-[#24262c] outline-none focus:border-[#9c7a33]"
                         onChange={(event) => setItemTemplateId(event.target.value)}
                         value={itemTemplateId}
                       >
@@ -796,14 +783,14 @@ export default function OutfitsPage() {
                 </div>
 
                 {/* Step 2 — name the item. */}
-                <div className="rounded-lg border border-[#1e202612] bg-[#ffffff]/70 backdrop-blur-xl p-4">
+                <div className="rounded-lg border border-[#1e202612] bg-[#ffffff]/70 backdrop-blur-xl p-3">
                   <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#9c7a33]">
                     Step 2 · Name it
                   </p>
-                  <label className="mt-3 grid gap-2 text-sm font-semibold text-[#6b6f77]">
+                  <label className="mt-2 grid gap-1.5 text-sm font-semibold text-[#6b6f77]">
                     Item name
                     <input
-                      className="rounded-lg border border-[#1e202612] bg-[#ffffff]/70 backdrop-blur-xl px-3 py-3 text-base font-medium text-[#24262c] outline-none focus:border-[#9c7a33]"
+                      className="w-full min-w-0 rounded-lg border border-[#1e202612] bg-[#ffffff]/70 backdrop-blur-xl px-3 py-2.5 text-sm font-medium text-[#24262c] outline-none focus:border-[#9c7a33]"
                       onChange={(event) => setItemName(event.target.value)}
                       placeholder="Black knit polo"
                       type="text"
@@ -812,66 +799,52 @@ export default function OutfitsPage() {
                   </label>
                 </div>
 
-                <div className="rounded-lg border border-[#1e202612] bg-[#ffffff]/70 backdrop-blur-xl p-4">
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#9c7a33]">
-                        Step 3 · Upload garment photos
-                      </p>
-                      <p className="mt-1 text-sm text-[#6b6f77]">
-                        Front and back are required. Add a side photo only when
-                        it contains details you want to preserve.
-                      </p>
-                    </div>
-                    <div className="rounded-full bg-[#ffffff]/70 backdrop-blur-xl px-3 py-1 text-xs font-semibold text-[#6b6f77]">
-                      Required: Front + Back
-                    </div>
-                  </div>
+                <div className="rounded-lg border border-[#1e202612] bg-[#ffffff]/70 backdrop-blur-xl p-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#9c7a33]">
+                    Step 3 · Upload garment photos
+                  </p>
+                  <p className="mt-1 text-xs text-[#6b6f77]">
+                    Front and back required. Side is optional — add it for
+                    details under the arm.
+                  </p>
 
-                  <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                  <div className="mt-3 grid gap-2 sm:grid-cols-3">
                     {uploadRoles.map((role) => {
                       const photo = uploadPhotos[role];
                       const isRequired = role !== "side";
 
                       return (
                         <div
-                          className="rounded-lg border border-dashed border-[#1e20261f] bg-[#1e202608] p-3"
+                          className="rounded-lg border border-dashed border-[#1e20261f] bg-[#1e202608] p-2"
                           key={role}
                         >
-                          <div className="flex items-center justify-between gap-3">
-                            <p className="text-sm font-semibold text-[#24262c]">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-xs font-semibold text-[#24262c]">
                               {garmentPhotoLabel(role)}
                             </p>
-                            <span className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#8b9099]">
+                            <span className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[#8b9099]">
                               {isRequired ? "Required" : "Optional"}
                             </span>
                           </div>
 
-                          <label className="mt-3 grid min-h-40 cursor-pointer place-items-center overflow-hidden rounded-lg border border-dashed border-[#1e20261f] bg-[#ffffff]/70 backdrop-blur-xl text-center transition hover:border-[#9c7a33]">
+                          <label className="mt-2 grid min-h-24 cursor-pointer place-items-center overflow-hidden rounded-lg border border-dashed border-[#1e20261f] bg-[#ffffff]/70 backdrop-blur-xl text-center transition hover:border-[#9c7a33]">
                             {photo ? (
                               <div
-                                className="relative h-full min-h-40 w-full bg-[#1e20260a]"
+                                className="relative h-full min-h-24 w-full bg-[#1e20260a]"
                                 style={{
                                   backgroundImage: "url(" + photo.url + ")",
                                   backgroundPosition: "center",
                                   backgroundSize: "cover",
                                 }}
                               >
-                                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent p-3 text-left text-xs font-semibold text-white">
-                                  Replace {garmentPhotoLabel(role).toLowerCase()} photo
+                                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent p-2 text-left text-[11px] font-semibold text-white">
+                                  Replace
                                 </div>
                               </div>
                             ) : (
-                              <div className="px-4">
-                                <p className="text-sm font-semibold text-[#24262c]">
-                                  Add {garmentPhotoLabel(role).toLowerCase()} photo
-                                </p>
-                                <p className="mt-1 text-xs leading-5 text-[#8b9099]">
-                                  {role === "front"
-                                    ? "Any clear front photo, including a try-on."
-                                    : role === "back"
-                                      ? "Any clear back photo, including a store display."
-                                      : "Optional side photo for prints or details under the arm."}
+                              <div className="px-2 py-3">
+                                <p className="text-xs font-semibold text-[#24262c]">
+                                  Add {garmentPhotoLabel(role).toLowerCase()}
                                 </p>
                               </div>
                             )}
@@ -883,13 +856,13 @@ export default function OutfitsPage() {
                             />
                           </label>
 
-                          <div className="mt-3 flex items-center justify-between gap-3">
-                            <p className="truncate text-xs text-[#6b6f77]">
+                          <div className="mt-2 flex items-center justify-between gap-2">
+                            <p className="truncate text-[11px] text-[#6b6f77]">
                               {photo ? photo.name : "No file selected"}
                             </p>
                             {photo ? (
                               <button
-                                className="rounded-lg border border-[#1e202612] px-2 py-1 text-xs font-semibold text-[#6b6f77] transition hover:bg-[#1e20260a]"
+                                className="shrink-0 rounded-lg border border-[#1e202612] px-2 py-0.5 text-[11px] font-semibold text-[#6b6f77] transition hover:bg-[#1e20260a]"
                                 onClick={() => removeUploadPhoto(role)}
                                 type="button"
                               >
@@ -903,25 +876,9 @@ export default function OutfitsPage() {
                   </div>
                 </div>
 
-                {orderedUploadPhotos.length > 0 ? (
-                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                    {orderedUploadPhotos.map((photo) => (
-                      <div
-                        className="relative h-32 overflow-hidden rounded-lg bg-[#1e20260a]"
-                        key={photo.role}
-                        style={{
-                          backgroundImage: "url(" + photo.url + ")",
-                          backgroundPosition: "center",
-                          backgroundSize: "cover",
-                        }}
-                      >
-                        <span className="absolute bottom-2 left-2 rounded-full bg-[#efece4]/85 px-2 py-1 text-[11px] font-semibold text-[#6b6f77]">
-                          {garmentPhotoLabel(photo.role)}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                ) : null}
+                {/* The per-role tiles above already preview each photo, so the
+                    duplicate thumbnail strip that used to sit here was removed
+                    to keep the dialog short. */}
 
                 {uploadError ? (
                   <p className="rounded-lg border border-[#e0b4a0] bg-[#fbeae2] px-3 py-2 text-sm font-semibold text-[#e0a06d]">
@@ -930,48 +887,11 @@ export default function OutfitsPage() {
                 ) : null}
               </div>
 
-              <aside className="rounded-lg border border-[#1e202612] bg-[#ffffff]/70 backdrop-blur-xl p-4">
-                <p className="text-sm font-medium uppercase tracking-[0.16em] text-[#8b9099]">
-                  Mesh build
-                </p>
-                <div className="mt-4 grid gap-3">
-                  {reconstructionStages.map((stage, index) => (
-                    <div className="flex items-center gap-3" key={stage}>
-                      <span
-                        className={
-                          "grid h-8 w-8 place-items-center rounded-full text-xs font-bold " +
-                          (hasRequiredUploadPhotos
-                            ? "bg-[#9c7a33] text-[#241c08]"
-                            : "bg-[#1e202617] text-[#6b6f77]")
-                        }
-                      >
-                        {index + 1}
-                      </span>
-                      <span className="text-sm font-semibold text-[#24262c]">
-                        {stage}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="mt-6 rounded-lg bg-[#ffffff]/70 backdrop-blur-xl p-4">
-                  <div className="mx-auto h-28 w-24 rounded-lg bg-[#ffffff]/70 backdrop-blur-xl p-3 shadow-sm">
-                    <div className="mx-auto h-20 w-14 rounded-t-full bg-[#2f4f46] shadow-[10px_10px_0_#b36f49] [transform:perspective(140px)_rotateY(-24deg)]" />
-                  </div>
-                  <p className="mt-3 text-center text-sm font-semibold text-[#6b6f77]">
-                    Standard mesh first
-                  </p>
-                  <p className="mt-2 text-center text-xs leading-5 text-[#8b9099]">
-                    Shirt drafts now start from a neutral T-shirt blockout
-                    before texture and photo details are applied.
-                  </p>
-                </div>
-              </aside>
             </div>
 
-            <div className="mt-5 flex flex-col-reverse justify-end gap-3 border-t border-[#1e202617] pt-4 sm:flex-row">
+            <div className="mt-4 flex flex-col-reverse justify-end gap-2 border-t border-[#1e202617] pt-3 sm:flex-row">
               <button
-                className="rounded-lg border border-[#1e202612] px-4 py-3 text-sm font-semibold hover:bg-[#1e20260a] disabled:cursor-not-allowed disabled:opacity-60"
+                className="rounded-lg border border-[#1e202612] px-4 py-2.5 text-sm font-semibold hover:bg-[#1e20260a] disabled:cursor-not-allowed disabled:opacity-60"
                 disabled={isSubmitting}
                 onClick={closeUploadPrompt}
                 type="button"
@@ -979,7 +899,7 @@ export default function OutfitsPage() {
                 Cancel
               </button>
               <button
-                className="rounded-lg border border-[#24262c]/15 px-4 py-3 text-sm font-semibold text-[#24262c] transition hover:border-[#9c7a33] hover:text-[#9c7a33] disabled:cursor-not-allowed disabled:opacity-50"
+                className="rounded-lg border border-[#24262c]/15 px-4 py-2.5 text-sm font-semibold text-[#24262c] transition hover:border-[#9c7a33] hover:text-[#9c7a33] disabled:cursor-not-allowed disabled:opacity-50"
                 disabled={!itemName.trim() || !hasRequiredUploadPhotos || isSubmitting}
                 type="submit"
               >
