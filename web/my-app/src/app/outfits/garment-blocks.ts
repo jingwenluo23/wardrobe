@@ -812,22 +812,17 @@ function buildTopGeometry(
     // wrist — while short cap sleeves keep their slight outward flare. The
     // root continues the shoulder line and the bend spreads over the WHOLE
     // arm; front-loading the turn kinks a visible pinch into the cap.
-    // A relaxed arm is nearly STRAIGHT: it leaves the shoulder already angled
-    // down and only eases a little further before the cuff. Both ends scale
-    // with sleeve length, so a long sleeve starts steep (60 deg) and finishes
-    // at 85 — short of vertical, because passing vertical swings the forearm
-    // back toward the body and reads as a pinched elbow. The small remaining
-    // bend is spread evenly, so no segment turns sharply. Short cap sleeves
-    // keep their original shallow root and outward flare.
-    const droopStart = slopeRad + ((14 + lengthT * 30) * Math.PI) / 180;
-    const droopEnd = droopRad + (lengthT * 45 * Math.PI) / 180;
-    // LINEAR, not smoothstep: smoothstep is flat at both ends and steepest at
-    // t = 0.5, which piles the whole turn into the middle of the sleeve — the
-    // elbow — and reads as a crease there however small the total bend. A
-    // linear ramp gives constant curvature, so the sleeve falls as one even arc
-    // like cloth hanging under its own weight.
+    // Root stays on the shoulder line (no pinch) and the fall stops well short
+    // of vertical, so the sleeve never swings back toward the body — that is
+    // what reads as a pinched elbow. Do not steepen these or concentrate the
+    // bend: every attempt to pull the cuff closer to the torso by raising the
+    // end angle past ~75 degrees has reintroduced the crease. Widening the
+    // shoulder is also not the lever — that inverts the armhole (see the cap on
+    // shoulderX above). These values are the ones confirmed good in review.
+    const droopStart = slopeRad + (18 * Math.PI) / 180;
+    const droopEnd = droopRad + (lengthT * 34 * Math.PI) / 180;
     const droopAt = (t: number) =>
-      droopStart + (droopEnd - droopStart) * clamp(t, 0, 1);
+      droopStart + (droopEnd - droopStart) * smoothstep(t);
     // Average axis for the ring frame.
     const droopMid = droopAt(0.5);
     const axis = new THREE.Vector3(
