@@ -821,8 +821,13 @@ function buildTopGeometry(
     // keep their original shallow root and outward flare.
     const droopStart = slopeRad + ((14 + lengthT * 30) * Math.PI) / 180;
     const droopEnd = droopRad + (lengthT * 45 * Math.PI) / 180;
+    // LINEAR, not smoothstep: smoothstep is flat at both ends and steepest at
+    // t = 0.5, which piles the whole turn into the middle of the sleeve — the
+    // elbow — and reads as a crease there however small the total bend. A
+    // linear ramp gives constant curvature, so the sleeve falls as one even arc
+    // like cloth hanging under its own weight.
     const droopAt = (t: number) =>
-      droopStart + (droopEnd - droopStart) * smoothstep(t);
+      droopStart + (droopEnd - droopStart) * clamp(t, 0, 1);
     // Average axis for the ring frame.
     const droopMid = droopAt(0.5);
     const axis = new THREE.Vector3(

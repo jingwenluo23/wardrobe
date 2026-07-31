@@ -554,10 +554,16 @@ export function inpaintTile(
             patch[dst + 2] = tileRaw[src + 2];
           }
         }
-        // Mirrored tiling avoids a visible seam every P pixels.
-        const mirror = (v: number) => {
-          const m = ((v % (2 * P)) + 2 * P) % (2 * P);
-          return m < P ? m : 2 * P - 1 - m;
+        // Each patch-sized block is wrapped (not mirrored) and shifted by a
+        // deterministic per-block offset. Mirroring joins blocks seamlessly but
+        // makes every pair a reflection, which on a large fill reads as an
+        // obvious kaleidoscope butterfly down the middle of the garment. Camo
+        // and other organic prints are irregular and high-frequency, so a
+        // shifted wrap hides its joins far better than symmetry does.
+        const blockShift = (bx: number, by: number) => {
+          let h = (bx * 73856093) ^ (by * 19349663);
+          h = (h ^ (h >>> 13)) >>> 0;
+          return h % P;
         };
         for (let y = 0; y < size; y += 1) {
           for (let x = 0; x < size; x += 1) {
@@ -565,7 +571,11 @@ export function inpaintTile(
             if (keep[i] || dist[i] <= 6) {
               continue;
             }
-            const s = (mirror(y) * P + mirror(x)) * 3;
+            const bx = Math.floor(x / P);
+            const by = Math.floor(y / P);
+            const su = (x + blockShift(bx, by)) % P;
+            const sv = (y + blockShift(by, bx + 7)) % P;
+            const s = (sv * P + su) * 3;
             tileRaw[i * 3] = patch[s];
             tileRaw[i * 3 + 1] = patch[s + 1];
             tileRaw[i * 3 + 2] = patch[s + 2];
@@ -1542,13 +1552,21 @@ export async function segmentGarment(
         .toBuffer(),
     ]);
 
+    const mainTextureUrl = "data:image/jpeg;base64," + tile.toString("base64");
     return {
       color: fabricColor,
-      textureUrl: "data:image/jpeg;base64," + tile.toString("base64"),
+      textureUrl: mainTextureUrl,
       fabricTextureUrl:
         "data:image/jpeg;base64," + fabricTile.toString("base64"),
-      sleeveTextureUrl,
-      hoodTextureUrl,
+      // When no dedicated sleeve/hood region could be isolated, reuse the torso
+      // tile rather than letting the viewer fall back to the plain swatch. A
+      // photo of a worn garment with the arms hanging down has sleeve columns
+      // nearly as tall as the torso, so they get absorbed into the torso crop
+      // and no separate region survives — which rendered printed sleeves as
+      // flat colour. The sleeves are cut from the same printed cloth, so the
+      // torso tile is a far better likeness than a solid fill.
+      sleeveTextureUrl: sleeveTextureUrl ?? mainTextureUrl,
+      hoodTextureUrl: hoodTextureUrl ?? mainTextureUrl,
       shape,
     };
   } catch (error) {
