@@ -486,6 +486,17 @@ export async function createDraft(input: {
     toHex(stats.channels[1]?.mean ?? 150) +
     toHex(stats.channels[2]?.mean ?? 150);
 
+  // Seed the panels with a guaranteed chest crop synchronously, and persist it
+  // in the initial row. The background extraction below only ever upgrades
+  // these — so even if that task never completes or fails in this deployment,
+  // the mesh still shows the garment's real fabric instead of a blank base.
+  const [seedFront, seedBack] = await Promise.all([
+    chestCropTexture(front.buffer),
+    chestCropTexture(back.buffer),
+  ]);
+  const seededFront = seedFront ?? seedBack;
+  const seededBack = seedBack ?? seedFront;
+
   const stored: StoredDraft = {
     id,
     name: input.name,
@@ -498,6 +509,8 @@ export async function createDraft(input: {
     templateId: template.id,
     templateVersion: GARMENT_TEMPLATE_VERSION,
     segmentationConfidence: 0.8,
+    extractedTextureUrl: seededFront,
+    extractedBackTextureUrl: seededBack,
     extractionReady: false,
   };
 
@@ -505,7 +518,8 @@ export async function createDraft(input: {
     .prepare(
       "INSERT INTO drafts (id, created_at, name, category, template_id, " +
         "template_version, color, confidence, extraction_ready, params_json, " +
-        "features_json, photos_json) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+        "features_json, photos_json, front_texture, back_texture) " +
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
     )
     .run(
       stored.id,
@@ -520,6 +534,8 @@ export async function createDraft(input: {
       JSON.stringify(stored.params),
       JSON.stringify(stored.features),
       JSON.stringify(stored.photos),
+      stored.extractedTextureUrl ?? null,
+      stored.extractedBackTextureUrl ?? null,
     );
 
   // Extraction runs in the background so the upload request returns right
@@ -687,7 +703,11 @@ export async function createDraft(input: {
             "UPDATE drafts SET extraction_ready = 1, " +
               "color = COALESCE(?, color), " +
               "confidence = COALESCE(?, confidence), " +
-              "front_texture = ?, back_texture = ?, fabric_texture = ?, " +
+              // COALESCE so a failed/partial extraction (null) keeps the
+              // synchronous chest-crop seed instead of blanking the panels.
+              "front_texture = COALESCE(?, front_texture), " +
+              "back_texture = COALESCE(?, back_texture), " +
+              "fabric_texture = ?, " +
               "sleeve_texture = ?, hood_texture = ?, side_texture = ?, " +
               "side_texture_mode = ?, " +
               "params_json = COALESCE(?, params_json), " +

@@ -127,10 +127,17 @@ function buildTopGeometry(
 
   // Shoulder point: end of the shoulder seam, start of the armhole curve.
   // shoulderWidthFactor < 0.8 narrows the straps (tanks, undershirts).
-  const shoulderX = Math.max(
-    neckHalf + halfW * 0.08,
-    halfW * (params.shoulderWidthFactor ?? 0.8),
-  );
+  // A drop-shoulder pad pushes the shoulder point outward past the body so the
+  // sleeve can hang straight DOWN beside the torso (relaxed / oversized fit)
+  // instead of flaring out to reach the arm from a narrow shoulder. Sleeveless
+  // cuts skip it so tank straps stay on the shoulder.
+  const shoulderPad =
+    features.sleeves === false ? 0 : halfW * 0.12;
+  const shoulderX =
+    Math.max(
+      neckHalf + halfW * 0.08,
+      halfW * (params.shoulderWidthFactor ?? 0.8),
+    ) + shoulderPad;
   const shoulderPtY =
     neckShoulderY - Math.tan(slopeRad) * (shoulderX - neckHalf);
   // Underarm point: bottom of the armhole curve, on the side seam.
@@ -807,13 +814,13 @@ function buildTopGeometry(
     // wrist — while short cap sleeves keep their slight outward flare. The
     // root continues the shoulder line and the bend spreads over the WHOLE
     // arm; front-loading the turn kinks a visible pinch into the cap.
-    const droopStart = slopeRad + (18 * Math.PI) / 180;
-    const droopEnd = droopRad + (lengthT * 34 * Math.PI) / 180;
-    // A single smooth, evenly-spread bend from the shoulder to the cuff — no
-    // acceleration, and the wrist stops short of vertical — so the sleeve reads
-    // as one straight relaxed arm hanging down and slightly out, close to the
-    // torso, rather than a shallow splay or a sharp kink at the elbow. The root
-    // angle stays gentle so the underarm joins the torso without a pinch.
+    // Because the shoulder pad above already carries the armhole out past the
+    // torso, the sleeve no longer has to travel outward to clear the body: it
+    // can turn down early and hang nearly straight. The bend is spread evenly
+    // over the whole sleeve (no acceleration) so there is no elbow kink, and
+    // long sleeves settle just shy of vertical — arms down at rest.
+    const droopStart = slopeRad + (38 * Math.PI) / 180;
+    const droopEnd = droopRad + (lengthT * 52 * Math.PI) / 180;
     const droopAt = (t: number) =>
       droopStart + (droopEnd - droopStart) * smoothstep(t);
     // Average axis for the ring frame.
