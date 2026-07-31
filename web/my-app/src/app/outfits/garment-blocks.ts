@@ -812,13 +812,15 @@ function buildTopGeometry(
     // wrist — while short cap sleeves keep their slight outward flare. The
     // root continues the shoulder line and the bend spreads over the WHOLE
     // arm; front-loading the turn kinks a visible pinch into the cap.
-    // Because the shoulder pad above already carries the armhole out past the
-    // torso, the sleeve no longer has to travel outward to clear the body: it
-    // can turn down early and hang nearly straight. The bend is spread evenly
-    // over the whole sleeve (no acceleration) so there is no elbow kink, and
-    // long sleeves settle just shy of vertical — arms down at rest.
-    const droopStart = slopeRad + (38 * Math.PI) / 180;
-    const droopEnd = droopRad + (lengthT * 52 * Math.PI) / 180;
+    // A relaxed arm is nearly STRAIGHT: it leaves the shoulder already angled
+    // down and only eases a little further before the cuff. Both ends scale
+    // with sleeve length, so a long sleeve starts steep (60 deg) and finishes
+    // at 85 — short of vertical, because passing vertical swings the forearm
+    // back toward the body and reads as a pinched elbow. The small remaining
+    // bend is spread evenly, so no segment turns sharply. Short cap sleeves
+    // keep their original shallow root and outward flare.
+    const droopStart = slopeRad + ((14 + lengthT * 30) * Math.PI) / 180;
+    const droopEnd = droopRad + (lengthT * 45 * Math.PI) / 180;
     const droopAt = (t: number) =>
       droopStart + (droopEnd - droopStart) * smoothstep(t);
     // Average axis for the ring frame.

@@ -464,6 +464,121 @@ export function inpaintTile(
   // patched areas read as soft fabric rather than smeared stripes.
   const filled = new Uint8Array(size * size);
 
+  // Pass 0 — texture-preserving fill for LARGE holes.
+  //
+  // Interpolating across a big empty region stretches whatever pixel sits at
+  // its edge over the whole span, which turns a patterned fabric (camo, plaid)
+  // into long smeared streaks. Patterned cloth is statistically uniform, so a
+  // far more faithful fill is real fabric copied from elsewhere in the tile.
+  // Find the densest patch of surviving garment and mirror-tile it into every
+  // pixel that is far from any kept pixel, then mark those pixels kept so the
+  // interpolation below only handles what it is good at: thin seams and small
+  // holes near real fabric. Pixels close to kept fabric are left alone so the
+  // fill still blends locally instead of hard-edging.
+  {
+    const n = size * size;
+    let keptCount = 0;
+    for (let i = 0; i < n; i += 1) {
+      keptCount += keep[i];
+    }
+    if (keptCount > n * 0.04 && keptCount < n) {
+      // Chamfer distance to the nearest kept pixel.
+      const INF = 1e9;
+      const dist = new Float32Array(n);
+      for (let i = 0; i < n; i += 1) {
+        dist[i] = keep[i] ? 0 : INF;
+      }
+      for (let y = 0; y < size; y += 1) {
+        for (let x = 0; x < size; x += 1) {
+          const i = y * size + x;
+          let d = dist[i];
+          if (y > 0) d = Math.min(d, dist[i - size] + 1);
+          if (x > 0) d = Math.min(d, dist[i - 1] + 1);
+          if (y > 0 && x > 0) d = Math.min(d, dist[i - size - 1] + 1.414);
+          if (y > 0 && x < size - 1) d = Math.min(d, dist[i - size + 1] + 1.414);
+          dist[i] = d;
+        }
+      }
+      for (let y = size - 1; y >= 0; y -= 1) {
+        for (let x = size - 1; x >= 0; x -= 1) {
+          const i = y * size + x;
+          let d = dist[i];
+          if (y < size - 1) d = Math.min(d, dist[i + size] + 1);
+          if (x < size - 1) d = Math.min(d, dist[i + 1] + 1);
+          if (y < size - 1 && x < size - 1)
+            d = Math.min(d, dist[i + size + 1] + 1.414);
+          if (y < size - 1 && x > 0) d = Math.min(d, dist[i + size - 1] + 1.414);
+          dist[i] = d;
+        }
+      }
+      // Densest square of kept fabric, via a summed-area table.
+      const P = Math.max(16, Math.min(128, size >> 2));
+      const stride = size + 1;
+      const integral = new Int32Array(stride * stride);
+      for (let y = 0; y < size; y += 1) {
+        for (let x = 0; x < size; x += 1) {
+          integral[(y + 1) * stride + (x + 1)] =
+            keep[y * size + x] +
+            integral[y * stride + (x + 1)] +
+            integral[(y + 1) * stride + x] -
+            integral[y * stride + x];
+        }
+      }
+      let bestX = 0;
+      let bestY = 0;
+      let best = -1;
+      for (let y = 0; y + P <= size; y += 4) {
+        for (let x = 0; x + P <= size; x += 4) {
+          const s =
+            integral[(y + P) * stride + (x + P)] -
+            integral[y * stride + (x + P)] -
+            integral[(y + P) * stride + x] +
+            integral[y * stride + x];
+          if (s > best) {
+            best = s;
+            bestX = x;
+            bestY = y;
+          }
+        }
+      }
+      if (best > P * P * 0.6) {
+        // Snapshot the patch so sampling can never read pixels this pass has
+        // already rewritten.
+        const patch = Buffer.alloc(P * P * 3);
+        for (let y = 0; y < P; y += 1) {
+          for (let x = 0; x < P; x += 1) {
+            const src = ((bestY + y) * size + (bestX + x)) * 3;
+            const dst = (y * P + x) * 3;
+            patch[dst] = tileRaw[src];
+            patch[dst + 1] = tileRaw[src + 1];
+            patch[dst + 2] = tileRaw[src + 2];
+          }
+        }
+        // Mirrored tiling avoids a visible seam every P pixels.
+        const mirror = (v: number) => {
+          const m = ((v % (2 * P)) + 2 * P) % (2 * P);
+          return m < P ? m : 2 * P - 1 - m;
+        };
+        for (let y = 0; y < size; y += 1) {
+          for (let x = 0; x < size; x += 1) {
+            const i = y * size + x;
+            if (keep[i] || dist[i] <= 6) {
+              continue;
+            }
+            const s = (mirror(y) * P + mirror(x)) * 3;
+            tileRaw[i * 3] = patch[s];
+            tileRaw[i * 3 + 1] = patch[s + 1];
+            tileRaw[i * 3 + 2] = patch[s + 2];
+            // Real fabric now: let the passes below treat it as source and
+            // only feather the narrow band still separating it from the
+            // original garment pixels.
+            keep[i] = 1;
+          }
+        }
+      }
+    }
+  }
+
   const lerpFill = (
     ti: number,
     ai: number,
