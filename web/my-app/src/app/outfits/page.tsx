@@ -889,15 +889,9 @@ export default function OutfitsPage() {
 
             </div>
 
-            <div className="mt-4 flex flex-col-reverse justify-end gap-2 border-t border-[#1e202617] pt-3 sm:flex-row">
-              <button
-                className="rounded-lg border border-[#1e202612] px-4 py-2.5 text-sm font-semibold hover:bg-[#1e20260a] disabled:cursor-not-allowed disabled:opacity-60"
-                disabled={isSubmitting}
-                onClick={closeUploadPrompt}
-                type="button"
-              >
-                Cancel
-              </button>
+            {/* Only one dismiss control: the header's Close button already
+                calls closeUploadPrompt, so the duplicate Cancel was removed. */}
+            <div className="mt-4 flex justify-end border-t border-[#1e202617] pt-3">
               <button
                 className="rounded-lg border border-[#24262c]/15 px-4 py-2.5 text-sm font-semibold text-[#24262c] transition hover:border-[#9c7a33] hover:text-[#9c7a33] disabled:cursor-not-allowed disabled:opacity-50"
                 disabled={!itemName.trim() || !hasRequiredUploadPhotos || isSubmitting}
