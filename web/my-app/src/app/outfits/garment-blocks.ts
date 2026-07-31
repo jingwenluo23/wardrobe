@@ -767,7 +767,7 @@ function buildTopGeometry(
   // sleeve's root ring reuses those exact positions, so the sleeve grows out
   // of the armhole with no gap or overlap.
   const sleeveLen = params.sleeveLength * SCALE;
-  const droopRad = slopeRad + (24 * Math.PI) / 180;
+  const droopRad = slopeRad + (30 * Math.PI) / 180;
 
   const buildSleeve = (side: 1 | -1) => {
     const sideCol = side > 0 ? COLS : 0;
@@ -807,13 +807,15 @@ function buildTopGeometry(
     // wrist — while short cap sleeves keep their slight outward flare. The
     // root continues the shoulder line and the bend spreads over the WHOLE
     // arm; front-loading the turn kinks a visible pinch into the cap.
-    const droopStart = slopeRad + (14 * Math.PI) / 180;
-    const droopEnd = droopRad + (lengthT * 52 * Math.PI) / 180;
-    // Root stays on the shoulder line (no pinch); the fall reaches vertical a
-    // little sooner so the forearm and cuff tuck in CLOSER to the torso
-    // instead of splaying out to the sides.
+    const droopStart = slopeRad + (18 * Math.PI) / 180;
+    const droopEnd = droopRad + (lengthT * 60 * Math.PI) / 180;
+    // Root stays close to the shoulder line (no armpit pinch), but the fall
+    // reaches vertical well before mid-arm so the whole sleeve hangs DOWN close
+    // to the torso — a natural relaxed-arm drop — instead of splaying out to
+    // the sides in a T. Long sleeves finish just past vertical so the forearm
+    // and cuff tuck inward against the body.
     const droopAt = (t: number) =>
-      droopStart + (droopEnd - droopStart) * smoothstep(Math.min(1, t * 1.18));
+      droopStart + (droopEnd - droopStart) * smoothstep(Math.min(1, t * 1.35));
     // Average axis for the ring frame.
     const droopMid = droopAt(0.5);
     const axis = new THREE.Vector3(

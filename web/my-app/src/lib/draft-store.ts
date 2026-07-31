@@ -211,6 +211,38 @@ function createId() {
 
 const MASK_SIZE = 96;
 
+/**
+ * Last-resort garment texture: a plain central chest crop of the photo. It
+ * keeps the head (top) and most of the background (sides) out of frame, so for
+ * a worn or laid-flat top the crop is almost entirely fabric. Unlike the
+ * segmentation and colour-heuristic extractors it does no masking that can come
+ * up empty — a valid photo always yields a texture — so it guarantees the mesh
+ * is never left blank when the smarter steps fail or time out.
+ */
+async function chestCropTexture(buffer: Buffer): Promise<string | undefined> {
+  try {
+    const meta = await sharp(buffer).rotate().metadata();
+    const w = meta.width ?? 0;
+    const h = meta.height ?? 0;
+    if (w < 8 || h < 8) {
+      return undefined;
+    }
+    const left = Math.round(w * 0.18);
+    const top = Math.round(h * 0.38);
+    const width = Math.max(1, Math.min(w - left, Math.round(w * 0.64)));
+    const height = Math.max(1, Math.min(h - top, Math.round(h * 0.5)));
+    const jpg = await sharp(buffer)
+      .rotate()
+      .extract({ left, top, width, height })
+      .resize(512, 512, { fit: "fill" })
+      .jpeg({ quality: 82 })
+      .toBuffer();
+    return "data:image/jpeg;base64," + jpg.toString("base64");
+  } catch {
+    return undefined;
+  }
+}
+
 async function analyzePhoto(buffer: Buffer): Promise<{
   color: string;
   textureUrl: string;
@@ -508,6 +540,24 @@ export async function createDraft(input: {
       features?: GarmentFeatures;
     } = {};
     try {
+      // Guaranteed baseline: a plain central chest crop of each photo, applied
+      // BEFORE any of the segmentation/synthesis work runs. If that work throws
+      // or hits the timeout below, this crop survives so the garment texture
+      // still appears instead of a blank mesh; every step after it only ever
+      // upgrades these panels to the cleaner isolated version.
+      const [fallbackFront, fallbackBack] = await Promise.all([
+        chestCropTexture(front.buffer),
+        chestCropTexture(back.buffer),
+      ]);
+      if (fallbackFront || fallbackBack) {
+        update = {
+          color: stored.color,
+          front: fallbackFront,
+          back: fallbackBack ?? fallbackFront,
+          confidence: 0.5,
+        };
+      }
+
       // Preferred path: ML clothes segmentation (SegFormer). Falls back to
       // the colour-heuristic extractor when the model is unavailable. The
       // whole thing races a timeout so a hung model download or wedged
