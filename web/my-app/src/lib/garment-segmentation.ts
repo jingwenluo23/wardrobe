@@ -1056,6 +1056,46 @@ export function isSkinTone(r: number, g: number, b: number) {
   );
 }
 
+/**
+ * Decide whether the skin-tone exclusion is safe for this garment.
+ *
+ * The skin test accepts any moderately saturated colour with r > g > b, which
+ * is also the exact signature of earthy fabric: tan, khaki, brown, and the bark
+ * tones of a camo print. The segmentation mask already isolates the clothing,
+ * so genuine skin bleed inside it is small (a little at the neck and wrists).
+ * When a large share of the masked garment reads as "skin" the test is clearly
+ * matching the fabric itself, and applying it would punch most of the garment
+ * out of the tile — the inpainter then stretches the few surviving pixels down
+ * each column, which is what produced heavy vertical smearing on camo. In that
+ * case drop the exclusion and keep the fabric.
+ */
+function skinExcluderFor(
+  data: Uint8Array | Buffer,
+  mask: Uint8Array,
+  width: number,
+  height: number,
+): ((r: number, g: number, b: number) => boolean) | undefined {
+  let masked = 0;
+  let skin = 0;
+  // Sparse scan: this only needs a ratio, not an exact count.
+  for (let y = 0; y < height; y += 2) {
+    for (let x = 0; x < width; x += 2) {
+      const i = y * width + x;
+      if (!mask[i]) {
+        continue;
+      }
+      masked += 1;
+      if (isSkinTone(data[i * 3], data[i * 3 + 1], data[i * 3 + 2])) {
+        skin += 1;
+      }
+    }
+  }
+  if (masked === 0) {
+    return isSkinTone;
+  }
+  return skin / masked > 0.25 ? undefined : isSkinTone;
+}
+
 const INFER_SIZE = 768;
 const HI_SIZE = 1536;
 const TILE = 512;
@@ -1209,6 +1249,11 @@ export async function segmentGarment(
     const gg = median(gs);
     const gb = median(bs);
 
+    // Skip the skin-tone exclusion on earthy fabrics it would misread as skin
+    // (camo, tan, khaki). Decided once here and reused for every region below
+    // so the whole garment is treated consistently.
+    const skinExclude = skinExcluderFor(data, mask, width, height);
+
     // Build the texture tile through the dense pose/perspective warp, then
     // inpaint non-garment pixels (neck opening, seams, skin) from the
     // surrounding fabric so no ghost collar or flat patches appear.
@@ -1220,7 +1265,7 @@ export async function segmentGarment(
       minX,
       maxX,
       tileSize: TILE,
-      exclude: isSkinTone,
+      exclude: skinExclude,
       hiData,
       hiWidth: hiInfo.width,
       hiHeight: hiInfo.height,
@@ -1268,7 +1313,7 @@ export async function segmentGarment(
         minX: rMinX,
         maxX: rMaxX,
         tileSize: TILE,
-        exclude: isSkinTone,
+        exclude: skinExclude,
         hiData,
         hiWidth: hiInfo.width,
         hiHeight: hiInfo.height,
