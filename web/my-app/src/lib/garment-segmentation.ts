@@ -295,10 +295,26 @@ export function flattenTile(
   const print = new Uint8Array(n);
   let resSum = 0;
   let resCount = 0;
+  // Coarse chromaticity histogram. Shading moves a pixel along the base
+  // direction (luminance) but leaves its chroma bin fixed, so a solid fabric —
+  // however wrinkled or shadowed — stays in one bin. Multi-colour weaves
+  // (camo, plaid, floral) genuinely span several earthy bins; that spread is
+  // invisible to the multiplicative-residual and luminance-energy tests, which
+  // is why low-contrast photographic camo was being flattened to blank cloth.
+  const CH2 = 12;
+  const chromaHist = new Array<number>(CH2 * CH2).fill(0);
+  let chromaTotal = 0;
   for (let i = 0; i < n; i += 1) {
     const r = tile[i * 3];
     const g = tile[i * 3 + 1];
     const b = tile[i * 3 + 2];
+    const sum = r + g + b;
+    if (sum >= 24) {
+      const cu = Math.min(CH2 - 1, Math.floor((r / sum) * CH2));
+      const cv = Math.min(CH2 - 1, Math.floor((g / sum) * CH2));
+      chromaHist[cu * CH2 + cv] += 1;
+      chromaTotal += 1;
+    }
     let s = (r * br + g * bg + b * bb) / baseNorm;
     s = Math.min(1.9, Math.max(0.35, s));
     const dr = r - s * br;
@@ -368,9 +384,53 @@ export function flattenTile(
     }
   }
   const hfEnergy = energyCount > 0 ? energy / energyCount : 0;
+  // Count chroma bins that each hold a meaningful share of the fabric. One or
+  // two bins => solid cloth (optionally with a logo); three or more => a
+  // genuine multi-colour weave (bright plaid/floral) that flattening erases.
+  let chromaSpread = 0;
+  if (chromaTotal > 0) {
+    const floor = chromaTotal * 0.06;
+    for (const count of chromaHist) {
+      if (count >= floor) {
+        chromaSpread += 1;
+      }
+    }
+  }
+  // Mid-scale luminance structure. Low-saturation camo (earthy Realtree tones)
+  // barely moves in chroma or between adjacent pixels — it hides from both the
+  // chroma spread and the high-frequency energy test — but its tonal BLOBS
+  // survive heavy downsampling, while a solid fabric's fold shading is a smooth
+  // gradient that averages out. The coefficient of variation of coarse block
+  // means separates the two: ~0.12 for shaded solids, ~0.35 for camo.
+  const grid = 16;
+  const cell = Math.max(1, Math.floor(size / grid));
+  const blocks: number[] = [];
+  for (let by = 0; by + cell <= size; by += cell) {
+    for (let bx = 0; bx + cell <= size; bx += cell) {
+      let sum = 0;
+      for (let y = by; y < by + cell; y += 1) {
+        for (let x = bx; x < bx + cell; x += 1) {
+          const i = (y * size + x) * 3;
+          sum += (tile[i] + tile[i + 1] + tile[i + 2]) / 3;
+        }
+      }
+      blocks.push(sum / (cell * cell));
+    }
+  }
+  let coarseCov = 0;
+  if (blocks.length > 0) {
+    const mean = blocks.reduce((a, b) => a + b, 0) / blocks.length;
+    const variance =
+      blocks.reduce((a, b) => a + (b - mean) ** 2, 0) / blocks.length;
+    coarseCov = Math.sqrt(variance) / Math.max(1, mean);
+  }
   const shouldApply =
     apply ??
-    (printCount / n <= 0.3 && rmsResidual <= 10 && hfEnergy <= 9);
+    (printCount / n <= 0.3 &&
+      rmsResidual <= 10 &&
+      hfEnergy <= 9 &&
+      chromaSpread < 3 &&
+      coarseCov < 0.28);
   if (shouldApply) {
     const R = Math.round(br);
     const G = Math.round(bg);
