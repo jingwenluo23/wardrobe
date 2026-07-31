@@ -114,6 +114,13 @@ export function fitGarmentToShape(
     4,
     bodyWidth * 0.85,
   );
+  // spanRatio only measures how far the silhouette reaches SIDEWAYS. A sleeve
+  // photographed on a body with the arms hanging down runs vertically and adds
+  // almost nothing to the span, so this estimate collapses a 56cm hoodie sleeve
+  // to a ~4cm stub. Only trust it when the sleeves clearly extend to the sides
+  // (arms out, or a flat lay); otherwise keep the template's length, which
+  // already encodes long vs short from the garment type the user chose.
+  const sleevesExtendSideways = shape.spanRatio > 1.45;
   const targetNeckWidth = clamp(
     bodyWidth * shape.neckWidthRatio,
     bodyWidth * 0.16,
@@ -141,7 +148,7 @@ export function fitGarmentToShape(
         weight,
       ),
       sleeveLength:
-        templateFeatures.sleeves === false
+        templateFeatures.sleeves === false || !sleevesExtendSideways
           ? templateParams.sleeveLength
           : mix(templateParams.sleeveLength, targetSleeve, weight),
       neckWidthFront: mix(

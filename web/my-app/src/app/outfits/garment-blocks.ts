@@ -127,17 +127,15 @@ function buildTopGeometry(
 
   // Shoulder point: end of the shoulder seam, start of the armhole curve.
   // shoulderWidthFactor < 0.8 narrows the straps (tanks, undershirts).
-  // A drop-shoulder pad pushes the shoulder point outward past the body so the
-  // sleeve can hang straight DOWN beside the torso (relaxed / oversized fit)
-  // instead of flaring out to reach the arm from a narrow shoulder. Sleeveless
-  // cuts skip it so tank straps stay on the shoulder.
-  const shoulderPad =
-    features.sleeves === false ? 0 : halfW * 0.12;
-  const shoulderX =
-    Math.max(
-      neckHalf + halfW * 0.08,
-      halfW * (params.shoulderWidthFactor ?? 0.8),
-    ) + shoulderPad;
+  // Hard cap below halfW: widthAt() interpolates from halfW at the underarm to
+  // shoulderX at the shoulder, so a shoulder wider than the body inverts that
+  // term and the panel flares OUTWARD above the underarm — a bulged shoulder
+  // with a broken armhole instead of a concave curve.
+  const shoulderX = clamp(
+    Math.max(neckHalf + halfW * 0.08, halfW * (params.shoulderWidthFactor ?? 0.8)),
+    neckHalf + halfW * 0.06,
+    halfW * 0.94,
+  );
   const shoulderPtY =
     neckShoulderY - Math.tan(slopeRad) * (shoulderX - neckHalf);
   // Underarm point: bottom of the armhole curve, on the side seam.
