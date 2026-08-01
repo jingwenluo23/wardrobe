@@ -131,10 +131,23 @@ function buildTopGeometry(
   // shoulderX at the shoulder, so a shoulder wider than the body inverts that
   // term and the panel flares OUTWARD above the underarm — a bulged shoulder
   // with a broken armhole instead of a concave curve.
+  //
+  // Drop-shoulder padding: for a sleeved garment the shoulder point is carried
+  // half-way out toward the body's full width. That is what a relaxed hoodie
+  // does — the shoulder seam sits out on the arm and the armhole stands nearly
+  // vertical — and it is the move that lets the sleeve hang STEEPLY without
+  // driving into the torso, so the cuff can sit close to the body. The padding
+  // works by approaching halfW, never exceeding it: past halfW the widthAt()
+  // term inverts and the panel bulges outward instead of curving in.
+  const shoulderBase = Math.max(
+    neckHalf + halfW * 0.08,
+    halfW * (params.shoulderWidthFactor ?? 0.8),
+  );
+  const dropShoulder = features.sleeves === false ? 0 : 0.5;
   const shoulderX = clamp(
-    Math.max(neckHalf + halfW * 0.08, halfW * (params.shoulderWidthFactor ?? 0.8)),
+    shoulderBase + (halfW * 0.97 - shoulderBase) * dropShoulder,
     neckHalf + halfW * 0.06,
-    halfW * 0.94,
+    halfW * 0.97,
   );
   const shoulderPtY =
     neckShoulderY - Math.tan(slopeRad) * (shoulderX - neckHalf);
@@ -812,17 +825,24 @@ function buildTopGeometry(
     // wrist — while short cap sleeves keep their slight outward flare. The
     // root continues the shoulder line and the bend spreads over the WHOLE
     // arm; front-loading the turn kinks a visible pinch into the cap.
-    // Root stays on the shoulder line (no pinch) and the fall stops well short
-    // of vertical, so the sleeve never swings back toward the body — that is
-    // what reads as a pinched elbow. Do not steepen these or concentrate the
-    // bend: every attempt to pull the cuff closer to the torso by raising the
-    // end angle past ~75 degrees has reintroduced the crease. Widening the
-    // shoulder is also not the lever — that inverts the armhole (see the cap on
-    // shoulderX above). These values are the ones confirmed good in review.
-    const droopStart = slopeRad + (18 * Math.PI) / 180;
-    const droopEnd = droopRad + (lengthT * 34 * Math.PI) / 180;
+    // A crease can only appear where the axis TURNS, so the fix for the elbow
+    // is not a smaller total turn — it is putting the turn somewhere else. All
+    // of it happens over the upper arm and the sleeve is perfectly straight
+    // from the elbow down, which is also how a real sleeve behaves: it curves
+    // over the deltoid, then hangs dead straight to the cuff.
+    //
+    // The drop-shoulder padding above is what makes this affordable. With the
+    // armhole carried out to the edge of the body the sleeve can leave the
+    // shoulder already steep, so only a small turn is left to distribute, and
+    // a steep sleeve no longer drives into the torso — the cuff ends up beside
+    // the body instead of out to the side.
+    const droopStart = slopeRad + ((18 + lengthT * 28) * Math.PI) / 180;
+    const droopEnd = droopRad + (lengthT * 44 * Math.PI) / 180;
+    // Turn confined to the upper arm; zero curvature past BEND_END.
+    const BEND_END = 0.45;
     const droopAt = (t: number) =>
-      droopStart + (droopEnd - droopStart) * smoothstep(t);
+      droopStart +
+      (droopEnd - droopStart) * smoothstep(Math.min(1, t / BEND_END));
     // Average axis for the ring frame.
     const droopMid = droopAt(0.5);
     const axis = new THREE.Vector3(
