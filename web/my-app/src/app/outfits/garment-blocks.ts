@@ -825,24 +825,23 @@ function buildTopGeometry(
     // wrist — while short cap sleeves keep their slight outward flare. The
     // root continues the shoulder line and the bend spreads over the WHOLE
     // arm; front-loading the turn kinks a visible pinch into the cap.
-    // A crease can only appear where the axis TURNS, so the fix for the elbow
-    // is not a smaller total turn — it is putting the turn somewhere else. All
-    // of it happens over the upper arm and the sleeve is perfectly straight
-    // from the elbow down, which is also how a real sleeve behaves: it curves
-    // over the deltoid, then hangs dead straight to the cuff.
+    // A crease forms wherever the axis turns sharply, so relocating the bend
+    // only moves the crease — concentrating it at the elbow creased the elbow,
+    // concentrating it over the deltoid creased the upper arm. The only real
+    // cure is to make the sleeve turn barely at all, anywhere.
     //
-    // The drop-shoulder padding above is what makes this affordable. With the
-    // armhole carried out to the edge of the body the sleeve can leave the
-    // shoulder already steep, so only a small turn is left to distribute, and
-    // a steep sleeve no longer drives into the torso — the cuff ends up beside
-    // the body instead of out to the side.
-    const droopStart = slopeRad + ((18 + lengthT * 28) * Math.PI) / 180;
+    // The drop-shoulder padding above is what makes that possible: with the
+    // armhole carried out to the edge of the body, the sleeve can leave the
+    // shoulder ALREADY steep (70 deg) without driving into the torso, so it
+    // only has ~14 deg left to travel before the cuff. Spread linearly, that
+    // is about 1.2 deg per segment along the entire sleeve — far below the
+    // ~5 deg peak of a spread smoothstep — so the arm reads as one straight
+    // relaxed drop with the cuff beside the body and no crease at any height.
+    // Short cap sleeves stay shallow and keep their outward flare.
+    const droopStart = slopeRad + ((18 + lengthT * 36) * Math.PI) / 180;
     const droopEnd = droopRad + (lengthT * 44 * Math.PI) / 180;
-    // Turn confined to the upper arm; zero curvature past BEND_END.
-    const BEND_END = 0.45;
     const droopAt = (t: number) =>
-      droopStart +
-      (droopEnd - droopStart) * smoothstep(Math.min(1, t / BEND_END));
+      droopStart + (droopEnd - droopStart) * clamp(t, 0, 1);
     // Average axis for the ring frame.
     const droopMid = droopAt(0.5);
     const axis = new THREE.Vector3(

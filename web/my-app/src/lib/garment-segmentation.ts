@@ -1443,6 +1443,18 @@ export async function segmentGarment(
         hiWidth: hiInfo.width,
         hiHeight: hiInfo.height,
       });
+      // A narrow region (a sleeve seen edge-on with the arm hanging down) warps
+      // into a tile with almost no real garment in it. Inpainting that fills
+      // the whole tile with the flat median colour, which is why printed
+      // sleeves rendered as solid brown. Report it as unusable so the caller
+      // falls back to the torso tile — the same printed cloth.
+      let covered = 0;
+      for (let i = 0; i < TILE * TILE; i += 1) {
+        covered += region.keep[i];
+      }
+      if (covered < TILE * TILE * 0.25) {
+        return undefined;
+      }
       inpaintTile(region.tileRaw, region.keep, TILE, [gr, gg, gb]);
       // Share the torso's base AND its flatten/keep decision, so every
       // region of the garment is treated as the same fabric.
