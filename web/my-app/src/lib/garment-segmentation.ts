@@ -63,15 +63,22 @@ function labelsForCategory(category: string): {
   return { primary: CLOTHING_LABELS, fallback: new Set<string>() };
 }
 
-// Lazy singleton so the model loads once per server process. A failed load
-// is remembered as null and never retried mid-process (callers fall back).
+// Lazy singleton so the model loads once per server process.
+//
+// A FAILED load is deliberately not cached. The first load downloads the
+// weights, so a network hiccup fails it — and remembering that failure poisons
+// every later draft in the process, silently demoting all of them to the
+// colour heuristic (visible as extraction quality dropping to 82% and the
+// background and undershirt leaking into the texture) until the server is
+// restarted. Clearing the slot lets the next draft try again; a successful
+// load is still cached and shared.
 const globalForSegmenter = globalThis as unknown as {
   __wardrobeSegmenter?: Promise<Segmenter | null>;
 };
 
 function getSegmenter(): Promise<Segmenter | null> {
   if (!globalForSegmenter.__wardrobeSegmenter) {
-    globalForSegmenter.__wardrobeSegmenter = (async () => {
+    const attempt = (async () => {
       try {
         const { pipeline } = await import("@huggingface/transformers");
         const segmenter = await pipeline(
@@ -87,7 +94,13 @@ function getSegmenter(): Promise<Segmenter | null> {
         );
         return null;
       }
-    })();
+    })().then((segmenter) => {
+      if (!segmenter && globalForSegmenter.__wardrobeSegmenter === attempt) {
+        globalForSegmenter.__wardrobeSegmenter = undefined;
+      }
+      return segmenter;
+    });
+    globalForSegmenter.__wardrobeSegmenter = attempt;
   }
   return globalForSegmenter.__wardrobeSegmenter;
 }
@@ -1225,6 +1238,12 @@ const INFER_SIZE = 768;
 const HI_SIZE = 1536;
 const TILE = 512;
 
+// Photographs of cloth come back more saturated than the garment reads in
+// hand — studio lighting and JPEG both push colour. Pull the saturation back
+// and lift the tone a touch so the print looks paler and more natural on the
+// mesh, rather than a vivid version of itself.
+const FABRIC_TONE = { saturation: 0.78, brightness: 1.03 };
+
 /**
  * Chromaticity histogram of the masked pixels in a column range.
  *
@@ -1576,6 +1595,7 @@ export async function segmentGarment(
         // washed prints stay visible; flattened tiles must stay uniform.
         pipeline = pipeline.clahe({ width: 192, height: 192, maxSlope: 1.15 });
       }
+      pipeline = pipeline.modulate(FABRIC_TONE);
       const jpg = await pipeline.jpeg({ quality: 86 }).toBuffer();
       return "data:image/jpeg;base64," + jpg.toString("base64");
     };
@@ -1715,6 +1735,7 @@ export async function segmentGarment(
       // would blotch the flat base.
       mainPipeline = mainPipeline.clahe({ width: 192, height: 192, maxSlope: 1.15 });
     }
+    mainPipeline = mainPipeline.modulate(FABRIC_TONE);
     const [tile, fabricTile] = await Promise.all([
       mainPipeline.jpeg({ quality: 86 }).toBuffer(),
       sharp(swatch, {
