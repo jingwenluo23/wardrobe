@@ -910,6 +910,43 @@ function buildTopGeometry(
 
     const taper = clamp(features.sleeveTaper, 0.35, 1);
 
+    // --- Sleeve anatomy ----------------------------------------------------
+    // Girth along the arm, as a multiplier on the armhole ring. A sleeve is not
+    // a cone from armhole to cuff: the sleeve head carries ease so the shoulder
+    // rolls into the arm instead of cornering, the fullest part is the bicep
+    // just below the cap, the elbow keeps ease so the joint can bend, and only
+    // then does the forearm taper into the cuff. Total length is untouched —
+    // this only changes how thick the tube is at each height.
+    const bell = (t: number, at: number, width: number) =>
+      Math.exp(-Math.pow((t - at) / width, 2));
+    const armGirth = (t: number) => {
+      const forearmTaper =
+        1 + (taper - 1) * smoothstep(clamp((t - 0.2) / 0.8, 0, 1));
+      const cap = 0.1 * bell(t, 0.06, 0.13); // ease across the sleeve head
+      const bicep = 0.13 * bell(t, 0.2, 0.16); // fullest point of the arm
+      const elbow = 0.07 * bell(t, 0.56, 0.15); // bending ease at the elbow
+      return forearmTaper * (1 + cap + bicep + elbow);
+    };
+    // Normalised so the root is exactly 1: the first ring is welded to the
+    // armhole loop, and any swell there opens a gap along the armhole seam
+    // rather than shaping the sleeve. The ease still builds immediately below.
+    const armRoot = armGirth(0);
+    const armRadius = (t: number) => armGirth(t) / armRoot;
+
+    // Folds from gravity and fabric tension: shallow creases running down the
+    // sleeve, faint where the cap is stretched over the shoulder and deeper
+    // through the slack lower arm, plus fabric stacking just above the cuff
+    // where the sleeve is stopped by the band. The modulation is zero-mean
+    // around the ring, so girth — and therefore the cuff junction and the
+    // texture's scale — are unchanged; it only ripples the surface.
+    const foldAt = (t: number, theta: number) => {
+      const slack = 0.35 + 0.65 * smoothstep(clamp((t - 0.2) / 0.5, 0, 1));
+      const drape = 0.030 * slack * Math.sin(3 * theta + 1.7 * t);
+      const tension = 0.017 * slack * Math.sin(5 * theta - 3.1 * t + 0.9);
+      const stack = 0.042 * bell(t, 0.9, 0.09) * Math.sin(4 * theta + 0.6);
+      return drape + tension + stack;
+    };
+
     // Rings are built in one frame taken from the sleeve's MID direction, so a
     // sleeve that turns along its length ends up with rings that are no longer
     // square to it — at the cuff, where the local direction differs from the
@@ -926,16 +963,21 @@ function buildTopGeometry(
       soften: number,
       v: number,
       droop: number,
+      folds = 1,
     ) => {
       const theta = -side * (droop - droopMid) * soften;
       const cs = Math.cos(theta);
       const sn = Math.sin(theta);
       const ring: number[] = [];
       for (let j = 0; j < loopCount; j += 1) {
+        // Folds fade in with `soften`, so the root ring stays exactly on the
+        // armhole loop it is welded to.
+        const around = (2 * Math.PI * j) / loopCount;
+        const ripple = 1 + folds * soften * foldAt(v, around);
         const offset = rootOffsets[j]
           .clone()
           .lerp(softOffsets[j], soften)
-          .multiplyScalar(scale);
+          .multiplyScalar(scale * ripple);
         const p = new THREE.Vector3(
           center.x + offset.x * cs - offset.y * sn,
           center.y + offset.x * sn + offset.y * cs,
@@ -975,21 +1017,13 @@ function buildTopGeometry(
         );
       }
       const soften = smoothstep(Math.max(0, t - 0.12) / 0.5);
-      const scale = 1 + (taper - 1) * smoothstep(Math.max(0, t - 0.15) / 0.85);
-      // Shoulder silhouette — the sleeve CAP.
-      //
-      // A straight tube leaving the armhole meets the shoulder seam at a hard
-      // angle, and that corner is what reads as a pinch at the top of the arm:
-      // the outline kinks instead of turning. A real sleeve head carries ease
-      // (extra fabric across the cap), so the shoulder is a soft dome that
-      // rolls into the arm. Reproduce it by swelling the rings just below the
-      // armhole: zero at the root, so the first ring stays welded exactly to
-      // the armhole loop, rising to a peak over the shoulder and back to zero
-      // by the upper arm — it shapes the outline without disturbing the
-      // straight hang below.
-      const capEase =
-        1 + 0.16 * Math.sin(Math.PI * clamp(t / 0.42, 0, 1));
-      const ring = emitRing(ringCenter.clone(), scale * capEase, soften, t, droopAt(t));
+      const ring = emitRing(
+        ringCenter.clone(),
+        armRadius(t),
+        soften,
+        t,
+        droopAt(t),
+      );
       if (previousRing) {
         stitchRings(previousRing, ring);
       }
@@ -1017,6 +1051,7 @@ function buildTopGeometry(
         1,
         1,
         dEnd,
+        0,
       );
       stitchRings(previousRing, rib1);
       const rib2 = emitRing(
@@ -1025,6 +1060,7 @@ function buildTopGeometry(
         1,
         1,
         dEnd,
+        0,
       );
       stitchRings(rib1, rib2);
     }
@@ -1047,6 +1083,7 @@ function buildTopGeometry(
         1,
         1,
         dEnd,
+        0,
       );
       stitchRings(previousRing, gather);
       // Straight crisp band to the wrist edge.
@@ -1056,6 +1093,7 @@ function buildTopGeometry(
         1,
         1,
         dEnd,
+        0,
       );
       stitchRings(gather, band);
       // Buttons sit on the front face of the cuff: anchor at the band's
