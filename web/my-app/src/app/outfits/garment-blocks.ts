@@ -922,9 +922,9 @@ function buildTopGeometry(
     const armGirth = (t: number) => {
       const forearmTaper =
         1 + (taper - 1) * smoothstep(clamp((t - 0.2) / 0.8, 0, 1));
-      const cap = 0.1 * bell(t, 0.06, 0.13); // ease across the sleeve head
-      const bicep = 0.13 * bell(t, 0.2, 0.16); // fullest point of the arm
-      const elbow = 0.07 * bell(t, 0.56, 0.15); // bending ease at the elbow
+      const cap = 0.14 * bell(t, 0.06, 0.13); // ease across the sleeve head
+      const bicep = 0.22 * bell(t, 0.22, 0.17); // fullest point of the arm
+      const elbow = 0.12 * bell(t, 0.56, 0.15); // bending ease at the elbow
       return forearmTaper * (1 + cap + bicep + elbow);
     };
     // Normalised so the root is exactly 1: the first ring is welded to the
@@ -941,9 +941,9 @@ function buildTopGeometry(
     // texture's scale — are unchanged; it only ripples the surface.
     const foldAt = (t: number, theta: number) => {
       const slack = 0.35 + 0.65 * smoothstep(clamp((t - 0.2) / 0.5, 0, 1));
-      const drape = 0.030 * slack * Math.sin(3 * theta + 1.7 * t);
-      const tension = 0.017 * slack * Math.sin(5 * theta - 3.1 * t + 0.9);
-      const stack = 0.042 * bell(t, 0.9, 0.09) * Math.sin(4 * theta + 0.6);
+      const drape = 0.048 * slack * Math.sin(3 * theta + 1.7 * t);
+      const tension = 0.028 * slack * Math.sin(5 * theta - 3.1 * t + 0.9);
+      const stack = 0.062 * bell(t, 0.9, 0.09) * Math.sin(4 * theta + 0.6);
       return drape + tension + stack;
     };
 

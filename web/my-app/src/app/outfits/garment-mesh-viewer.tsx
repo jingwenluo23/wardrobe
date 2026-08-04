@@ -43,12 +43,18 @@ function fabricMaterial(
   kind: FabricKind,
   bump?: { texture: THREE.Texture; scale: number } | null,
 ) {
+  // Sheen is ADDED on top of the base colour, so a strong white sheen lays a
+  // pale film over the whole surface — brightest where the fabric faces the
+  // viewer, which washed the print out behind a white haze across the chest.
+  // Real cloth catches a soft, tinted highlight at grazing angles only, so
+  // keep the amount low and tint it warm-grey rather than white. Printed
+  // surfaces get even less, since any veil there is read as faded ink.
   const profile =
     kind === "fleece"
-      ? { roughness: 0.96, sheen: 0.82, sheenRoughness: 0.96, specular: 0.22 }
+      ? { roughness: 0.96, sheen: 0.3, sheenRoughness: 0.96, specular: 0.16 }
       : kind === "knit"
-        ? { roughness: 0.91, sheen: 0.72, sheenRoughness: 0.9, specular: 0.28 }
-        : { roughness: 0.84, sheen: 0.58, sheenRoughness: 0.82, specular: 0.34 };
+        ? { roughness: 0.91, sheen: 0.26, sheenRoughness: 0.9, specular: 0.2 }
+        : { roughness: 0.84, sheen: 0.2, sheenRoughness: 0.82, specular: 0.24 };
   return new THREE.MeshPhysicalMaterial({
     // three.js multiplies the map by the material colour, so textured
     // surfaces must stay white or the photo gets darkened and prints are
@@ -59,11 +65,11 @@ function fabricMaterial(
     bumpScale: bump?.scale ?? 0,
     roughness: profile.roughness,
     metalness: 0,
-    sheen: profile.sheen,
-    sheenColor: new THREE.Color("#ffffff"),
+    sheen: map ? profile.sheen * 0.6 : profile.sheen,
+    sheenColor: new THREE.Color("#9b948a"),
     sheenRoughness: profile.sheenRoughness,
     specularIntensity: profile.specular,
-    specularColor: new THREE.Color("#f4eee4"),
+    specularColor: new THREE.Color("#e8e2d8"),
     ior: 1.46,
     side: THREE.FrontSide,
   });
