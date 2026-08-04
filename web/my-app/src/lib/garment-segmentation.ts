@@ -1226,6 +1226,62 @@ const HI_SIZE = 1536;
 const TILE = 512;
 
 /**
+ * Chromaticity histogram of the masked pixels in a column range.
+ *
+ * Binned by chromaticity (r/sum, g/sum) rather than raw RGB so that the same
+ * cloth photographed in shadow on the arm and in light on the chest lands in
+ * the same bins. What survives is which COLOURS the fabric is made of, not how
+ * brightly that patch happened to be lit.
+ */
+function chromaHistogram(
+  data: Uint8Array | Buffer,
+  mask: Uint8Array,
+  width: number,
+  x0: number,
+  x1: number,
+  y0: number,
+  y1: number,
+): { hist: Float64Array; count: number } {
+  const B = 8;
+  const hist = new Float64Array(B * B);
+  let count = 0;
+  for (let y = y0; y <= y1; y += 1) {
+    for (let x = x0; x <= x1; x += 1) {
+      const i = y * width + x;
+      if (!mask[i]) {
+        continue;
+      }
+      const r = data[i * 3];
+      const g = data[i * 3 + 1];
+      const b = data[i * 3 + 2];
+      const sum = r + g + b;
+      if (sum < 24) {
+        continue;
+      }
+      const cu = Math.min(B - 1, Math.floor((r / sum) * B * 1.5));
+      const cv = Math.min(B - 1, Math.floor((g / sum) * B * 1.5));
+      hist[cu * B + cv] += 1;
+      count += 1;
+    }
+  }
+  if (count > 0) {
+    for (let i = 0; i < hist.length; i += 1) {
+      hist[i] /= count;
+    }
+  }
+  return { hist, count };
+}
+
+/** Histogram intersection: 1 = identical palettes, 0 = nothing in common. */
+function histogramIntersection(a: Float64Array, b: Float64Array): number {
+  let sum = 0;
+  for (let i = 0; i < a.length; i += 1) {
+    sum += Math.min(a[i], b[i]);
+  }
+  return sum;
+}
+
+/**
  * Extract the garment from a photo with the segmentation model.
  * Returns null when the model is unavailable or finds no garment,
  * so the caller can fall back to the colour heuristic.
@@ -1508,9 +1564,15 @@ export async function segmentGarment(
       return "data:image/jpeg;base64," + jpg.toString("base64");
     };
 
-    // Sleeves: the mask columns outside the torso crop. Pick the bigger
-    // sleeve (front photos usually show both; one is enough to texture the
-    // mesh's sleeve loft, which wraps the tile around the arm).
+    // Sleeves — extracted separately ONLY when they are decorated.
+    //
+    // A sleeve is usually cut from the same bolt as the body, so a dedicated
+    // tile just re-samples the same cloth from a narrower, more foreshortened
+    // strip: a worse likeness of the same print. It earns its place only when
+    // the sleeve carries something the body does not — a contrast panel, a
+    // stripe down the arm, a printed logo. Otherwise return nothing and let
+    // the body print dress the sleeve, which is exactly right for an all-over
+    // print like camo.
     let sleeveTextureUrl: string | undefined;
     {
       let gMinX = width;
@@ -1521,6 +1583,7 @@ export async function segmentGarment(
           if (x > gMaxX) gMaxX = x;
         }
       }
+      const garmentW = gMaxX - gMinX + 1;
       const area = (x0: number, x1: number) => {
         let sum = 0;
         for (let x = x0; x <= x1; x += 1) {
@@ -1528,16 +1591,62 @@ export async function segmentGarment(
         }
         return sum;
       };
-      const leftW = minX - 1 - gMinX;
-      const rightW = gMaxX - (maxX + 1);
-      const leftArea = leftW >= 10 ? area(gMinX, minX - 1) : 0;
-      const rightArea = rightW >= 10 ? area(maxX + 1, gMaxX) : 0;
+
+      // Locate the sleeve columns. When the arms are held away from the body
+      // they fall outside the torso crop. When they hang down alongside it
+      // those columns are as tall as the torso and get absorbed into the crop,
+      // so fall back to the outer margin of the garment, which is where a
+      // hanging sleeve sits.
+      const outsideLeft = minX - gMinX;
+      const outsideRight = gMaxX - maxX;
+      const detached =
+        outsideLeft >= garmentW * 0.08 || outsideRight >= garmentW * 0.08;
+      const margin = Math.max(4, Math.round(garmentW * 0.15));
+      const leftBand = detached
+        ? { x0: gMinX, x1: Math.max(gMinX, minX - 1) }
+        : { x0: gMinX, x1: Math.min(gMaxX, gMinX + margin) };
+      const rightBand = detached
+        ? { x0: Math.min(gMaxX, maxX + 1), x1: gMaxX }
+        : { x0: Math.max(gMinX, gMaxX - margin), x1: gMaxX };
       const best =
-        leftArea >= rightArea
-          ? { x0: gMinX, x1: minX - 1, area: leftArea }
-          : { x0: maxX + 1, x1: gMaxX, area: rightArea };
-      if (best.area >= maskCount * 0.03) {
-        sleeveTextureUrl = await regionTile(best.x0, best.x1, mask);
+        area(leftBand.x0, leftBand.x1) >= area(rightBand.x0, rightBand.x1)
+          ? leftBand
+          : rightBand;
+
+      // Compare the sleeve's palette with the CENTRE of the torso, below the
+      // neckline so a collar cannot skew it. Chromaticity bins make this
+      // robust to the arm simply being more shaded than the chest.
+      const bodyX0 = Math.round(minX + (maxX - minX) * 0.3);
+      const bodyX1 = Math.round(minX + (maxX - minX) * 0.7);
+      const bodyY0 = Math.round(minY + (maxY - minY) * 0.25);
+      const sleeve = chromaHistogram(
+        data,
+        mask,
+        width,
+        best.x0,
+        best.x1,
+        minY,
+        maxY,
+      );
+      const body = chromaHistogram(
+        data,
+        mask,
+        width,
+        bodyX0,
+        bodyX1,
+        bodyY0,
+        maxY,
+      );
+      const enoughToJudge =
+        sleeve.count > 400 && body.count > 400 &&
+        area(best.x0, best.x1) >= maskCount * 0.03;
+      if (enoughToJudge) {
+        const shared = histogramIntersection(sleeve.hist, body.hist);
+        // Same cloth overlaps almost completely. A decorated sleeve brings
+        // colours the body does not have, dropping the overlap sharply.
+        if (shared < 0.7) {
+          sleeveTextureUrl = await regionTile(best.x0, best.x1, mask);
+        }
       }
     }
 
