@@ -910,14 +910,37 @@ function buildTopGeometry(
 
     const taper = clamp(features.sleeveTaper, 0.35, 1);
 
-    const emitRing = (center: THREE.Vector3, scale: number, soften: number, v: number) => {
+    // Rings are built in one frame taken from the sleeve's MID direction, so a
+    // sleeve that turns along its length ends up with rings that are no longer
+    // square to it — at the cuff, where the local direction differs from the
+    // mid by half the total turn, the opening reads as cut on a slant. Rotate
+    // each ring about Z by the difference between its local direction and the
+    // mid, which puts every cross-section perpendicular to the tube again.
+    //
+    // Weighted by `soften`, which is 0 at the root: the first ring must stay
+    // exactly on the armhole loop it is welded to, and the correction fades in
+    // as the ring becomes a free circle further down the sleeve.
+    const emitRing = (
+      center: THREE.Vector3,
+      scale: number,
+      soften: number,
+      v: number,
+      droop: number,
+    ) => {
+      const theta = -side * (droop - droopMid) * soften;
+      const cs = Math.cos(theta);
+      const sn = Math.sin(theta);
       const ring: number[] = [];
       for (let j = 0; j < loopCount; j += 1) {
         const offset = rootOffsets[j]
           .clone()
           .lerp(softOffsets[j], soften)
           .multiplyScalar(scale);
-        const p = center.clone().add(offset);
+        const p = new THREE.Vector3(
+          center.x + offset.x * cs - offset.y * sn,
+          center.y + offset.x * sn + offset.y * cs,
+          center.z + offset.z,
+        );
         ring.push(pushVertex(p.x, p.y, p.z, j / loopCount, v));
       }
       return ring;
@@ -966,7 +989,7 @@ function buildTopGeometry(
       // straight hang below.
       const capEase =
         1 + 0.16 * Math.sin(Math.PI * clamp(t / 0.42, 0, 1));
-      const ring = emitRing(ringCenter.clone(), scale * capEase, soften, t);
+      const ring = emitRing(ringCenter.clone(), scale * capEase, soften, t, droopAt(t));
       if (previousRing) {
         stitchRings(previousRing, ring);
       }
@@ -993,6 +1016,7 @@ function buildTopGeometry(
         cuffScale,
         1,
         1,
+        dEnd,
       );
       stitchRings(previousRing, rib1);
       const rib2 = emitRing(
@@ -1000,6 +1024,7 @@ function buildTopGeometry(
         cuffScale,
         1,
         1,
+        dEnd,
       );
       stitchRings(rib1, rib2);
     }
@@ -1021,6 +1046,7 @@ function buildTopGeometry(
         cuffScale,
         1,
         1,
+        dEnd,
       );
       stitchRings(previousRing, gather);
       // Straight crisp band to the wrist edge.
@@ -1029,6 +1055,7 @@ function buildTopGeometry(
         cuffScale * 0.98,
         1,
         1,
+        dEnd,
       );
       stitchRings(gather, band);
       // Buttons sit on the front face of the cuff: anchor at the band's
