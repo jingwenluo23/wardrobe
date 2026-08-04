@@ -935,7 +935,20 @@ function buildTopGeometry(
       }
       const soften = smoothstep(Math.max(0, t - 0.12) / 0.5);
       const scale = 1 + (taper - 1) * smoothstep(Math.max(0, t - 0.15) / 0.85);
-      const ring = emitRing(ringCenter.clone(), scale, soften, t);
+      // Shoulder silhouette — the sleeve CAP.
+      //
+      // A straight tube leaving the armhole meets the shoulder seam at a hard
+      // angle, and that corner is what reads as a pinch at the top of the arm:
+      // the outline kinks instead of turning. A real sleeve head carries ease
+      // (extra fabric across the cap), so the shoulder is a soft dome that
+      // rolls into the arm. Reproduce it by swelling the rings just below the
+      // armhole: zero at the root, so the first ring stays welded exactly to
+      // the armhole loop, rising to a peak over the shoulder and back to zero
+      // by the upper arm — it shapes the outline without disturbing the
+      // straight hang below.
+      const capEase =
+        1 + 0.16 * Math.sin(Math.PI * clamp(t / 0.42, 0, 1));
+      const ring = emitRing(ringCenter.clone(), scale * capEase, soften, t);
       if (previousRing) {
         stitchRings(previousRing, ring);
       }
