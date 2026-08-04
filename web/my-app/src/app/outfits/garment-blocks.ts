@@ -514,11 +514,17 @@ function buildTopGeometry(
       .reduce((acc, p) => acc.clone().add(p), new THREE.Vector3())
       .multiplyScalar(1 / neckLoop.length);
 
-    // Base arc: rim points whose angle around the neck centre is within
-    // ~120 deg of the centre-back, ordered left-front -> back -> right-front.
+    // Base arc: rim points around the centre-back that the hood is sewn to.
+    //
+    // Kept to ~85 deg either side of centre-back, so the seam ends near the
+    // shoulders. A wider arc reaches around to the front neckline, and because
+    // the hood's front rim is welded onto this arc the extra span hangs across
+    // the neck opening as a flat strip bridging the two front edges — the
+    // "collar band" spanning the front. Ending at the shoulders leaves the
+    // front neckline open, which is where a real hood's seam stops.
     const arc = neckLoop
       .map((p) => ({ p, theta: Math.atan2(p.x - centroid.x, -(p.z - centroid.z)) }))
-      .filter(({ theta }) => Math.abs(theta) <= 2.1)
+      .filter(({ theta }) => Math.abs(theta) <= 1.5)
       .sort((a, b) => a.theta - b.theta)
       .map(({ p }) => p);
     if (arc.length < 4) {
@@ -838,8 +844,20 @@ function buildTopGeometry(
     // ~5 deg peak of a spread smoothstep — so the arm reads as one straight
     // relaxed drop with the cuff beside the body and no crease at any height.
     // Short cap sleeves stay shallow and keep their outward flare.
-    const droopStart = slopeRad + ((18 + lengthT * 36) * Math.PI) / 180;
-    const droopEnd = droopRad + (lengthT * 44 * Math.PI) / 180;
+    // What pinches the upper sleeve is the ROOT angle, not the curvature.
+    // The armhole ring's plane faces sideways, so a sleeve that leaves it
+    // steeply is extruded almost within its own plane and the tube collapses
+    // at the shoulder. That matches every version reviewed: root 54 and 70 deg
+    // both pinched (the 70 deg one had the LOWEST curvature of any attempt, so
+    // curvature cannot be the cause), while root 34 deg never did.
+    //
+    // So keep the root shallow, where the tube opens cleanly out of the
+    // armhole, and buy the closeness back at the far end instead: carry the
+    // sleeve past vertical so it swings back in toward the body. Spread that
+    // turn linearly — constant curvature, no local kink to read as an elbow.
+    // The cuff lands ~13cm outside the body edge instead of ~27cm.
+    const droopStart = slopeRad + (18 * Math.PI) / 180;
+    const droopEnd = droopRad + (lengthT * 64 * Math.PI) / 180;
     const droopAt = (t: number) =>
       droopStart + (droopEnd - droopStart) * clamp(t, 0, 1);
     // Average axis for the ring frame.
