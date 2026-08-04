@@ -1574,7 +1574,7 @@ export async function segmentGarment(
       if (!flat.applied) {
         // Photo tiles (patterned fabric) keep the gentle local contrast so
         // washed prints stay visible; flattened tiles must stay uniform.
-        pipeline = pipeline.clahe({ width: 128, height: 128, maxSlope: 2 });
+        pipeline = pipeline.clahe({ width: 192, height: 192, maxSlope: 1.15 });
       }
       const jpg = await pipeline.jpeg({ quality: 86 }).toBuffer();
       return "data:image/jpeg;base64," + jpg.toString("base64");
@@ -1713,7 +1713,7 @@ export async function segmentGarment(
       // Photo tile (patterned fabric): gentle local contrast so washed
       // prints stay visible. Flattened tiles must stay uniform — CLAHE
       // would blotch the flat base.
-      mainPipeline = mainPipeline.clahe({ width: 128, height: 128, maxSlope: 2 });
+      mainPipeline = mainPipeline.clahe({ width: 192, height: 192, maxSlope: 1.15 });
     }
     const [tile, fabricTile] = await Promise.all([
       mainPipeline.jpeg({ quality: 86 }).toBuffer(),

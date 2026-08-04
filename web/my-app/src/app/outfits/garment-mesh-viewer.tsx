@@ -395,8 +395,11 @@ export default function GarmentMeshViewer({
         gl={{
           antialias: true,
           preserveDrawingBuffer: true,
-          toneMapping: THREE.ACESFilmicToneMapping,
-          toneMappingExposure: 1.08,
+          // ACES deepens the shadow end, which exaggerates the print's own
+          // contrast. Neutral tone mapping keeps the fabric reading as it does
+          // in the photograph.
+          toneMapping: THREE.NeutralToneMapping,
+          toneMappingExposure: 1.0,
         }}
         onCreated={({ gl }) => {
           gl.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -429,18 +432,22 @@ export default function GarmentMeshViewer({
             scale={[3, 4, 1]}
           />
         </Environment>
-        <hemisphereLight args={["#ffffff", "#cdbfa6", 0.8]} />
-        <ambientLight intensity={0.18} />
+        {/* Soft, even studio light. A hard key throws deep shadows across the
+            folds, and on a photographic print that reads as harsh contrast
+            rather than shape, so the key is eased back and the fill raised —
+            closer to the diffuse lighting of a product shot. */}
+        <hemisphereLight args={["#ffffff", "#d6cbb6", 0.95]} />
+        <ambientLight intensity={0.38} />
         <directionalLight
           position={[3, 5, 4]}
-          intensity={1.85}
+          intensity={1.05}
           castShadow
           shadow-mapSize-width={2048}
           shadow-mapSize-height={2048}
           shadow-bias={-0.0002}
         />
-        <directionalLight position={[-4, 2, -3]} intensity={0.32} />
-        <directionalLight position={[0, 1, -5]} intensity={0.25} />
+        <directionalLight position={[-4, 2, -3]} intensity={0.4} />
+        <directionalLight position={[0, 1, -5]} intensity={0.3} />
         <Bounds fit clip observe margin={1.2}>
           <TeeModel mesh={mesh} />
         </Bounds>

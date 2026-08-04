@@ -911,27 +911,13 @@ function buildTopGeometry(
     const taper = clamp(features.sleeveTaper, 0.35, 1);
 
     // --- Sleeve anatomy ----------------------------------------------------
-    // Girth along the arm, as a multiplier on the armhole ring. A sleeve is not
-    // a cone from armhole to cuff: the sleeve head carries ease so the shoulder
-    // rolls into the arm instead of cornering, the fullest part is the bicep
-    // just below the cap, the elbow keeps ease so the joint can bend, and only
-    // then does the forearm taper into the cuff. Total length is untouched —
-    // this only changes how thick the tube is at each height.
+    // Straight sleeve: constant girth from the armhole all the way to the cuff.
+    // Every ring is the size of the armhole ring — no sleeve-head swell, no
+    // bicep, no elbow ease and no taper down the forearm — so the tube reads as
+    // one even width top to bottom. Only the cuff band gathers in.
     const bell = (t: number, at: number, width: number) =>
       Math.exp(-Math.pow((t - at) / width, 2));
-    const armGirth = (t: number) => {
-      const forearmTaper =
-        1 + (taper - 1) * smoothstep(clamp((t - 0.2) / 0.8, 0, 1));
-      const cap = 0.14 * bell(t, 0.06, 0.13); // ease across the sleeve head
-      const bicep = 0.22 * bell(t, 0.22, 0.17); // fullest point of the arm
-      const elbow = 0.12 * bell(t, 0.56, 0.15); // bending ease at the elbow
-      return forearmTaper * (1 + cap + bicep + elbow);
-    };
-    // Normalised so the root is exactly 1: the first ring is welded to the
-    // armhole loop, and any swell there opens a gap along the armhole seam
-    // rather than shaping the sleeve. The ease still builds immediately below.
-    const armRoot = armGirth(0);
-    const armRadius = (t: number) => armGirth(t) / armRoot;
+    const armRadius = () => 1;
 
     // Folds from gravity and fabric tension: shallow creases running down the
     // sleeve, faint where the cap is stretched over the shoulder and deeper
@@ -1019,7 +1005,7 @@ function buildTopGeometry(
       const soften = smoothstep(Math.max(0, t - 0.12) / 0.5);
       const ring = emitRing(
         ringCenter.clone(),
-        armRadius(t),
+        armRadius(),
         soften,
         t,
         droopAt(t),
@@ -1043,7 +1029,9 @@ function buildTopGeometry(
     // Optional ribbed cuff: a short, snugger band past the sleeve end.
     if (features.cuff === "ribbed" && previousRing) {
       const cuffLen = 3 * SCALE * trimScale;
-      const cuffScale = taper * 0.8;
+      // The sleeve no longer tapers, so the cuff gathers relative to its FULL
+      // width; sleeveTaper now only says how snug this garment's cuff is.
+      const cuffScale = 0.62 + 0.28 * taper;
       const endCenter = ringCenter.clone();
       const rib1 = emitRing(
         endCenter.clone().addScaledVector(endAxis, cuffLen * 0.15),
@@ -1073,7 +1061,8 @@ function buildTopGeometry(
       // Nearly the sleeve-end width: a real cuff is only slightly snugger
       // than the sleeve it gathers out of — a drastic step reads as two
       // mismatched tubes.
-      const cuffScale = taper * 0.94;
+      // Relative to the full sleeve width (the sleeve itself is straight).
+      const cuffScale = Math.min(0.96, (0.62 + 0.28 * taper) * 1.12);
       const endCenter = ringCenter.clone();
       // Sharp gather where the blousy sleeve pleats into a clean, smooth
       // band — no ridge line across the cuff.
