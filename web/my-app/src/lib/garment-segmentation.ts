@@ -1483,7 +1483,23 @@ export async function segmentGarment(
             tileRaw[d] = hiData[s];
             tileRaw[d + 1] = hiData[s + 1];
             tileRaw[d + 2] = hiData[s + 2];
-            keep[ty * TILE + tx] = 1;
+            // Mark as real fabric ONLY where the segmentation says garment.
+            // The crop is a plain rectangle, so it also spans background
+            // between the arms, skin at the neck, and whatever else is worn
+            // under the hem — treating all of it as cloth is what painted the
+            // studio backdrop onto the sleeves and an undershirt band across
+            // the chest. Everything outside the mask is left for the inpainter
+            // to fill from surrounding garment, and the skin-tone exclusion
+            // still applies where it is trusted.
+            const mx = clampInt(Math.floor(srcX / sx), 0, width - 1);
+            const my = clampInt(Math.floor(srcY / sy), 0, height - 1);
+            const isGarment =
+              mask[my * width + mx] === 1 &&
+              !(
+                skinExclude &&
+                skinExclude(hiData[s], hiData[s + 1], hiData[s + 2])
+              );
+            keep[ty * TILE + tx] = isGarment ? 1 : 0;
           }
         }
       }
