@@ -1395,6 +1395,43 @@ export async function segmentGarment(
       hiWidth: hiInfo.width,
       hiHeight: hiInfo.height,
     });
+
+    // Fidelity guard: if the warp only covered part of the tile, the rest has
+    // to be invented, and no amount of clever filling reproduces a print that
+    // was never sampled — patched fabric shows up as blocks and smears that do
+    // not match the photo. A plain rectified crop of the garment box is a far
+    // better likeness in that case: every pixel is real photographed cloth, the
+    // print stays continuous, and the only cost is a little background near the
+    // edges. The warp still wins when it covers the tile, because it undoes the
+    // body's perspective.
+    {
+      let covered = 0;
+      for (let i = 0; i < TILE * TILE; i += 1) {
+        covered += keep[i];
+      }
+      if (covered < TILE * TILE * 0.62) {
+        const sx = hiInfo.width / width;
+        const sy = hiInfo.height / height;
+        const x0 = clampInt(Math.floor(minX * sx), 0, hiInfo.width - 1);
+        const x1 = clampInt(Math.ceil((maxX + 1) * sx), x0 + 1, hiInfo.width);
+        const y0 = clampInt(Math.floor(minY * sy), 0, hiInfo.height - 1);
+        const y1 = clampInt(Math.ceil((maxY + 1) * sy), y0 + 1, hiInfo.height);
+        const cw = x1 - x0;
+        const ch = y1 - y0;
+        for (let ty = 0; ty < TILE; ty += 1) {
+          const srcY = y0 + Math.min(ch - 1, Math.floor((ty / TILE) * ch));
+          for (let tx = 0; tx < TILE; tx += 1) {
+            const srcX = x0 + Math.min(cw - 1, Math.floor((tx / TILE) * cw));
+            const s = (srcY * hiInfo.width + srcX) * 3;
+            const d = (ty * TILE + tx) * 3;
+            tileRaw[d] = hiData[s];
+            tileRaw[d + 1] = hiData[s + 1];
+            tileRaw[d + 2] = hiData[s + 2];
+            keep[ty * TILE + tx] = 1;
+          }
+        }
+      }
+    }
     inpaintTile(tileRaw, keep, TILE, [gr, gg, gb]);
 
     // Decompose into base fabric + print layer and recompose as clean flat
