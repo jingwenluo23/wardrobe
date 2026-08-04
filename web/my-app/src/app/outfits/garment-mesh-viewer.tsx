@@ -278,8 +278,16 @@ function TeeModel({ mesh }: { mesh: DraftMesh }) {
       fabricTexture.wrapT = THREE.RepeatWrapping;
     }
     const trimTexture = fabricTexture ?? frontTexture;
-    const sleeveTexture = loadTexture(mesh.sleeveTextureUrl) ?? trimTexture;
-    const hoodTexture = loadTexture(mesh.hoodTextureUrl) ?? trimTexture;
+    // Sleeves and the hood are large panels cut from the SAME printed cloth as
+    // the body, so when no dedicated region was extracted they fall back to the
+    // front panel's print — not to the plain swatch. The swatch is a blurred
+    // single-colour patch, which is what rendered printed sleeves as flat
+    // brown next to a fully patterned body. Only the small trims (neckband,
+    // cuffs, plackets) keep the plain swatch, where a solid colour is right.
+    const sleeveTexture =
+      loadTexture(mesh.sleeveTextureUrl) ?? frontTexture ?? trimTexture;
+    const hoodTexture =
+      loadTexture(mesh.hoodTextureUrl) ?? frontTexture ?? trimTexture;
     const fabricKind: FabricKind = mesh.features?.fabric ?? "jersey";
     const relief =
       fabricKind === "knit" ? 1.25 : fabricKind === "fleece" ? 0.55 : 0.16;
