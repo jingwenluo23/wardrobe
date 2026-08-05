@@ -79,21 +79,38 @@ const globalForSegmenter = globalThis as unknown as {
 function getSegmenter(): Promise<Segmenter | null> {
   if (!globalForSegmenter.__wardrobeSegmenter) {
     const attempt = (async () => {
-      try {
-        const { pipeline } = await import("@huggingface/transformers");
-        const segmenter = await pipeline(
-          "image-segmentation",
-          "Xenova/segformer_b2_clothes",
-          { dtype: "q8" },
-        );
-        return segmenter as unknown as Segmenter;
-      } catch (error) {
-        console.warn(
-          "[garment-segmentation] model unavailable, using colour heuristic:",
-          error instanceof Error ? error.message : error,
-        );
-        return null;
+      // The first load pulls the weights over the network, so it is the step
+      // most likely to fail on a flaky or rate-limited connection. Try a few
+      // times with a short backoff before falling back — a single hiccup
+      // should not cost this draft its segmentation.
+      const { pipeline } = await import("@huggingface/transformers");
+      for (let tryIndex = 0; tryIndex < 3; tryIndex += 1) {
+        try {
+          const segmenter = await pipeline(
+            "image-segmentation",
+            "Xenova/segformer_b2_clothes",
+            { dtype: "q8" },
+          );
+          return segmenter as unknown as Segmenter;
+        } catch (error) {
+          const last = tryIndex === 2;
+          console.warn(
+            "[garment-segmentation] model load attempt " +
+              (tryIndex + 1) +
+              "/3 failed" +
+              (last ? ", using colour heuristic" : ", retrying") +
+              ": " +
+              (error instanceof Error ? error.message : String(error)),
+          );
+          if (last) {
+            return null;
+          }
+          await new Promise((resolve) =>
+            setTimeout(resolve, 800 * (tryIndex + 1)),
+          );
+        }
       }
+      return null;
     })().then((segmenter) => {
       if (!segmenter && globalForSegmenter.__wardrobeSegmenter === attempt) {
         globalForSegmenter.__wardrobeSegmenter = undefined;

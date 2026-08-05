@@ -227,10 +227,15 @@ async function chestCropTexture(buffer: Buffer): Promise<string | undefined> {
     if (w < 8 || h < 8) {
       return undefined;
     }
-    const left = Math.round(w * 0.18);
-    const top = Math.round(h * 0.38);
-    const width = Math.max(1, Math.min(w - left, Math.round(w * 0.64)));
-    const height = Math.max(1, Math.min(h - top, Math.round(h * 0.5)));
+    // Upper chest only. A taller crop reaches the hem, which is where a
+    // waistband, an undershirt or a contrast band sits — exactly the content
+    // that must not become the garment's fabric — and reaching higher picks up
+    // the collar and face. This band is chest and sleeve tops, almost all of
+    // which is the garment itself.
+    const left = Math.round(w * 0.22);
+    const top = Math.round(h * 0.32);
+    const width = Math.max(1, Math.min(w - left, Math.round(w * 0.56)));
+    const height = Math.max(1, Math.min(h - top, Math.round(h * 0.28)));
     const jpg = await sharp(buffer)
       .rotate()
       .extract({ left, top, width, height })
@@ -592,6 +597,28 @@ export async function createDraft(input: {
         const sideResult = side
           ? sideSeg ?? (await analyzePhoto(side.buffer))
           : null;
+
+        // Without the model, the colour heuristic has to guess the garment
+        // from colour distance alone. On a multi-tone print like camo that
+        // guess is poor: it keeps the wrong regions and its inpainting then
+        // smears an undershirt band and studio background across the panels —
+        // the striped, patchy texture that keeps coming back whenever the
+        // model is unavailable. The plain upper-chest crop carries none of
+        // that machinery and is nearly all garment, so prefer it for the
+        // PANELS. The heuristic still supplies the colour and fabric swatch,
+        // which it estimates reliably.
+        if (!frontSeg) {
+          const crop = await chestCropTexture(front.buffer);
+          if (crop) {
+            frontResult.textureUrl = crop;
+          }
+        }
+        if (!backSeg) {
+          const crop = await chestCropTexture(back.buffer);
+          if (crop) {
+            backResult.textureUrl = crop;
+          }
+        }
         return {
           frontSeg,
           backSeg,
