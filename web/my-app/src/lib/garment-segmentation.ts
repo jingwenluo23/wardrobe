@@ -593,7 +593,12 @@ export function inpaintTile(
         }
         levels.push({ w, h, c, m });
       }
-      // Push: fill an unknown cell from its parent's average, coarse to fine.
+      // Push: fill an unknown cell from its parent, coarse to fine, sampling
+      // the parent BILINEARLY. Taking the parent cell directly copies one
+      // colour across each 2x2 child block, and over a large hole those blocks
+      // survive all the way up the pyramid as big flat squares — the pixel
+      // blocks that appeared across the chest. Interpolating between the four
+      // surrounding parents turns the same information into a smooth gradient.
       for (let l = levels.length - 2; l >= 0; l -= 1) {
         const cur = levels[l];
         const par = levels[l + 1];
@@ -603,14 +608,39 @@ export function inpaintTile(
             if (cur.m[i] > 0) {
               continue;
             }
-            const pi =
-              Math.min(par.h - 1, y >> 1) * par.w + Math.min(par.w - 1, x >> 1);
-            if (par.m[pi] <= 0) {
+            const fx = (x + 0.5) / 2 - 0.5;
+            const fy = (y + 0.5) / 2 - 0.5;
+            const x0 = Math.floor(fx);
+            const y0 = Math.floor(fy);
+            const tx = fx - x0;
+            const ty = fy - y0;
+            let r = 0;
+            let g = 0;
+            let b = 0;
+            let wsum = 0;
+            for (let dy = 0; dy < 2; dy += 1) {
+              for (let dx = 0; dx < 2; dx += 1) {
+                const sx = Math.min(par.w - 1, Math.max(0, x0 + dx));
+                const sy = Math.min(par.h - 1, Math.max(0, y0 + dy));
+                const si = sy * par.w + sx;
+                if (par.m[si] <= 0) {
+                  continue;
+                }
+                // Skip absent parents and renormalise, so a hole's edge is not
+                // dragged toward whatever lies outside the pyramid.
+                const w = (dx ? tx : 1 - tx) * (dy ? ty : 1 - ty);
+                r += (par.c[si * 3] / par.m[si]) * w;
+                g += (par.c[si * 3 + 1] / par.m[si]) * w;
+                b += (par.c[si * 3 + 2] / par.m[si]) * w;
+                wsum += w;
+              }
+            }
+            if (wsum <= 0) {
               continue;
             }
-            cur.c[i * 3] = par.c[pi * 3] / par.m[pi];
-            cur.c[i * 3 + 1] = par.c[pi * 3 + 1] / par.m[pi];
-            cur.c[i * 3 + 2] = par.c[pi * 3 + 2] / par.m[pi];
+            cur.c[i * 3] = r / wsum;
+            cur.c[i * 3 + 1] = g / wsum;
+            cur.c[i * 3 + 2] = b / wsum;
             cur.m[i] = 1;
           }
         }

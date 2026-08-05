@@ -946,9 +946,22 @@ function buildTopGeometry(
     // offset's FULL 3D length so steep axes don't collapse the ring) gives
     // clean cross-sections by mid-sleeve.
     const rootOffsets = loop.map((p) => p.clone().sub(centroid));
-    const avgRootRadius =
-      rootOffsets.reduce((acc, offset) => acc + offset.length(), 0) /
-      loopCount;
+    // Radius the rounded ring settles on, matched to the armhole's AREA rather
+    // than its mean radius.
+    //
+    // The armhole is a tall, narrow oval. A circle built from the mean radius
+    // of such an oval encloses noticeably more area than the oval itself, so
+    // the tube swells as it rounds off — the sleeve came out slim at the
+    // shoulder and fat below the elbow, the opposite of the reference. Taking
+    // the radius of the equal-area circle keeps the sleeve the same thickness
+    // as the armhole it grows out of, so the taper alone decides its shape.
+    let loopArea = 0;
+    for (let j = 0; j < loopCount; j += 1) {
+      const a = rootOffsets[j];
+      const b = rootOffsets[(j + 1) % loopCount];
+      loopArea += a.dot(e1) * b.dot(e2) - b.dot(e1) * a.dot(e2);
+    }
+    const avgRootRadius = Math.sqrt(Math.abs(loopArea) / 2 / Math.PI);
     const rawAngles = rootOffsets.map((offset) =>
       Math.atan2(offset.dot(e2), offset.dot(e1)),
     );
