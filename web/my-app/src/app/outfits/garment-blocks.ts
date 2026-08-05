@@ -1125,32 +1125,22 @@ function buildTopGeometry(
       );
       stitchRings(rib1, rib2);
       if (sleeveProfile.foldedRibCuff) {
-        // Rib knit folded in half lengthwise, so the band is doubled and its
-        // lower edge is a fold. Roll the surface around that fold and run a
-        // short return up the inside: the edge then reads as soft folded rib
-        // instead of the open end of a tube.
+        // Rib knit folded in half lengthwise: the band's lower edge is a fold,
+        // not a raw opening. Roll the surface tightly around that edge and
+        // stop — an extra return ring up the inside stacked visible concentric
+        // steps at the wrist, which read as a telescoping tube rather than a
+        // soft doubled cuff.
         const roll = emitRing(
           endCenter
             .clone()
-            .addScaledVector(endAxis, cuffLen + 0.35 * SCALE * trimScale),
-          cuffScale * 0.93,
+            .addScaledVector(endAxis, cuffLen + 0.25 * SCALE * trimScale),
+          cuffScale * 0.9,
           1,
           1,
           dEnd,
           0,
         );
         stitchRings(rib2, roll);
-        const inner = emitRing(
-          endCenter
-            .clone()
-            .addScaledVector(endAxis, cuffLen - 0.5 * SCALE * trimScale),
-          cuffScale * 0.84,
-          1,
-          1,
-          dEnd,
-          0,
-        );
-        stitchRings(roll, inner);
       }
     }
 

@@ -521,126 +521,144 @@ export function inpaintTile(
   // patched areas read as soft fabric rather than smeared stripes.
   const filled = new Uint8Array(size * size);
 
-  // Pass 0 — texture-preserving fill for LARGE holes.
+  // Pass 0 — pyramid fill for everything the photo never covered.
   //
-  // Interpolating across a big empty region stretches whatever pixel sits at
-  // its edge over the whole span, which turns a patterned fabric (camo, plaid)
-  // into long smeared streaks. Patterned cloth is statistically uniform, so a
-  // far more faithful fill is real fabric copied from elsewhere in the tile.
-  // Find the densest patch of surviving garment and mirror-tile it into every
-  // pixel that is far from any kept pixel, then mark those pixels kept so the
-  // interpolation below only handles what it is good at: thin seams and small
-  // holes near real fabric. Pixels close to kept fabric are left alone so the
-  // fill still blends locally instead of hard-edging.
+  // Two earlier strategies both failed here. Interpolating across a large empty
+  // region stretches whatever pixel sits at its edge over the whole span, which
+  // smears a patterned fabric into streaks. Copying real fabric in from
+  // elsewhere fixes the streaks but reproduces its shapes, and a recognisable
+  // shape repeated across the panel reads as a repeating graphic — with hard
+  // seams at every block boundary.
+  //
+  // So do not invent detail at all. A pull-push pyramid averages the surviving
+  // fabric into successively coarser levels, then pushes those averages back
+  // down into the holes: colour and broad shading carry across, no shape is
+  // duplicated, and there is no block structure to leave seams. Filled regions
+  // read as cloth continuing softly out of frame. Real garment pixels are never
+  // touched — this only affects area the photo never covered.
   {
     const n = size * size;
     let keptCount = 0;
     for (let i = 0; i < n; i += 1) {
       keptCount += keep[i];
     }
-    if (keptCount > n * 0.04 && keptCount < n) {
-      // Chamfer distance to the nearest kept pixel.
-      const INF = 1e9;
-      const dist = new Float32Array(n);
+    if (keptCount > n * 0.02 && keptCount < n) {
+      type Level = { w: number; h: number; c: Float32Array; m: Float32Array };
+      const base: Level = {
+        w: size,
+        h: size,
+        c: new Float32Array(n * 3),
+        m: new Float32Array(n),
+      };
       for (let i = 0; i < n; i += 1) {
-        dist[i] = keep[i] ? 0 : INF;
-      }
-      for (let y = 0; y < size; y += 1) {
-        for (let x = 0; x < size; x += 1) {
-          const i = y * size + x;
-          let d = dist[i];
-          if (y > 0) d = Math.min(d, dist[i - size] + 1);
-          if (x > 0) d = Math.min(d, dist[i - 1] + 1);
-          if (y > 0 && x > 0) d = Math.min(d, dist[i - size - 1] + 1.414);
-          if (y > 0 && x < size - 1) d = Math.min(d, dist[i - size + 1] + 1.414);
-          dist[i] = d;
+        if (keep[i]) {
+          base.c[i * 3] = tileRaw[i * 3];
+          base.c[i * 3 + 1] = tileRaw[i * 3 + 1];
+          base.c[i * 3 + 2] = tileRaw[i * 3 + 2];
+          base.m[i] = 1;
         }
       }
-      for (let y = size - 1; y >= 0; y -= 1) {
-        for (let x = size - 1; x >= 0; x -= 1) {
-          const i = y * size + x;
-          let d = dist[i];
-          if (y < size - 1) d = Math.min(d, dist[i + size] + 1);
-          if (x < size - 1) d = Math.min(d, dist[i + 1] + 1);
-          if (y < size - 1 && x < size - 1)
-            d = Math.min(d, dist[i + size + 1] + 1.414);
-          if (y < size - 1 && x > 0) d = Math.min(d, dist[i + size - 1] + 1.414);
-          dist[i] = d;
-        }
-      }
-      // Densest square of kept fabric, via a summed-area table.
-      const P = Math.max(16, Math.min(128, size >> 2));
-      const stride = size + 1;
-      const integral = new Int32Array(stride * stride);
-      for (let y = 0; y < size; y += 1) {
-        for (let x = 0; x < size; x += 1) {
-          integral[(y + 1) * stride + (x + 1)] =
-            keep[y * size + x] +
-            integral[y * stride + (x + 1)] +
-            integral[(y + 1) * stride + x] -
-            integral[y * stride + x];
-        }
-      }
-      let bestX = 0;
-      let bestY = 0;
-      let best = -1;
-      for (let y = 0; y + P <= size; y += 4) {
-        for (let x = 0; x + P <= size; x += 4) {
-          const s =
-            integral[(y + P) * stride + (x + P)] -
-            integral[y * stride + (x + P)] -
-            integral[(y + P) * stride + x] +
-            integral[y * stride + x];
-          if (s > best) {
-            best = s;
-            bestX = x;
-            bestY = y;
+      const levels: Level[] = [base];
+      // Pull: each level sums the colour and coverage of its four children, so
+      // a coarse cell holds the average of whatever real fabric lies under it.
+      while (levels[levels.length - 1].w > 1 || levels[levels.length - 1].h > 1) {
+        const p = levels[levels.length - 1];
+        const w = Math.max(1, p.w >> 1);
+        const h = Math.max(1, p.h >> 1);
+        const c = new Float32Array(w * h * 3);
+        const m = new Float32Array(w * h);
+        for (let y = 0; y < h; y += 1) {
+          for (let x = 0; x < w; x += 1) {
+            let cr = 0;
+            let cg = 0;
+            let cb = 0;
+            let mm = 0;
+            for (let dy = 0; dy < 2; dy += 1) {
+              for (let dx = 0; dx < 2; dx += 1) {
+                const sy = Math.min(p.h - 1, y * 2 + dy);
+                const sx = Math.min(p.w - 1, x * 2 + dx);
+                const si = sy * p.w + sx;
+                cr += p.c[si * 3];
+                cg += p.c[si * 3 + 1];
+                cb += p.c[si * 3 + 2];
+                mm += p.m[si];
+              }
+            }
+            const di = y * w + x;
+            c[di * 3] = cr;
+            c[di * 3 + 1] = cg;
+            c[di * 3 + 2] = cb;
+            m[di] = mm;
           }
         }
+        levels.push({ w, h, c, m });
       }
-      if (best > P * P * 0.6) {
-        // Snapshot the patch so sampling can never read pixels this pass has
-        // already rewritten.
-        const patch = Buffer.alloc(P * P * 3);
-        for (let y = 0; y < P; y += 1) {
-          for (let x = 0; x < P; x += 1) {
-            const src = ((bestY + y) * size + (bestX + x)) * 3;
-            const dst = (y * P + x) * 3;
-            patch[dst] = tileRaw[src];
-            patch[dst + 1] = tileRaw[src + 1];
-            patch[dst + 2] = tileRaw[src + 2];
-          }
-        }
-        // Each patch-sized block is wrapped (not mirrored) and shifted by a
-        // deterministic per-block offset. Mirroring joins blocks seamlessly but
-        // makes every pair a reflection, which on a large fill reads as an
-        // obvious kaleidoscope butterfly down the middle of the garment. Camo
-        // and other organic prints are irregular and high-frequency, so a
-        // shifted wrap hides its joins far better than symmetry does.
-        const blockShift = (bx: number, by: number) => {
-          let h = (bx * 73856093) ^ (by * 19349663);
-          h = (h ^ (h >>> 13)) >>> 0;
-          return h % P;
-        };
-        for (let y = 0; y < size; y += 1) {
-          for (let x = 0; x < size; x += 1) {
-            const i = y * size + x;
-            if (keep[i] || dist[i] <= 6) {
+      // Push: fill an unknown cell from its parent's average, coarse to fine.
+      for (let l = levels.length - 2; l >= 0; l -= 1) {
+        const cur = levels[l];
+        const par = levels[l + 1];
+        for (let y = 0; y < cur.h; y += 1) {
+          for (let x = 0; x < cur.w; x += 1) {
+            const i = y * cur.w + x;
+            if (cur.m[i] > 0) {
               continue;
             }
-            const bx = Math.floor(x / P);
-            const by = Math.floor(y / P);
-            const su = (x + blockShift(bx, by)) % P;
-            const sv = (y + blockShift(by, bx + 7)) % P;
-            const s = (sv * P + su) * 3;
-            tileRaw[i * 3] = patch[s];
-            tileRaw[i * 3 + 1] = patch[s + 1];
-            tileRaw[i * 3 + 2] = patch[s + 2];
-            // Real fabric now: let the passes below treat it as source and
-            // only feather the narrow band still separating it from the
-            // original garment pixels.
-            keep[i] = 1;
+            const pi =
+              Math.min(par.h - 1, y >> 1) * par.w + Math.min(par.w - 1, x >> 1);
+            if (par.m[pi] <= 0) {
+              continue;
+            }
+            cur.c[i * 3] = par.c[pi * 3] / par.m[pi];
+            cur.c[i * 3 + 1] = par.c[pi * 3 + 1] / par.m[pi];
+            cur.c[i * 3 + 2] = par.c[pi * 3 + 2] / par.m[pi];
+            cur.m[i] = 1;
           }
+        }
+      }
+      const flat = levels[0];
+      const wrote = new Uint8Array(n);
+      for (let i = 0; i < n; i += 1) {
+        if (keep[i] || flat.m[i] <= 0) {
+          continue;
+        }
+        tileRaw[i * 3] = clampInt(Math.round(flat.c[i * 3] / flat.m[i]), 0, 255);
+        tileRaw[i * 3 + 1] = clampInt(
+          Math.round(flat.c[i * 3 + 1] / flat.m[i]),
+          0,
+          255,
+        );
+        tileRaw[i * 3 + 2] = clampInt(
+          Math.round(flat.c[i * 3 + 2] / flat.m[i]),
+          0,
+          255,
+        );
+        wrote[i] = 1;
+      }
+      // Taking each cell from its parent leaves faint 2x2 terracing. Smooth
+      // only the pixels this pass wrote, so real fabric keeps its sharpness.
+      for (let pass = 0; pass < 3; pass += 1) {
+        const snapshot = Buffer.from(tileRaw);
+        for (let y = 1; y < size - 1; y += 1) {
+          for (let x = 1; x < size - 1; x += 1) {
+            const i = y * size + x;
+            if (!wrote[i]) {
+              continue;
+            }
+            for (let ch = 0; ch < 3; ch += 1) {
+              const sum =
+                snapshot[(i - 1) * 3 + ch] +
+                snapshot[(i + 1) * 3 + ch] +
+                snapshot[(i - size) * 3 + ch] +
+                snapshot[(i + size) * 3 + ch] +
+                snapshot[i * 3 + ch] * 2;
+              tileRaw[i * 3 + ch] = Math.round(sum / 6);
+            }
+          }
+        }
+      }
+      for (let i = 0; i < n; i += 1) {
+        if (wrote[i]) {
+          keep[i] = 1;
         }
       }
     }
