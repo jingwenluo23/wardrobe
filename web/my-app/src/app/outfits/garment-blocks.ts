@@ -85,16 +85,20 @@ const SLEEVE_PROFILES: Record<SleeveKind, SleeveProfile> = {
   // weight, and it stacks where the cuff band stops it.
   long: {
     rootOffsetDeg: 18,
-    endOffsetDeg: 88,
-    drape: 0.048,
-    tension: 0.028,
-    // Light: a strong stack visibly swells the sleeve just above the cuff.
-    stack: 0.02,
-    // Uniform tube: no cap swell and no taper, so every ring matches the
-    // armhole ring from shoulder to cuff. The rib band does all the narrowing
-    // at the wrist, which is where a hoodie's shaping actually comes from.
+    // Vertical at the cuff. Carrying it past vertical swings the wrist back
+    // toward the body, which bows the sleeve instead of letting it hang.
+    endOffsetDeg: 74,
+    // Shallow: the reference sleeve is a smooth, clean cone. Deep folds make
+    // the outline wobble, which reads as the sleeve flaring in and out.
+    drape: 0.018,
+    tension: 0.010,
+    stack: 0.012,
     capEase: 0,
-    wristTaper: 1,
+    // Narrows steadily from armhole to wrist, as the reference does. A
+    // constant-width tube keeps its full armhole girth all the way down and
+    // then steps abruptly into a much narrower cuff, and that combination is
+    // what reads as the sleeve flaring out.
+    wristTaper: 0.74,
     foldedRibCuff: true,
   },
 };
@@ -977,10 +981,10 @@ function buildTopGeometry(
     const bell = (t: number, at: number, width: number) =>
       Math.exp(-Math.pow((t - at) / width, 2));
     const armGirth = (t: number) => {
-      const toWrist =
-        1 +
-        (sleeveProfile.wristTaper - 1) *
-          smoothstep(clamp((t - 0.15) / 0.85, 0, 1));
+      // LINEAR from armhole to cuff. Easing the taper in bows the outline —
+      // it stays wide through the upper arm and then falls away — whereas the
+      // reference's sleeve edge is a straight line converging on the cuff.
+      const toWrist = 1 + (sleeveProfile.wristTaper - 1) * clamp(t, 0, 1);
       return toWrist * (1 + sleeveProfile.capEase * bell(t, 0.1, 0.16));
     };
     // Normalised so the root is exactly 1: the first ring is welded to the
