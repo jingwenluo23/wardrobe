@@ -11,6 +11,10 @@
 // takes noticeably longer. If the model cannot be loaded (offline, blocked
 // network), callers fall back to the colour-heuristic extractor.
 
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+
 import sharp from "sharp";
 import type { GarmentShapeEstimate } from "./garment-mesh";
 
@@ -83,7 +87,30 @@ function getSegmenter(): Promise<Segmenter | null> {
       // most likely to fail on a flaky or rate-limited connection. Try a few
       // times with a short backoff before falling back — a single hiccup
       // should not cost this draft its segmentation.
-      const { pipeline } = await import("@huggingface/transformers");
+      const { pipeline, env } = await import("@huggingface/transformers");
+
+      // Prefer weights vendored into the app by `npm run fetch-model`, so a
+      // user's upload never waits on huggingface.co and cannot be demoted to
+      // the colour heuristic by a blocked or throttled request. transformers.js
+      // looks for <localModelPath>/<repo>/..., checks there first, and only
+      // falls back to the network when a file is missing. Downloads are cached
+      // to a writable directory so an unvendored deployment at least fetches
+      // once per host rather than once per cold start.
+      const modelDir =
+        process.env.WARDROBE_MODEL_DIR ?? path.join(process.cwd(), "models");
+      env.localModelPath = modelDir;
+      env.allowLocalModels = true;
+      env.cacheDir =
+        process.env.WARDROBE_MODEL_CACHE ??
+        path.join(os.tmpdir(), "wardrobe-models");
+      const vendored = fs.existsSync(
+        path.join(modelDir, "Xenova", "segformer_b2_clothes", "config.json"),
+      );
+      console.info(
+        "[garment-segmentation] loading model " +
+          (vendored ? "from vendored weights at " + modelDir : "from network") +
+          (vendored ? "" : " (run `npm run fetch-model` to vendor it)"),
+      );
       for (let tryIndex = 0; tryIndex < 3; tryIndex += 1) {
         try {
           const segmenter = await pipeline(

@@ -56,3 +56,37 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+## Garment segmentation model
+
+Garment extraction uses `Xenova/segformer_b2_clothes` via transformers.js.
+By default those weights are downloaded from huggingface.co the first time an
+upload is processed, which makes extraction quality depend on an outbound
+request at exactly the wrong moment: if the host cannot reach huggingface.co,
+or the request is throttled, extraction silently falls back to a colour
+heuristic and the texture comes back visibly worse (the mesh panel reports
+82% extraction quality instead of ~95%).
+
+Vendor the weights so the runtime reads them from disk instead:
+
+```bash
+npm run fetch-model
+```
+
+This downloads about 15 MB into `models/Xenova/segformer_b2_clothes/`, which
+is gitignored. It also runs automatically before `npm run build`, so a deploy
+that can reach huggingface.co bakes the model in. The script never fails a
+build — if the download does not work the app still runs and falls back to
+fetching at request time.
+
+Overrides:
+
+- `WARDROBE_MODEL_DIR` — where vendored weights live (default `./models`)
+- `WARDROBE_MODEL_CACHE` — cache for runtime downloads (default a temp dir)
+
+On startup the server logs which path it took, so it is easy to confirm:
+
+```
+[garment-segmentation] loading model from vendored weights at /app/models
+[garment-segmentation] loading model from network (run `npm run fetch-model` to vendor it)
+```

@@ -42,3 +42,6 @@ next-env.d.ts
 
 # local draft database
 /data
+
+# vendored ML model weights (fetched via `npm run fetch-model`)
+/models/

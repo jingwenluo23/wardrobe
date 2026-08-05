@@ -9,7 +9,9 @@
     "lint": "eslint",
     "cad:refresh": "node ./scripts/refresh_tshirt_asset.mjs",
     "golden": "node scripts/golden.mjs",
-    "golden:update": "node scripts/golden.mjs --update"
+    "golden:update": "node scripts/golden.mjs --update",
+    "fetch-model": "node scripts/fetch-model.mjs",
+    "prebuild": "node scripts/fetch-model.mjs"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.2.0",
