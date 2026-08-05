@@ -26,6 +26,79 @@ const SCALE = 0.04;
 const COLS = 64; // columns across the body width
 const ROWS = 44; // rows from hem to shoulder
 const SLEEVE_RINGS = 12; // rings along each sleeve
+
+// --- Sleeve kinds -----------------------------------------------------------
+// A cap sleeve and a long sleeve behave like different garments: one stands out
+// from the shoulder, is short and taut and barely falls; the other reaches the
+// wrist, carries real weight and drapes. They used to share a single formula
+// with a smoothstep on sleeve length blending between them, so every adjustment
+// aimed at one silently moved the other and neither was ever stated outright.
+// Each kind now declares its own numbers.
+//
+// The construction (lofting rings off the armhole) is deliberately still
+// shared: it is the part that must stay correct for both, and duplicating it
+// would let the two drift apart.
+type SleeveKind = "cap" | "long";
+
+type SleeveProfile = {
+  /** Degrees below the shoulder line where the sleeve leaves the armhole.
+   *  Deliberately shallow for every kind: the armhole ring faces sideways, so
+   *  a steep root extrudes the tube almost within its own plane and collapses
+   *  it — that is what reads as a pinched upper arm. */
+  rootOffsetDeg: number;
+  /** Degrees below the shoulder line at the cuff. Past 90 the sleeve swings
+   *  back toward the body, which is how a long sleeve gets its cuff to hang
+   *  beside the hip rather than out to the side. */
+  endOffsetDeg: number;
+  /** Depth of the long gravity folds down the sleeve. */
+  drape: number;
+  /** Depth of the finer tension wrinkles. */
+  tension: number;
+  /** Fabric stacking just above the cuff band. */
+  stack: number;
+  /** Ease across the sleeve cap — the domed head that sets into the armhole
+   *  (step 2/3 of the construction sheet). */
+  capEase: number;
+  /** Width at the cuff edge relative to the bicep. The pattern pieces taper
+   *  gently from the cap down to the hem allowance. */
+  wristTaper: number;
+  /** Rib cuff folded in half lengthwise, so the band is doubled and its lower
+   *  edge is a fold rather than a raw opening (steps 5-6). */
+  foldedRibCuff: boolean;
+};
+
+const SLEEVE_PROFILES: Record<SleeveKind, SleeveProfile> = {
+  // Short cap sleeve: flares gently outward off the shoulder and stops. Too
+  // short and too taut to develop meaningful folds, so it stays nearly smooth.
+  cap: {
+    rootOffsetDeg: 18,
+    endOffsetDeg: 24,
+    drape: 0.012,
+    tension: 0.008,
+    stack: 0,
+    capEase: 0.04,
+    wristTaper: 1,
+    foldedRibCuff: false,
+  },
+  // Long sleeve: leaves the armhole shallow, then falls past vertical so the
+  // cuff comes to rest beside the body. Long enough to hang under its own
+  // weight, and it stacks where the cuff band stops it.
+  long: {
+    rootOffsetDeg: 18,
+    endOffsetDeg: 88,
+    drape: 0.048,
+    tension: 0.028,
+    stack: 0.062,
+    capEase: 0.1,
+    // Gentle only: the pattern tapers, but a hoodie sleeve is cut full and the
+    // rib does most of the narrowing at the wrist.
+    wristTaper: 0.88,
+    foldedRibCuff: true,
+  },
+};
+
+/** Sleeves past mid-forearm hang and drape; shorter ones behave as caps. */
+const LONG_SLEEVE_CM = 40;
 const HOOD_RINGS = 14; // rings from neckline to hood end
 
 const clamp = (value: number, min: number, max: number) =>
@@ -791,7 +864,6 @@ function buildTopGeometry(
   // sleeve's root ring reuses those exact positions, so the sleeve grows out
   // of the armhole with no gap or overlap.
   const sleeveLen = params.sleeveLength * SCALE;
-  const droopRad = slopeRad + (24 * Math.PI) / 180;
 
   const buildSleeve = (side: 1 | -1) => {
     const sideCol = side > 0 ? COLS : 0;
@@ -823,41 +895,26 @@ function buildTopGeometry(
       .reduce((acc, p) => acc.clone().add(p), new THREE.Vector3())
       .multiplyScalar(1 / loopCount);
 
-    // Sleeve hang: starts nearly along the shoulder line and bends toward
-    // vertical along the length, like fabric falling under gravity. A
-    // straight steep axis pinched the armpit right at the root.
-    const lengthT = smoothstep((params.sleeveLength - 21) / 35);
-    // Long sleeves hang DOWN under their weight — near vertical at the
-    // wrist — while short cap sleeves keep their slight outward flare. The
-    // root continues the shoulder line and the bend spreads over the WHOLE
-    // arm; front-loading the turn kinks a visible pinch into the cap.
-    // A crease forms wherever the axis turns sharply, so relocating the bend
-    // only moves the crease — concentrating it at the elbow creased the elbow,
-    // concentrating it over the deltoid creased the upper arm. The only real
-    // cure is to make the sleeve turn barely at all, anywhere.
+    // Sleeve hang, taken from this sleeve's kind rather than blended from its
+    // length. Two findings are baked into those profiles and should not be
+    // re-litigated by tweaking angles here:
     //
-    // The drop-shoulder padding above is what makes that possible: with the
-    // armhole carried out to the edge of the body, the sleeve can leave the
-    // shoulder ALREADY steep (70 deg) without driving into the torso, so it
-    // only has ~14 deg left to travel before the cuff. Spread linearly, that
-    // is about 1.2 deg per segment along the entire sleeve — far below the
-    // ~5 deg peak of a spread smoothstep — so the arm reads as one straight
-    // relaxed drop with the cuff beside the body and no crease at any height.
-    // Short cap sleeves stay shallow and keep their outward flare.
-    // What pinches the upper sleeve is the ROOT angle, not the curvature.
-    // The armhole ring's plane faces sideways, so a sleeve that leaves it
-    // steeply is extruded almost within its own plane and the tube collapses
-    // at the shoulder. That matches every version reviewed: root 54 and 70 deg
-    // both pinched (the 70 deg one had the LOWEST curvature of any attempt, so
-    // curvature cannot be the cause), while root 34 deg never did.
+    //  - The ROOT angle is what pinches the upper arm, not the curvature. Root
+    //    54 and 70 deg both pinched, and the 70 deg version had the lowest
+    //    curvature of any attempt; root 34 deg never pinched. The armhole ring
+    //    faces sideways, so a steep root extrudes the tube within its own plane
+    //    and collapses it.
+    //  - Closeness is therefore bought at the far END, by carrying a long
+    //    sleeve past vertical so it swings back toward the body.
     //
-    // So keep the root shallow, where the tube opens cleanly out of the
-    // armhole, and buy the closeness back at the far end instead: carry the
-    // sleeve past vertical so it swings back in toward the body. Spread that
-    // turn linearly — constant curvature, no local kink to read as an elbow.
-    // The cuff lands ~13cm outside the body edge instead of ~27cm.
-    const droopStart = slopeRad + (18 * Math.PI) / 180;
-    const droopEnd = droopRad + (lengthT * 64 * Math.PI) / 180;
+    // The turn is spread linearly between the two, giving constant curvature
+    // and so no local kink anywhere along the sleeve to read as an elbow.
+    const sleeveKind: SleeveKind =
+      params.sleeveLength >= LONG_SLEEVE_CM ? "long" : "cap";
+    const sleeveProfile = SLEEVE_PROFILES[sleeveKind];
+    const droopStart =
+      slopeRad + (sleeveProfile.rootOffsetDeg * Math.PI) / 180;
+    const droopEnd = slopeRad + (sleeveProfile.endOffsetDeg * Math.PI) / 180;
     const droopAt = (t: number) =>
       droopStart + (droopEnd - droopStart) * clamp(t, 0, 1);
     // Average axis for the ring frame.
@@ -911,13 +968,24 @@ function buildTopGeometry(
     const taper = clamp(features.sleeveTaper, 0.35, 1);
 
     // --- Sleeve anatomy ----------------------------------------------------
-    // Straight sleeve: constant girth from the armhole all the way to the cuff.
-    // Every ring is the size of the armhole ring — no sleeve-head swell, no
-    // bicep, no elbow ease and no taper down the forearm — so the tube reads as
-    // one even width top to bottom. Only the cuff band gathers in.
+    // Follows the pattern pieces on the construction sheet: a domed cap that
+    // eases into the armhole, then a gentle taper from the cap down to the hem
+    // allowance. No bicep or elbow bulge — the pattern's side seams are close
+    // to straight, and the sleeve reads as one even tube apart from that taper.
     const bell = (t: number, at: number, width: number) =>
       Math.exp(-Math.pow((t - at) / width, 2));
-    const armRadius = () => 1;
+    const armGirth = (t: number) => {
+      const toWrist =
+        1 +
+        (sleeveProfile.wristTaper - 1) *
+          smoothstep(clamp((t - 0.15) / 0.85, 0, 1));
+      return toWrist * (1 + sleeveProfile.capEase * bell(t, 0.1, 0.16));
+    };
+    // Normalised so the root is exactly 1: the first ring is welded to the
+    // armhole loop, and any swell there opens a gap along the armhole seam
+    // instead of shaping the sleeve.
+    const armRoot = armGirth(0);
+    const armRadius = (t: number) => armGirth(t) / armRoot;
 
     // Folds from gravity and fabric tension: shallow creases running down the
     // sleeve, faint where the cap is stretched over the shoulder and deeper
@@ -927,9 +995,12 @@ function buildTopGeometry(
     // texture's scale — are unchanged; it only ripples the surface.
     const foldAt = (t: number, theta: number) => {
       const slack = 0.35 + 0.65 * smoothstep(clamp((t - 0.2) / 0.5, 0, 1));
-      const drape = 0.048 * slack * Math.sin(3 * theta + 1.7 * t);
-      const tension = 0.028 * slack * Math.sin(5 * theta - 3.1 * t + 0.9);
-      const stack = 0.062 * bell(t, 0.9, 0.09) * Math.sin(4 * theta + 0.6);
+      const drape =
+        sleeveProfile.drape * slack * Math.sin(3 * theta + 1.7 * t);
+      const tension =
+        sleeveProfile.tension * slack * Math.sin(5 * theta - 3.1 * t + 0.9);
+      const stack =
+        sleeveProfile.stack * bell(t, 0.9, 0.09) * Math.sin(4 * theta + 0.6);
       return drape + tension + stack;
     };
 
@@ -1005,7 +1076,7 @@ function buildTopGeometry(
       const soften = smoothstep(Math.max(0, t - 0.12) / 0.5);
       const ring = emitRing(
         ringCenter.clone(),
-        armRadius(),
+        armRadius(t),
         soften,
         t,
         droopAt(t),
@@ -1029,9 +1100,9 @@ function buildTopGeometry(
     // Optional ribbed cuff: a short, snugger band past the sleeve end.
     if (features.cuff === "ribbed" && previousRing) {
       const cuffLen = 3 * SCALE * trimScale;
-      // The sleeve no longer tapers, so the cuff gathers relative to its FULL
-      // width; sleeveTaper now only says how snug this garment's cuff is.
-      const cuffScale = 0.62 + 0.28 * taper;
+      // The cuff is cut narrower than the sleeve and stretched to fit, so the
+      // sleeve gathers into it. sleeveTaper says how snug this garment's is.
+      const cuffScale = (0.62 + 0.28 * taper) * armRadius(1);
       const endCenter = ringCenter.clone();
       const rib1 = emitRing(
         endCenter.clone().addScaledVector(endAxis, cuffLen * 0.15),
@@ -1051,6 +1122,34 @@ function buildTopGeometry(
         0,
       );
       stitchRings(rib1, rib2);
+      if (sleeveProfile.foldedRibCuff) {
+        // Rib knit folded in half lengthwise, so the band is doubled and its
+        // lower edge is a fold. Roll the surface around that fold and run a
+        // short return up the inside: the edge then reads as soft folded rib
+        // instead of the open end of a tube.
+        const roll = emitRing(
+          endCenter
+            .clone()
+            .addScaledVector(endAxis, cuffLen + 0.35 * SCALE * trimScale),
+          cuffScale * 0.93,
+          1,
+          1,
+          dEnd,
+          0,
+        );
+        stitchRings(rib2, roll);
+        const inner = emitRing(
+          endCenter
+            .clone()
+            .addScaledVector(endAxis, cuffLen - 0.5 * SCALE * trimScale),
+          cuffScale * 0.84,
+          1,
+          1,
+          dEnd,
+          0,
+        );
+        stitchRings(roll, inner);
+      }
     }
 
     // Barrel cuff (woven button shirts): the sleeve gathers into a crisp,
