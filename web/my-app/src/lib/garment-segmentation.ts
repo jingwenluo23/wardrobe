@@ -1634,11 +1634,11 @@ export async function segmentGarment(
       let pipeline = sharp(region.tileRaw, {
         raw: { width: TILE, height: TILE, channels: 3 },
       });
-      if (!flat.applied) {
-        // Photo tiles (patterned fabric) keep the gentle local contrast so
-        // washed prints stay visible; flattened tiles must stay uniform.
-        pipeline = pipeline.clahe({ width: 192, height: 192, maxSlope: 1.15 });
-      }
+      // No CLAHE. Its maxSlope is an integer, so the fractional value used to
+      // soften it threw and silently demoted every draft to the colour
+      // heuristic; and local contrast enhancement is the opposite of what a
+      // garment photo needs — it is what made the print read harsher than the
+      // fabric. FABRIC_TONE alone keeps the tile close to the photograph.
       pipeline = pipeline.modulate(FABRIC_TONE);
       const jpg = await pipeline.jpeg({ quality: 86 }).toBuffer();
       return "data:image/jpeg;base64," + jpg.toString("base64");
@@ -1773,12 +1773,6 @@ export async function segmentGarment(
     let mainPipeline = sharp(tileRaw, {
       raw: { width: TILE, height: TILE, channels: 3 },
     });
-    if (!flat.applied) {
-      // Photo tile (patterned fabric): gentle local contrast so washed
-      // prints stay visible. Flattened tiles must stay uniform — CLAHE
-      // would blotch the flat base.
-      mainPipeline = mainPipeline.clahe({ width: 192, height: 192, maxSlope: 1.15 });
-    }
     mainPipeline = mainPipeline.modulate(FABRIC_TONE);
     const [tile, fabricTile] = await Promise.all([
       mainPipeline.jpeg({ quality: 86 }).toBuffer(),

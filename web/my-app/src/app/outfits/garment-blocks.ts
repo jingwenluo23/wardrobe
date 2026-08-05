@@ -76,7 +76,7 @@ const SLEEVE_PROFILES: Record<SleeveKind, SleeveProfile> = {
     drape: 0.012,
     tension: 0.008,
     stack: 0,
-    capEase: 0.04,
+    capEase: 0,
     wristTaper: 1,
     foldedRibCuff: false,
   },
@@ -88,11 +88,13 @@ const SLEEVE_PROFILES: Record<SleeveKind, SleeveProfile> = {
     endOffsetDeg: 88,
     drape: 0.048,
     tension: 0.028,
-    stack: 0.062,
-    capEase: 0.1,
-    // Gentle only: the pattern tapers, but a hoodie sleeve is cut full and the
-    // rib does most of the narrowing at the wrist.
-    wristTaper: 0.88,
+    // Light: a strong stack visibly swells the sleeve just above the cuff.
+    stack: 0.02,
+    // Uniform tube: no cap swell and no taper, so every ring matches the
+    // armhole ring from shoulder to cuff. The rib band does all the narrowing
+    // at the wrist, which is where a hoodie's shaping actually comes from.
+    capEase: 0,
+    wristTaper: 1,
     foldedRibCuff: true,
   },
 };
