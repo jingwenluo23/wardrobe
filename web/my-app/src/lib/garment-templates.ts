@@ -34,7 +34,10 @@ const CATEGORY_ORDER = ["Tops", "Bottoms", "Dresses", "Outerwear", "Shoes"];
 
 const longSleeve: Partial<GarmentParams> = {
   sleeveLength: 56,
-  armholeDepth: 21,
+  // Deep armhole. The sleeve is lofted from the armhole loop, so the armhole
+  // IS the sleeve's girth — at 21 the tube came out noticeably skinny beside
+  // the torso, where a relaxed long-sleeve top drops from a roomy armhole.
+  armholeDepth: 28,
 };
 
 /**

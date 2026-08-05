@@ -292,7 +292,10 @@ function buildTopGeometry(
   // side. Kept shallow (a real armhole is much flatter front-to-back than
   // the torso), and it does NOT close fully at the shoulder point — a real
   // sleeve cap stays rounded there instead of pinching to a crease.
-  const maxOpen = depth * 0.5;
+  // Front-to-back opening of the armhole. Together with armholeDepth this sets
+  // how much cross-section the sleeve inherits, so a flatter armhole makes a
+  // thin sleeve however the sleeve itself is shaped.
+  const maxOpen = depth * 0.68;
   const armholeGap = (y: number) => {
     if (y <= underarmY) {
       return 0;

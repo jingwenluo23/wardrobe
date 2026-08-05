@@ -543,6 +543,39 @@ export function inpaintTile(
       keptCount += keep[i];
     }
     if (keptCount > n * 0.02 && keptCount < n) {
+      // Distance to the nearest surviving pixel. The pyramid is a LAST resort:
+      // it carries colour but no detail, so letting it fill every gap replaces
+      // fabric the interpolation below could have reconstructed from real
+      // neighbours with a visible smooth blur. Restrict it to pixels with no
+      // real fabric anywhere near them.
+      const dist = new Float32Array(n);
+      for (let i = 0; i < n; i += 1) {
+        dist[i] = keep[i] ? 0 : 1e9;
+      }
+      for (let y = 0; y < size; y += 1) {
+        for (let x = 0; x < size; x += 1) {
+          const i = y * size + x;
+          let d = dist[i];
+          if (y > 0) d = Math.min(d, dist[i - size] + 1);
+          if (x > 0) d = Math.min(d, dist[i - 1] + 1);
+          if (y > 0 && x > 0) d = Math.min(d, dist[i - size - 1] + 1.414);
+          if (y > 0 && x < size - 1) d = Math.min(d, dist[i - size + 1] + 1.414);
+          dist[i] = d;
+        }
+      }
+      for (let y = size - 1; y >= 0; y -= 1) {
+        for (let x = size - 1; x >= 0; x -= 1) {
+          const i = y * size + x;
+          let d = dist[i];
+          if (y < size - 1) d = Math.min(d, dist[i + size] + 1);
+          if (x < size - 1) d = Math.min(d, dist[i + 1] + 1);
+          if (y < size - 1 && x < size - 1)
+            d = Math.min(d, dist[i + size + 1] + 1.414);
+          if (y < size - 1 && x > 0) d = Math.min(d, dist[i + size - 1] + 1.414);
+          dist[i] = d;
+        }
+      }
+      const FAR = 10;
       type Level = { w: number; h: number; c: Float32Array; m: Float32Array };
       const base: Level = {
         w: size,
@@ -648,7 +681,7 @@ export function inpaintTile(
       const flat = levels[0];
       const wrote = new Uint8Array(n);
       for (let i = 0; i < n; i += 1) {
-        if (keep[i] || flat.m[i] <= 0) {
+        if (keep[i] || flat.m[i] <= 0 || dist[i] <= FAR) {
           continue;
         }
         tileRaw[i * 3] = clampInt(Math.round(flat.c[i * 3] / flat.m[i]), 0, 255);
