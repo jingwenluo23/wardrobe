@@ -97,11 +97,16 @@ const SLEEVE_PROFILES: Record<SleeveKind, SleeveProfile> = {
   // cuff comes to rest beside the body. Long enough to hang under its own
   // weight, and it stacks where the cuff band stops it.
   long: {
-    rootOffsetDeg: 8,
+    // Steeper than a true shoulder-line start: the raglan seam already carries
+    // the sleeve outward, so the tube itself can turn down sooner and bring the
+    // cuff in beside the body.
+    rootOffsetDeg: 20,
     // Root is shallow because the first part of a raglan sleeve IS the
     // shoulder — it travels outward across the top of the body before the arm
     // starts. It then falls to vertical at the cuff.
-    endOffsetDeg: 74,
+    // A little past vertical, so the cuff settles in toward the hip without
+    // meeting the torso.
+    endOffsetDeg: 80,
     // Shallow: the reference sleeve is a smooth, clean cone. Deep folds make
     // the outline wobble, which reads as the sleeve flaring in and out.
     drape: 0.018,
@@ -303,7 +308,13 @@ function buildTopGeometry(
       return halfW * (hemFactor + (1 - hemFactor) * smoothstep(t)) * pinchAt(y);
     }
     const t = clamp((y - underarmY) / (shoulderPtY - underarmY), 0, 1);
-    return halfW - (halfW - shoulderX) * smoothstep(t);
+    // On a raglan the seam has a long way to travel — underarm to neckline —
+    // and easing it symmetrically starts pulling the body in from just above
+    // the underarm, which narrows the chest and makes the torso look squeezed.
+    // Hold close to full width and turn in late instead, so the body keeps its
+    // shape and the seam does its work up near the neck.
+    const shape = raglan ? Math.pow(t, 2.1) : smoothstep(t);
+    return halfW - (halfW - shoulderX) * shape;
   };
 
   // Vertical depth taper: the torso keeps full depth up to the chest, then
