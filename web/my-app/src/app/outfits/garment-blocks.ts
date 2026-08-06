@@ -25,7 +25,7 @@ const SCALE = 0.04;
 // Grid resolution. Higher = smoother curves.
 const COLS = 64; // columns across the body width
 const ROWS = 44; // rows from hem to shoulder
-const SLEEVE_RINGS = 12; // rings along each sleeve
+const SLEEVE_RINGS = 18; // rings along each sleeve
 
 // --- Sleeve kinds -----------------------------------------------------------
 // A cap sleeve and a long sleeve behave like different garments: one stands out
@@ -106,7 +106,7 @@ const SLEEVE_PROFILES: Record<SleeveKind, SleeveProfile> = {
     // starts. It then falls to vertical at the cuff.
     // A little past vertical, so the cuff settles in toward the hip without
     // meeting the torso.
-    endOffsetDeg: 80,
+    endOffsetDeg: 69,
     // Shallow: the reference sleeve is a smooth, clean cone. Deep folds make
     // the outline wobble, which reads as the sleeve flaring in and out.
     drape: 0.018,
@@ -117,12 +117,12 @@ const SLEEVE_PROFILES: Record<SleeveKind, SleeveProfile> = {
     // constant-width tube keeps its full armhole girth all the way down and
     // then steps abruptly into a much narrower cuff, and that combination is
     // what reads as the sleeve flaring out.
-    wristTaper: 0.74,
+    wristTaper: 0.84,
     foldedRibCuff: true,
-    hangFromShoulder: false,
+    hangFromShoulder: true,
     // ~0.6 x half width across, so the sleeve reads about 0.3 of the body
     // width — where a relaxed hoodie's bicep sits.
-    bicepRadiusFactor: 0.3,
+    bicepRadiusFactor: 0.25,
   },
 };
 
@@ -160,17 +160,50 @@ function weldNormalsByPosition(geometry: THREE.BufferGeometry) {
     "," +
     Math.round(position.getZ(i) * 1e4);
 
+  // Accumulate unnormalised face normals into POSITION buckets. Summing the
+  // already-normalised vertex normals gives every separately-built piece the
+  // same vote regardless of its adjacent triangle area, which leaves a dark
+  // groove at the torso/sleeve join. Face cross-products are area-weighted and
+  // reproduce the result of a genuinely shared topological vertex while the
+  // duplicate vertices—and therefore their independent UVs—remain intact.
   const buckets = new Map<string, THREE.Vector3>();
-  const tmp = new THREE.Vector3();
-  for (let i = 0; i < position.count; i += 1) {
-    const k = key(i);
-    let acc = buckets.get(k);
-    if (!acc) {
-      acc = new THREE.Vector3();
-      buckets.set(k, acc);
+  const index = geometry.getIndex();
+  const pa = new THREE.Vector3();
+  const pb = new THREE.Vector3();
+  const pc = new THREE.Vector3();
+  const ab = new THREE.Vector3();
+  const ac = new THREE.Vector3();
+  const faceNormal = new THREE.Vector3();
+  const addFace = (ia: number, ib: number, ic: number) => {
+    pa.fromBufferAttribute(position, ia);
+    pb.fromBufferAttribute(position, ib);
+    pc.fromBufferAttribute(position, ic);
+    ab.subVectors(pb, pa);
+    ac.subVectors(pc, pa);
+    faceNormal.crossVectors(ab, ac);
+    if (faceNormal.lengthSq() < 1e-16) {
+      return;
     }
-    acc.add(tmp.set(normal.getX(i), normal.getY(i), normal.getZ(i)));
+    for (const i of [ia, ib, ic]) {
+      const k = key(i);
+      let acc = buckets.get(k);
+      if (!acc) {
+        acc = new THREE.Vector3();
+        buckets.set(k, acc);
+      }
+      acc.add(faceNormal);
+    }
+  };
+  if (index) {
+    for (let i = 0; i < index.count; i += 3) {
+      addFace(index.getX(i), index.getX(i + 1), index.getX(i + 2));
+    }
+  } else {
+    for (let i = 0; i < position.count; i += 3) {
+      addFace(i, i + 1, i + 2);
+    }
   }
+  const tmp = new THREE.Vector3();
   for (let i = 0; i < position.count; i += 1) {
     const acc = buckets.get(key(i));
     if (!acc || acc.lengthSq() < 1e-12) {
@@ -178,6 +211,50 @@ function weldNormalsByPosition(geometry: THREE.BufferGeometry) {
     }
     tmp.copy(acc).normalize();
     normal.setXYZ(i, tmp.x, tmp.y, tmp.z);
+  }
+  normal.needsUpdate = true;
+}
+
+/**
+ * Fair shading across recorded sleeve-cap rows without moving vertices or UVs.
+ * This distributes the remaining normal rotation from the welded torso seam
+ * through the upper arm, so lighting does not reveal a rigid attachment line.
+ */
+function fairSleeveAttachmentNormals(geometry: THREE.BufferGeometry) {
+  const rowSets = geometry.userData.sleeveNormalRows as
+    | number[][][]
+    | undefined;
+  const normal = geometry.getAttribute("normal");
+  if (!rowSets?.length || !normal) {
+    return;
+  }
+  const start = new THREE.Vector3();
+  const end = new THREE.Vector3();
+  const current = new THREE.Vector3();
+  const target = new THREE.Vector3();
+  for (const rows of rowSets) {
+    if (rows.length < 3) {
+      continue;
+    }
+    const last = rows.length - 1;
+    const around = Math.min(...rows.map((row) => row.length));
+    for (let j = 0; j < around; j += 1) {
+      start.fromBufferAttribute(normal, rows[0][j]).normalize();
+      end.fromBufferAttribute(normal, rows[last][j]).normalize();
+      if (start.dot(end) < 0) {
+        end.negate();
+      }
+      for (let k = 1; k < last; k += 1) {
+        const t = smoothstep(k / last);
+        target.copy(start).lerp(end, t).normalize();
+        current.fromBufferAttribute(normal, rows[k][j]).normalize();
+        if (current.dot(target) < 0) {
+          current.negate();
+        }
+        current.lerp(target, 0.78).normalize();
+        normal.setXYZ(rows[k][j], current.x, current.y, current.z);
+      }
+    }
   }
   normal.needsUpdate = true;
 }
@@ -203,6 +280,7 @@ export function buildGarmentGeometry(
     geometry = buildTopGeometry(params, features);
   }
   weldNormalsByPosition(geometry);
+  fairSleeveAttachmentNormals(geometry);
   return geometry;
 }
 
@@ -333,23 +411,22 @@ function buildTopGeometry(
     return 1 - 0.62 * smoothstep(t);
   };
 
-  // Front/back separation along the armhole edge: zero at the underarm and
-  // widest in the middle, so the opening reads as a smooth oval from the
-  // side. Kept shallow (a real armhole is much flatter front-to-back than
-  // the torso), and it does NOT close fully at the shoulder point — a real
-  // sleeve cap stays rounded there instead of pinching to a crease.
-  // Front-to-back opening of the armhole. Together with armholeDepth this sets
-  // how much cross-section the sleeve inherits, so a flatter armhole makes a
-  // thin sleeve however the sleeve itself is shaped.
-  const maxOpen = depth * 0.68;
+  // Front/back separation only at the armhole boundary.  This edge becomes
+  // the sleeve seam, so it needs enough depth to form a stitchable loop but
+  // must stay much flatter than the torso itself.  A deep oval here leaves
+  // two visible lobes (front and back) beside the sleeve in side view.
+  const maxOpen = depth * 0.28;
   const armholeGap = (y: number) => {
     if (y <= underarmY) {
       return 0;
     }
     const t = Math.min(1, (y - underarmY) / (shoulderPtY - underarmY));
-    const dome = Math.pow(Math.sin(Math.PI * t), 0.8);
+    // Close naturally at both ends of the seam.  The tiny cap term prevents
+    // coincident front/back shoulder vertices while remaining hidden inside
+    // the sleeve cap; it does not change the torso away from this boundary.
+    const dome = Math.pow(Math.sin(Math.PI * t), 1.15);
     const capRound = smoothstep(Math.min(1, t * 3));
-    return maxOpen * (0.72 * dome + 0.28 * capRound);
+    return maxOpen * (0.94 * dome + 0.06 * capRound);
   };
 
   // Top edge of a panel as a function of lateral position s in [0, 1]
@@ -919,22 +996,20 @@ function buildTopGeometry(
   // sleeve's root ring reuses those exact positions, so the sleeve grows out
   // of the armhole with no gap or overlap.
   const sleeveLen = params.sleeveLength * SCALE;
+  const sleeveNormalRows: number[][][] = [];
 
   /**
-   * A sleeve that HANGS from the shoulder: a straight tube whose rings are
-   * perpendicular to the hanging direction throughout, with the torso's
-   * armhole edge stitched onto its first ring as the shoulder seam.
-   *
-   * Because the tube's axis never changes direction there is no bend anywhere
-   * to crease, and because each ring is square to that axis from the start the
-   * cross-section cannot collapse the way an extrusion out of the sideways
-   * armhole plane does.
+   * A sleeve that hangs from the shoulder. Its upper centreline eases from an
+   * outward shoulder direction into the final hanging axis; the rest remains
+   * straight. This avoids concentrating the entire shoulder-to-arm direction
+   * change into a single ring.
    */
   const buildHangingSleeve = (
     side: 1 | -1,
     loop: THREE.Vector3[],
     centroid: THREE.Vector3,
     profile: SleeveProfile,
+    seamTangents: THREE.Vector3[],
   ) => {
     const loopCount = loop.length;
     // One constant hanging direction: down, angled slightly outward.
@@ -963,7 +1038,14 @@ function buildTopGeometry(
     // 0.3. The armhole area is kept only as a floor, so a very roomy armhole
     // still gets a sleeve wide enough to cover it.
     const areaRadius = Math.sqrt(Math.abs(twice) / 2 / Math.PI);
-    const rEff = Math.max(areaRadius, halfW * profile.bicepRadiusFactor);
+    // A raglan opening includes the long seam from neckline to underarm, so
+    // its projected area is much larger than an arm cross-section. Using it as
+    // the sleeve radius creates a broad slab in side view. Long hanging
+    // sleeves are sized from the body/arm proportion; the measured area is
+    // retained only for cap sleeves whose opening is a conventional armhole.
+    const rEff = profile.hangFromShoulder
+      ? halfW * profile.bicepRadiusFactor
+      : Math.max(areaRadius, halfW * profile.bicepRadiusFactor);
     if (!(rEff > 1e-6)) {
       return;
     }
@@ -989,19 +1071,44 @@ function buildTopGeometry(
       shoulderTopY = Math.max(shoulderTopY, p.y);
     }
     const start = centroid.clone();
-    start.x = side * (halfW + rEff * 0.42);
-    start.y = shoulderTopY;
-    const first = offsets[0];
-    const a0 = Math.atan2(first.dot(e2), first.dot(e1));
+    start.x = side * (halfW + rEff * 0.35);
+    // A round upper arm reaches the shoulder at its TOP, not at its centre.
+    // Lowering the first-ring centre by one radius removes the horizontal
+    // cylinder top that made the shoulder look square.
+    start.y = shoulderTopY - rEff * 1.42;
     let signed = 0;
     for (let j = 0; j < loopCount; j += 1) {
       const a = offsets[j];
       const b = offsets[(j + 1) % loopCount];
       signed += a.dot(e1) * b.dot(e2) - b.dot(e1) * a.dot(e2);
     }
-    const dir = signed >= 0 ? 1 : -1;
+    // e1/e2 form the opposite handedness to the armhole loop's projected
+    // basis here. Reverse the angular walk so the front half of the raglan
+    // seam maps to the front half of the sleeve instead of twisting to back.
+    const dir = signed >= 0 ? -1 : 1;
+    // Match the top of the circular tube to the top of the raglan loop. The
+    // former phase came from the first (underarm) point, which put the tube's
+    // top near the end of the loop while the shoulder top sits halfway around
+    // it. Lofting between those phases twisted the cap and removed a large
+    // wedge from the visible shoulder.
+    const topIndices: number[] = [];
+    for (let j = 0; j < loopCount; j += 1) {
+      if (Math.abs(loop[j].y - shoulderTopY) < 1e-5) {
+        topIndices.push(j);
+      }
+    }
+    const topPhaseIndex =
+      topIndices.reduce((sum, j) => sum + j, 0) /
+      Math.max(topIndices.length, 1);
+    const topTheta = side > 0 ? 0 : Math.PI;
+    const a0 =
+      topTheta - dir * ((2 * Math.PI * topPhaseIndex) / loopCount);
 
     const taper = clamp(features.sleeveTaper, 0.35, 1);
+    // A hanging sleeve is oval rather than a round cylinder in side view.
+    // Preserve its front-view arm width while reducing only front-to-back
+    // depth to match the flatter shoulder and sleeve profile of real fleece.
+    const sleeveDepthScale = profile.hangFromShoulder ? 0.72 : 1;
     const bell = (t: number, at: number, w: number) =>
       Math.exp(-Math.pow((t - at) / w, 2));
     const girth = (t: number) => 1 + (profile.wristTaper - 1) * clamp(t, 0, 1);
@@ -1014,17 +1121,63 @@ function buildTopGeometry(
       return drape + tension + stack;
     };
 
+    // Ease the first part of the arm outward before settling into the hanging
+    // axis. The previous straight centreline began nearly vertical at t=0,
+    // leaving a flat cap shelf followed by a hard corner. This C1 shoulder
+    // sweep distributes that turn across several rings and then reaches zero
+    // extra curvature, so the lower sleeve remains straight.
+    const shoulderBendEnd = 0.28;
+    const shoulderSweep = rEff * 0.3;
+    const outward = new THREE.Vector3(side, 0, 0);
+    const sleeveCenterAt = (t: number) => {
+      const s = clamp(t / shoulderBendEnd, 0, 1);
+      const sweep = shoulderSweep * (2 * s - s * s);
+      return start
+        .clone()
+        .addScaledVector(axis, sleeveLen * t)
+        .addScaledVector(outward, sweep);
+    };
+    const sleeveAxisAt = (t: number) => {
+      const s = clamp(t / shoulderBendEnd, 0, 1);
+      const sweepRate =
+        t < shoulderBendEnd
+          ? (shoulderSweep * 2 * (1 - s)) / shoulderBendEnd
+          : 0;
+      return axis
+        .clone()
+        .multiplyScalar(sleeveLen)
+        .addScaledVector(outward, sweepRate)
+        .normalize();
+    };
+
+    const sleevePointAt = (
+      t: number,
+      scale: number,
+      withFolds: boolean,
+      j: number,
+    ) => {
+      const center = sleeveCenterAt(t);
+      const localAxis = sleeveAxisAt(t);
+      const localE1 = new THREE.Vector3()
+        .crossVectors(e2, localAxis)
+        .normalize();
+      const theta = a0 + dir * ((2 * Math.PI * j) / loopCount);
+      const r = rEff * scale * (withFolds ? 1 + foldAt(t, theta) : 1);
+      const p = center
+        .clone()
+        .addScaledVector(localE1, Math.cos(theta) * r)
+        .addScaledVector(e2, Math.sin(theta) * r * sleeveDepthScale);
+      // The cap itself now carries the transition from the torso-depth raglan
+      // loop to this arm-sized cross-section. Keeping loop[j].z through the
+      // upper 22% of the sleeve made the whole shoulder as deep as the torso,
+      // which produced the bulky side profile and intersecting cap faces.
+      return p;
+    };
+
     const ringAt = (t: number, scale: number, withFolds: boolean) => {
-      const center = start.clone().addScaledVector(axis, sleeveLen * t);
       const ring: number[] = [];
       for (let j = 0; j < loopCount; j += 1) {
-        const theta = a0 + dir * ((2 * Math.PI * j) / loopCount);
-        const r =
-          rEff * scale * (withFolds ? 1 + foldAt(t, theta) : 1);
-        const p = center
-          .clone()
-          .addScaledVector(e1, Math.cos(theta) * r)
-          .addScaledVector(e2, Math.sin(theta) * r);
+        const p = sleevePointAt(t, scale, withFolds, j);
         ring.push(pushVertex(p.x, p.y, p.z, j / loopCount, t));
       }
       return ring;
@@ -1045,44 +1198,125 @@ function buildTopGeometry(
       }
     };
 
-    // Shoulder seam: weld the torso's armhole edge onto the tube's first ring.
+    // Shoulder seam: weld the torso's armhole edge into a short curved cap,
+    // then enter the hanging tube with the same tangent as its axis. A direct
+    // one-strip stitch made the raglan panel meet the round tube as a sharp
+    // folded triangle even though their normals were averaged.
     const seam = loop.map((p, j) => pushVertex(p.x, p.y, p.z, j / loopCount, 0));
-    let previous = ringAt(0, 1, false);
-    stitch(seam, previous);
+    const normalRows: number[][] = [seam];
+    // First continue the torso's final grid step exactly. This strip is
+    // coplanar with the panel at the boundary, so the attachment cannot fold
+    // inward before the curved cap begins.
+    const leadPositions = loop.map((p, j) => {
+      const leadPoint = p.clone().addScaledVector(seamTangents[j], 1.05);
+      // Continue the panel mainly across X/Y. Its curved side-edge tangent can
+      // point strongly forward/backward; carrying all of that Z component
+      // into the sleeve makes the cap briefly deeper than the torso seam.
+      leadPoint.z = p.z;
+      return leadPoint;
+    });
+    const lead = leadPositions.map((p, j) =>
+      pushVertex(p.x, p.y, p.z, j / loopCount, 0.005),
+    );
+    stitch(seam, lead);
+    normalRows.push(lead);
+    let previous = lead;
+    // Dense sampling is important at the seam itself: with only a few rings,
+    // the first chord cuts across the Hermite curve and its face normal can be
+    // almost perpendicular to the torso normal even though the mathematical
+    // tangent is continuous.
+    const capRings = 12;
+    for (let k = 1; k <= capRings; k += 1) {
+      const u = k / capRings;
+      const u2 = u * u;
+      const u3 = u2 * u;
+      const h00 = 2 * u3 - 3 * u2 + 1;
+      const h10 = u3 - 2 * u2 + u;
+      const h01 = -2 * u3 + 3 * u2;
+      const h11 = u3 - u2;
+      const ring: number[] = [];
+      for (let j = 0; j < loopCount; j += 1) {
+        const p0 = leadPositions[j];
+        const p1 = sleevePointAt(0, 1, false, j);
+        // Bound both Hermite handles to the actual seam-to-tube span. The old
+        // radius-sized handles could cross past that span, producing a bump at
+        // the raglan seam followed by a flat shelf and an almost 90-degree
+        // drop into the sleeve. Short, span-relative handles keep the cap
+        // monotone while still matching the torso and sleeve directions.
+        const span = p0.distanceTo(p1);
+        const seamTangent = seamTangents[j]
+          .clone()
+          .normalize()
+          .multiplyScalar(Math.min(rEff * 0.62, span * 0.32));
+        const tubeTangent = sleeveAxisAt(0)
+          .clone()
+          .multiplyScalar(Math.min(rEff * 0.72, span * 0.34));
+        const p = p0
+          .clone()
+          .multiplyScalar(h00)
+          .addScaledVector(seamTangent, h10)
+          .addScaledVector(p1, h01)
+          .addScaledVector(tubeTangent, h11);
+        // Keep front-to-back depth monotone. Independent Hermite Z handles
+        // previously collapsed the middle of the cap almost flat and then
+        // expanded it again at the arm, creating a bulbous circular shoulder
+        // in side view. X/Y retain the tangent-matched Hermite shoulder curve.
+        const depthU = clamp(u / 0.3, 0, 1);
+        p.z = p0.z + (p1.z - p0.z) * smoothstep(depthU);
+        ring.push(pushVertex(p.x, p.y, p.z, j / loopCount, u * 0.08));
+      }
+      stitch(previous, ring);
+      previous = ring;
+      normalRows.push(ring);
+    }
 
     for (let i = 1; i <= SLEEVE_RINGS; i += 1) {
       const t = i / SLEEVE_RINGS;
       const ring = ringAt(t, girth(t), true);
       stitch(previous, ring);
       previous = ring;
+      if (i <= 4) {
+        normalRows.push(ring);
+      }
     }
+    sleeveNormalRows.push(normalRows);
 
     // Rib cuff: cut narrower than the sleeve so the tube gathers into it, and
     // rolled around its lower edge because the band is folded double.
     if (features.cuff === "ribbed") {
-      const cuffLen = 3 * SCALE * trimScale;
-      const cuffScale = (0.62 + 0.28 * taper) * girth(1);
+      const cuffLen = 7 * SCALE * trimScale;
+      const sleeveEndScale = girth(1);
+      const cuffScale = 0.84 * sleeveEndScale;
       const at = (d: number, scale: number) => {
-        const center = start
-          .clone()
-          .addScaledVector(axis, sleeveLen + d);
+        const center = sleeveCenterAt(1).addScaledVector(axis, d);
         const ring: number[] = [];
         for (let j = 0; j < loopCount; j += 1) {
           const theta = a0 + dir * ((2 * Math.PI * j) / loopCount);
           const p = center
             .clone()
             .addScaledVector(e1, Math.cos(theta) * rEff * scale)
-            .addScaledVector(e2, Math.sin(theta) * rEff * scale);
+            .addScaledVector(
+              e2,
+              Math.sin(theta) * rEff * scale * sleeveDepthScale,
+            );
           ring.push(pushVertex(p.x, p.y, p.z, j / loopCount, 1));
         }
         return ring;
       };
-      const band1 = at(cuffLen * 0.15, cuffScale);
-      stitch(previous, band1);
+      // Keep the cuff on the sleeve's curved centreline and remove the small
+      // terminal folds before narrowing the rib. This prevents both the
+      // lateral offset and the abrupt radius step at the join.
+      const cuffJoin = at(cuffLen * 0.04, sleeveEndScale);
+      stitch(previous, cuffJoin);
+      const band1 = at(cuffLen * 0.22, cuffScale);
+      stitch(cuffJoin, band1);
       const band2 = at(cuffLen, cuffScale);
       stitch(band1, band2);
       if (profile.foldedRibCuff) {
-        stitch(band2, at(cuffLen + 0.25 * SCALE * trimScale, cuffScale * 0.9));
+        stitch(
+          band2,
+          at(cuffLen + 0.25 * SCALE * trimScale, cuffScale * 0.96),
+        );
       }
     }
   };
@@ -1105,11 +1339,23 @@ function buildTopGeometry(
 
     // Root loop: front edge bottom->top, then back edge top->bottom.
     const loop: THREE.Vector3[] = [];
+    const seamTangents: THREE.Vector3[] = [];
+    const innerCol = sideCol - side;
+    const addSeamPoint = (base: number, row: number) => {
+      const boundary = readVertex(base + row * panelStride + sideCol);
+      const interior = readVertex(base + row * panelStride + innerCol);
+      const tangent = boundary.clone().sub(interior);
+      if (tangent.lengthSq() < 1e-10) {
+        tangent.set(side * SCALE, 0, 0);
+      }
+      loop.push(boundary);
+      seamTangents.push(tangent);
+    };
     for (const r of edgeRows) {
-      loop.push(readVertex(frontBase + r * panelStride + sideCol));
+      addSeamPoint(frontBase, r);
     }
     for (let i = edgeRows.length - 1; i >= 0; i -= 1) {
-      loop.push(readVertex(backBase + edgeRows[i] * panelStride + sideCol));
+      addSeamPoint(backBase, edgeRows[i]);
     }
 
     const loopCount = loop.length;
@@ -1154,7 +1400,7 @@ function buildTopGeometry(
     // is torso + sleeve, joined at a seam, rather than torso + armhole +
     // sleeve with a hinge in the middle.
     if (sleeveProfile.hangFromShoulder) {
-      buildHangingSleeve(side, loop, centroid, sleeveProfile);
+      buildHangingSleeve(side, loop, centroid, sleeveProfile, seamTangents);
       return;
     }
 
@@ -1995,6 +2241,7 @@ function buildTopGeometry(
     geometry.addGroup(cursor, indices.length - cursor, 2);
   }
   geometry.computeVertexNormals();
+  geometry.userData.sleeveNormalRows = sleeveNormalRows;
   geometry.computeBoundingBox();
   geometry.computeBoundingSphere();
   return geometry;
