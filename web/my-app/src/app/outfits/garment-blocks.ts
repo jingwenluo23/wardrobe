@@ -65,6 +65,9 @@ type SleeveProfile = {
   /** Rib cuff folded in half lengthwise, so the band is doubled and its lower
    *  edge is a fold rather than a raw opening (steps 5-6). */
   foldedRibCuff: boolean;
+  /** Build the sleeve as a tube hanging from the SHOULDER rather than one
+   *  extruded out of the armhole and then turned down. See buildSleeve. */
+  hangFromShoulder: boolean;
 };
 
 const SLEEVE_PROFILES: Record<SleeveKind, SleeveProfile> = {
@@ -79,6 +82,9 @@ const SLEEVE_PROFILES: Record<SleeveKind, SleeveProfile> = {
     capEase: 0,
     wristTaper: 1,
     foldedRibCuff: false,
+    // A cap sleeve genuinely does project out of the armhole — that is its
+    // whole shape — so it keeps the extruded construction.
+    hangFromShoulder: false,
   },
   // Long sleeve: leaves the armhole shallow, then falls past vertical so the
   // cuff comes to rest beside the body. Long enough to hang under its own
@@ -100,6 +106,7 @@ const SLEEVE_PROFILES: Record<SleeveKind, SleeveProfile> = {
     // what reads as the sleeve flaring out.
     wristTaper: 0.74,
     foldedRibCuff: true,
+    hangFromShoulder: true,
   },
 };
 
@@ -218,11 +225,20 @@ function buildTopGeometry(
   // driving into the torso, so the cuff can sit close to the body. The padding
   // works by approaching halfW, never exceeding it: past halfW the widthAt()
   // term inverts and the panel bulges outward instead of curving in.
-  const shoulderBase = Math.max(
-    neckHalf + halfW * 0.08,
-    halfW * (params.shoulderWidthFactor ?? 0.8),
-  );
-  const dropShoulder = features.sleeves === false ? 0 : 0.5;
+  //
+  // A long-sleeved top is now built as a tank plus separate hanging sleeves, so
+  // its torso carries the shoulder at full width and the side seam runs
+  // straight up — the vest silhouette. Drawing the shoulder in would leave the
+  // body short of the sleeve hanging beside it and open a notch at the join.
+  const tankTorso =
+    features.sleeves !== false && params.sleeveLength >= LONG_SLEEVE_CM;
+  const shoulderBase = tankTorso
+    ? halfW * 0.99
+    : Math.max(
+        neckHalf + halfW * 0.08,
+        halfW * (params.shoulderWidthFactor ?? 0.8),
+      );
+  const dropShoulder = features.sleeves === false || tankTorso ? 0 : 0.5;
   const shoulderX = clamp(
     shoulderBase + (halfW * 0.97 - shoulderBase) * dropShoulder,
     neckHalf + halfW * 0.06,
@@ -874,6 +890,154 @@ function buildTopGeometry(
   // of the armhole with no gap or overlap.
   const sleeveLen = params.sleeveLength * SCALE;
 
+  /**
+   * A sleeve that HANGS from the shoulder: a straight tube whose rings are
+   * perpendicular to the hanging direction throughout, with the torso's
+   * armhole edge stitched onto its first ring as the shoulder seam.
+   *
+   * Because the tube's axis never changes direction there is no bend anywhere
+   * to crease, and because each ring is square to that axis from the start the
+   * cross-section cannot collapse the way an extrusion out of the sideways
+   * armhole plane does.
+   */
+  const buildHangingSleeve = (
+    side: 1 | -1,
+    loop: THREE.Vector3[],
+    centroid: THREE.Vector3,
+    profile: SleeveProfile,
+  ) => {
+    const loopCount = loop.length;
+    // One constant hanging direction: down, angled slightly outward.
+    const hang = slopeRad + (profile.endOffsetDeg * Math.PI) / 180;
+    const axis = new THREE.Vector3(
+      side * Math.cos(hang),
+      -Math.sin(hang),
+      0,
+    ).normalize();
+    const e2 = new THREE.Vector3(0, 0, 1);
+    const e1 = new THREE.Vector3().crossVectors(e2, axis).normalize();
+
+    // Size the tube to the armhole's area, so it covers the opening without
+    // the ballooning a mean-radius circle would give on a tall narrow oval.
+    const offsets = loop.map((p) => p.clone().sub(centroid));
+    let twice = 0;
+    for (let j = 0; j < loopCount; j += 1) {
+      const a = offsets[j];
+      const b = offsets[(j + 1) % loopCount];
+      twice += a.dot(e1) * b.dot(e2) - b.dot(e1) * a.dot(e2);
+    }
+    const rEff = Math.sqrt(Math.abs(twice) / 2 / Math.PI);
+    if (!(rEff > 1e-6)) {
+      return;
+    }
+
+    // Place the tube beside the torso, not through it.
+    //
+    // Set the lateral position explicitly rather than offsetting along e1: at a
+    // near-vertical hang the axis has almost no sideways component, so e1
+    // collapses to +x for BOTH sleeves and offsetting along it pushes the left
+    // sleeve inward, burying it in the body. Seat the tube's inner wall on the
+    // torso's side seam instead, which is where a sleeve hangs when the arm is
+    // down, and lift it slightly so it starts up at the shoulder.
+    const start = centroid.clone();
+    start.x = side * (halfW + rEff * 0.42);
+    start.y = centroid.y + rEff * 0.2;
+    const first = offsets[0];
+    const a0 = Math.atan2(first.dot(e2), first.dot(e1));
+    let signed = 0;
+    for (let j = 0; j < loopCount; j += 1) {
+      const a = offsets[j];
+      const b = offsets[(j + 1) % loopCount];
+      signed += a.dot(e1) * b.dot(e2) - b.dot(e1) * a.dot(e2);
+    }
+    const dir = signed >= 0 ? 1 : -1;
+
+    const taper = clamp(features.sleeveTaper, 0.35, 1);
+    const bell = (t: number, at: number, w: number) =>
+      Math.exp(-Math.pow((t - at) / w, 2));
+    const girth = (t: number) => 1 + (profile.wristTaper - 1) * clamp(t, 0, 1);
+    const foldAt = (t: number, theta: number) => {
+      const slack = 0.35 + 0.65 * smoothstep(clamp((t - 0.2) / 0.5, 0, 1));
+      const drape = profile.drape * slack * Math.sin(3 * theta + 1.7 * t);
+      const tension =
+        profile.tension * slack * Math.sin(5 * theta - 3.1 * t + 0.9);
+      const stack = profile.stack * bell(t, 0.9, 0.09) * Math.sin(4 * theta);
+      return drape + tension + stack;
+    };
+
+    const ringAt = (t: number, scale: number, withFolds: boolean) => {
+      const center = start.clone().addScaledVector(axis, sleeveLen * t);
+      const ring: number[] = [];
+      for (let j = 0; j < loopCount; j += 1) {
+        const theta = a0 + dir * ((2 * Math.PI * j) / loopCount);
+        const r =
+          rEff * scale * (withFolds ? 1 + foldAt(t, theta) : 1);
+        const p = center
+          .clone()
+          .addScaledVector(e1, Math.cos(theta) * r)
+          .addScaledVector(e2, Math.sin(theta) * r);
+        ring.push(pushVertex(p.x, p.y, p.z, j / loopCount, t));
+      }
+      return ring;
+    };
+
+    const stitch = (ringA: number[], ringB: number[]) => {
+      for (let j = 0; j < loopCount; j += 1) {
+        const jn = (j + 1) % loopCount;
+        const a = ringA[j];
+        const b = ringA[jn];
+        const d = ringB[j];
+        const e = ringB[jn];
+        if (side > 0) {
+          indices.push(a, d, b, b, d, e);
+        } else {
+          indices.push(a, b, d, b, e, d);
+        }
+      }
+    };
+
+    // Shoulder seam: weld the torso's armhole edge onto the tube's first ring.
+    const seam = loop.map((p, j) => pushVertex(p.x, p.y, p.z, j / loopCount, 0));
+    let previous = ringAt(0, 1, false);
+    stitch(seam, previous);
+
+    for (let i = 1; i <= SLEEVE_RINGS; i += 1) {
+      const t = i / SLEEVE_RINGS;
+      const ring = ringAt(t, girth(t), true);
+      stitch(previous, ring);
+      previous = ring;
+    }
+
+    // Rib cuff: cut narrower than the sleeve so the tube gathers into it, and
+    // rolled around its lower edge because the band is folded double.
+    if (features.cuff === "ribbed") {
+      const cuffLen = 3 * SCALE * trimScale;
+      const cuffScale = (0.62 + 0.28 * taper) * girth(1);
+      const at = (d: number, scale: number) => {
+        const center = start
+          .clone()
+          .addScaledVector(axis, sleeveLen + d);
+        const ring: number[] = [];
+        for (let j = 0; j < loopCount; j += 1) {
+          const theta = a0 + dir * ((2 * Math.PI * j) / loopCount);
+          const p = center
+            .clone()
+            .addScaledVector(e1, Math.cos(theta) * rEff * scale)
+            .addScaledVector(e2, Math.sin(theta) * rEff * scale);
+          ring.push(pushVertex(p.x, p.y, p.z, j / loopCount, 1));
+        }
+        return ring;
+      };
+      const band1 = at(cuffLen * 0.15, cuffScale);
+      stitch(previous, band1);
+      const band2 = at(cuffLen, cuffScale);
+      stitch(band1, band2);
+      if (profile.foldedRibCuff) {
+        stitch(band2, at(cuffLen + 0.25 * SCALE * trimScale, cuffScale * 0.9));
+      }
+    }
+  };
+
   const buildSleeve = (side: 1 | -1) => {
     const sideCol = side > 0 ? COLS : 0;
 
@@ -921,6 +1085,30 @@ function buildTopGeometry(
     const sleeveKind: SleeveKind =
       params.sleeveLength >= LONG_SLEEVE_CM ? "long" : "cap";
     const sleeveProfile = SLEEVE_PROFILES[sleeveKind];
+
+    // --- Torso + sleeve construction (long sleeves) -------------------------
+    //
+    // The torso is built as a tank: body, shoulders, and an armhole opening,
+    // nothing more. The sleeve is then a separate tube hung from that opening.
+    //
+    // The older construction extruded the sleeve OUT of the armhole — the tube
+    // left sideways, following the armhole's own plane, and had to turn roughly
+    // ninety degrees to get pointing down. That turn is the source of most of
+    // the sleeve trouble: a crease wherever the bend concentrated, and a
+    // collapsed tube whenever the bend was moved up to the shoulder to avoid
+    // creasing lower down.
+    //
+    // Here the tube never turns. Its cross-section is built perpendicular to
+    // the hanging direction from the very first ring, matched to the armhole's
+    // area so it is the same thickness as the opening it covers, and the
+    // armhole edge is stitched onto it as the shoulder seam. So the geometry
+    // is torso + sleeve, joined at a seam, rather than torso + armhole +
+    // sleeve with a hinge in the middle.
+    if (sleeveProfile.hangFromShoulder) {
+      buildHangingSleeve(side, loop, centroid, sleeveProfile);
+      return;
+    }
+
     const droopStart =
       slopeRad + (sleeveProfile.rootOffsetDeg * Math.PI) / 180;
     const droopEnd = slopeRad + (sleeveProfile.endOffsetDeg * Math.PI) / 180;
