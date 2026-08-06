@@ -956,9 +956,21 @@ function buildTopGeometry(
     // sleeve inward, burying it in the body. Seat the tube's inner wall on the
     // torso's side seam instead, which is where a sleeve hangs when the arm is
     // down, and lift it slightly so it starts up at the shoulder.
+    // Start at the SHOULDER, not part-way down the armhole.
+    //
+    // Taking the armhole's centroid put the tube's first ring halfway down the
+    // opening, so the sleeve began below the shoulder line and read as a slab
+    // hung off the side of the body with the shoulder missing above it. The
+    // sleeve runs from the shoulder seam all the way to the cuff, so begin it
+    // at the TOP of the armhole — the shoulder end — and let the seam close
+    // the opening beneath it.
+    let shoulderTopY = -Infinity;
+    for (const p of loop) {
+      shoulderTopY = Math.max(shoulderTopY, p.y);
+    }
     const start = centroid.clone();
     start.x = side * (halfW + rEff * 0.42);
-    start.y = centroid.y + rEff * 0.2;
+    start.y = shoulderTopY;
     const first = offsets[0];
     const a0 = Math.atan2(first.dot(e2), first.dot(e1));
     let signed = 0;
