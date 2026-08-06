@@ -481,13 +481,69 @@ export function flattenTile(
       blocks.reduce((a, b) => a + (b - mean) ** 2, 0) / blocks.length;
     coarseCov = Math.sqrt(variance) / Math.max(1, mean);
   }
+  // Directional weave / stripe structure.
+  //
+  // Woven and striped cloth varies strongly along ONE axis and stays uniform
+  // along the other. Averaging each column and each row cancels sensor noise
+  // and smooth shading while leaving that signature intact, which catches
+  // fabrics every other test here misses: a pale linen stripe has too little
+  // colour range for the chroma test, too little contrast for the residual and
+  // energy tests, and too fine a repeat for the coarse-block test — yet
+  // flattening erases it completely and the garment renders blank.
+  const colMean = new Float64Array(size);
+  const rowMean = new Float64Array(size);
+  for (let y = 0; y < size; y += 1) {
+    for (let x = 0; x < size; x += 1) {
+      const i = (y * size + x) * 3;
+      const lum = (tile[i] + tile[i + 1] + tile[i + 2]) / 3;
+      colMean[x] += lum;
+      rowMean[y] += lum;
+    }
+  }
+  const structureOf = (arr: Float64Array) => {
+    for (let i = 0; i < size; i += 1) {
+      arr[i] /= size;
+    }
+    // High-pass against a wide local average, so shading across the garment
+    // does not read as pattern.
+    const win = 12;
+    const hp = new Float64Array(size);
+    for (let i = 0; i < size; i += 1) {
+      let acc = 0;
+      let n = 0;
+      for (let k = -win; k <= win; k += 1) {
+        const j = i + k;
+        if (j >= 0 && j < size) {
+          acc += arr[j];
+          n += 1;
+        }
+      }
+      hp[i] = arr[i] - acc / n;
+    }
+    let sum = 0;
+    let crossings = 0;
+    for (let i = 0; i < size; i += 1) {
+      sum += hp[i] * hp[i];
+      if (i > 0 && hp[i] > 0 !== hp[i - 1] > 0) {
+        crossings += 1;
+      }
+    }
+    // Weave and stripe REPEAT, so their profile crosses zero many times. A
+    // single printed graphic makes one broad bump — strong but not periodic —
+    // and should still be flattened, since flattening keeps print pixels and
+    // only cleans the fabric around them.
+    return crossings >= 8 ? Math.sqrt(sum / size) : 0;
+  };
+  const weave = Math.max(structureOf(colMean), structureOf(rowMean));
+
   const shouldApply =
     apply ??
     (printCount / n <= 0.3 &&
       rmsResidual <= 10 &&
       hfEnergy <= 9 &&
       chromaSpread < 3 &&
-      coarseCov < 0.28);
+      coarseCov < 0.28 &&
+      weave < 1.6);
   if (shouldApply) {
     const R = Math.round(br);
     const G = Math.round(bg);
