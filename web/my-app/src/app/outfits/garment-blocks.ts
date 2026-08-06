@@ -68,6 +68,12 @@ type SleeveProfile = {
   /** Build the sleeve as a tube hanging from the SHOULDER rather than one
    *  extruded out of the armhole and then turned down. See buildSleeve. */
   hangFromShoulder: boolean;
+  /** Sleeve radius at the bicep, as a fraction of the body's half width.
+   *  Sizing the tube from the armhole's area instead gave a sleeve about a
+   *  fifth of the thickness a real one has, because the armhole opening is a
+   *  narrow slit between the front and back panels rather than a full
+   *  cross-section of the arm. */
+  bicepRadiusFactor: number;
 };
 
 const SLEEVE_PROFILES: Record<SleeveKind, SleeveProfile> = {
@@ -85,6 +91,7 @@ const SLEEVE_PROFILES: Record<SleeveKind, SleeveProfile> = {
     // A cap sleeve genuinely does project out of the armhole — that is its
     // whole shape — so it keeps the extruded construction.
     hangFromShoulder: false,
+    bicepRadiusFactor: 0.3,
   },
   // Long sleeve: leaves the armhole shallow, then falls past vertical so the
   // cuff comes to rest beside the body. Long enough to hang under its own
@@ -107,6 +114,9 @@ const SLEEVE_PROFILES: Record<SleeveKind, SleeveProfile> = {
     wristTaper: 0.74,
     foldedRibCuff: true,
     hangFromShoulder: true,
+    // ~0.6 x half width across, so the sleeve reads about 0.3 of the body
+    // width — where a relaxed hoodie's bicep sits.
+    bicepRadiusFactor: 0.3,
   },
 };
 
@@ -926,7 +936,14 @@ function buildTopGeometry(
       const b = offsets[(j + 1) % loopCount];
       twice += a.dot(e1) * b.dot(e2) - b.dot(e1) * a.dot(e2);
     }
-    const rEff = Math.sqrt(Math.abs(twice) / 2 / Math.PI);
+    // Size the tube from the arm, not from the armhole opening. The opening is
+    // a narrow slit between the front and back panels, so its area yields a
+    // sleeve roughly a fifth of a real one's thickness; measured against the
+    // render, sleeve-to-torso width came out at 0.05 where a hoodie sits near
+    // 0.3. The armhole area is kept only as a floor, so a very roomy armhole
+    // still gets a sleeve wide enough to cover it.
+    const areaRadius = Math.sqrt(Math.abs(twice) / 2 / Math.PI);
+    const rEff = Math.max(areaRadius, halfW * profile.bicepRadiusFactor);
     if (!(rEff > 1e-6)) {
       return;
     }
