@@ -97,9 +97,10 @@ const SLEEVE_PROFILES: Record<SleeveKind, SleeveProfile> = {
   // cuff comes to rest beside the body. Long enough to hang under its own
   // weight, and it stacks where the cuff band stops it.
   long: {
-    rootOffsetDeg: 18,
-    // Vertical at the cuff. Carrying it past vertical swings the wrist back
-    // toward the body, which bows the sleeve instead of letting it hang.
+    rootOffsetDeg: 8,
+    // Root is shallow because the first part of a raglan sleeve IS the
+    // shoulder — it travels outward across the top of the body before the arm
+    // starts. It then falls to vertical at the cuff.
     endOffsetDeg: 74,
     // Shallow: the reference sleeve is a smooth, clean cone. Deep folds make
     // the outline wobble, which reads as the sleeve flaring in and out.
@@ -113,7 +114,7 @@ const SLEEVE_PROFILES: Record<SleeveKind, SleeveProfile> = {
     // what reads as the sleeve flaring out.
     wristTaper: 0.74,
     foldedRibCuff: true,
-    hangFromShoulder: true,
+    hangFromShoulder: false,
     // ~0.6 x half width across, so the sleeve reads about 0.3 of the body
     // width — where a relaxed hoodie's bicep sits.
     bicepRadiusFactor: 0.3,
@@ -236,24 +237,32 @@ function buildTopGeometry(
   // works by approaching halfW, never exceeding it: past halfW the widthAt()
   // term inverts and the panel bulges outward instead of curving in.
   //
-  // A long-sleeved top is now built as a tank plus separate hanging sleeves, so
-  // its torso carries the shoulder at full width and the side seam runs
-  // straight up — the vest silhouette. Drawing the shoulder in would leave the
-  // body short of the sleeve hanging beside it and open a notch at the join.
-  const tankTorso =
+  // RAGLAN for long sleeves: the shoulder belongs to the SLEEVE, not the body.
+  //
+  // While the torso carries a shoulder cap, a sleeve can only be attached to
+  // the side of it, and the join always reads as two parts meeting — the notch
+  // at the top of the arm that no amount of positioning removed. In a raglan
+  // the body ends at a diagonal seam running from the neckline down to the
+  // underarm and the sleeve piece carries the whole shoulder, so the outline
+  // sweeps unbroken from the neck, over the shoulder, down to the cuff.
+  //
+  // Narrowing the panel to a point near the neck turns its top edge into
+  // exactly that seam, and the sleeve lofted from that edge inherits the
+  // shoulder rather than having one bolted on.
+  const raglan =
     features.sleeves !== false && params.sleeveLength >= LONG_SLEEVE_CM;
-  const shoulderBase = tankTorso
-    ? halfW * 0.99
-    : Math.max(
-        neckHalf + halfW * 0.08,
-        halfW * (params.shoulderWidthFactor ?? 0.8),
-      );
-  const dropShoulder = features.sleeves === false || tankTorso ? 0 : 0.5;
-  const shoulderX = clamp(
-    shoulderBase + (halfW * 0.97 - shoulderBase) * dropShoulder,
-    neckHalf + halfW * 0.06,
-    halfW * 0.97,
+  const shoulderBase = Math.max(
+    neckHalf + halfW * 0.08,
+    halfW * (params.shoulderWidthFactor ?? 0.8),
   );
+  const dropShoulder = features.sleeves === false || raglan ? 0 : 0.5;
+  const shoulderX = raglan
+    ? clamp(Math.max(neckHalf * 1.2, halfW * 0.38), neckHalf * 1.1, halfW * 0.5)
+    : clamp(
+        shoulderBase + (halfW * 0.97 - shoulderBase) * dropShoulder,
+        neckHalf + halfW * 0.06,
+        halfW * 0.97,
+      );
   const shoulderPtY =
     neckShoulderY - Math.tan(slopeRad) * (shoulderX - neckHalf);
   // Underarm point: bottom of the armhole curve, on the side seam.
