@@ -100,7 +100,22 @@ export function fitGarmentToShape(
   }
 
   const bodyWidth = templateParams.bodyWidth;
-  const targetLength = bodyWidth * clamp(shape.bodyAspectRatio, 0.75, 2.25);
+  // A photo can say a top is cropped or longline. It cannot say it is a dress.
+  //
+  // bodyAspectRatio comes from a silhouette, so it carries every distortion a
+  // phone photo has: a garment shot from above foreshortens, one on a hanger
+  // stretches, a hood or collar adds height the mesh's bodyLength does not
+  // include. Multiplying bodyWidth by an unbounded ratio let a 70cm tee fit
+  // out to 124cm, and because sleeveLength is almost always kept from the
+  // template (see sleevesExtendSideways below), the torso ran away from the
+  // sleeves instead of growing with them. Keep the fitted length in a band
+  // around the template, which already encodes the right length for the
+  // garment type the user picked.
+  const targetLength = clamp(
+    bodyWidth * clamp(shape.bodyAspectRatio, 0.75, 2.25),
+    templateParams.bodyLength * 0.86,
+    templateParams.bodyLength * 1.18,
+  );
   const chest = Math.max(0.55, shape.chestRatio);
   const targetShoulder = clamp(
     (shape.shoulderRatio / chest) * 0.8,

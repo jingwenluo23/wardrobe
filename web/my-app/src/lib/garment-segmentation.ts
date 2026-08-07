@@ -169,7 +169,59 @@ function estimateShape(
   torso: { minX: number; maxX: number; minY: number; maxY: number },
 ): GarmentShapeEstimate {
   const bodyW = Math.max(1, torso.maxX - torso.minX + 1);
-  const bodyH = Math.max(1, torso.maxY - torso.minY + 1);
+
+  // Body length starts at the SHOULDER LINE, not at the top of the mask.
+  //
+  // bodyAspectRatio drives the mesh's bodyLength, and bodyLength is measured
+  // from the high point of the shoulder down to the hem. The mask, though,
+  // also contains everything the garment carries ABOVE that line: a hood, a
+  // collar stand, a turtleneck, the raised neck rib of a sweatshirt. Counting
+  // those as body length inflates the ratio by a quarter to a third on exactly
+  // the garments that have them, and since sleeveLength is left at the
+  // template's value the model comes back with a torso far longer than its
+  // sleeves.
+  //
+  // The shoulder line is where the silhouette first opens out to the torso's
+  // full width: above it sits the neck/hood, below it the body. Find the first
+  // row that reaches most of the torso width, and measure from there.
+  const rowSpan = (y: number) => {
+    let lo = width;
+    let hi = -1;
+    for (let x = torso.minX; x <= torso.maxX; x += 1) {
+      if (mask[y * width + x]) {
+        lo = Math.min(lo, x);
+        hi = Math.max(hi, x);
+      }
+    }
+    return hi >= lo ? hi - lo + 1 : 0;
+  };
+  const rawH = Math.max(1, torso.maxY - torso.minY + 1);
+  // Reference width from the body itself (lower 60%), so a spread hood or a
+  // wide collar cannot set the bar it is supposed to fail.
+  const bodySamples: number[] = [];
+  for (
+    let y = torso.minY + Math.round(rawH * 0.4);
+    y <= torso.maxY;
+    y += 1
+  ) {
+    const span = rowSpan(y);
+    if (span > 0) bodySamples.push(span);
+  }
+  bodySamples.sort((a, b) => a - b);
+  const chestW = bodySamples[Math.floor(bodySamples.length / 2)] ?? bodyW;
+  // Never trim more than a third of the silhouette: on a garment with no neck
+  // detail at all the first row already qualifies and this is a no-op, and a
+  // mask odd enough to push the line lower than that is not to be trusted.
+  const lowestShoulder = torso.minY + Math.round(rawH * 0.33);
+  let bodyTop = torso.minY;
+  for (let y = torso.minY; y <= lowestShoulder; y += 1) {
+    if (rowSpan(y) >= chestW * 0.85) {
+      bodyTop = y;
+      break;
+    }
+  }
+  const bodyH = Math.max(1, torso.maxY - bodyTop + 1);
+
   let allMinX = width;
   let allMaxX = 0;
   let area = 0;
@@ -182,11 +234,11 @@ function estimateShape(
     }
   }
   const rowWidth = (fraction: number) => {
-    const center = torso.minY + fraction * (bodyH - 1);
+    const center = bodyTop + fraction * (bodyH - 1);
     const radius = Math.max(1, Math.round(bodyH * 0.025));
     const samples: number[] = [];
     for (
-      let y = Math.max(torso.minY, Math.round(center) - radius);
+      let y = Math.max(bodyTop, Math.round(center) - radius);
       y <= Math.min(torso.maxY, Math.round(center) + radius);
       y += 1
     ) {
@@ -206,9 +258,9 @@ function estimateShape(
 
   // The neck is the central background run above the first solid chest row.
   let maxNeckWidth = 0;
-  let neckBottom = torso.minY;
+  let neckBottom = bodyTop;
   const centerX = Math.round((torso.minX + torso.maxX) / 2);
-  for (let y = torso.minY; y <= torso.minY + bodyH * 0.3; y += 1) {
+  for (let y = bodyTop; y <= bodyTop + bodyH * 0.3; y += 1) {
     if (mask[y * width + centerX]) continue;
     let lo = centerX;
     let hi = centerX;
@@ -231,7 +283,7 @@ function estimateShape(
     waistRatio: rowWidth(0.62),
     hemRatio: rowWidth(0.94),
     neckWidthRatio: maxNeckWidth / bodyW,
-    neckDepthRatio: Math.max(0, neckBottom - torso.minY) / bodyH,
+    neckDepthRatio: Math.max(0, neckBottom - bodyTop) / bodyH,
     confidence,
   };
 }
