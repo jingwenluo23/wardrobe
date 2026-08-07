@@ -1104,6 +1104,7 @@ function buildTopGeometry(
     const a0 =
       topTheta - dir * ((2 * Math.PI * topPhaseIndex) / loopCount);
 
+    const taper = clamp(features.sleeveTaper, 0.35, 1);
     // A hanging sleeve is oval rather than a round cylinder in side view.
     // Preserve its front-view arm width while reducing only front-to-back
     // depth to match the flatter shoulder and sleeve profile of real fleece.
