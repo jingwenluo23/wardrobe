@@ -520,7 +520,14 @@ function buildTopGeometry(
         // Texture V follows absolute height, not the per-column row index,
         // so prints stay straight instead of bending along the neckline.
         const vTex = (y - hemY) / (neckShoulderY - hemY);
-        pushVertex(x, y, z, front ? u : 1 - u, vTex);
+        // A woven stripe follows the fabric grain, not the width of each mesh
+        // row. Row-normalised U stretched the full photograph across the
+        // narrowing upper panel, fanning vertical stripes sideways over the
+        // shoulder. Project U from the vertex's real X position instead.
+        const planarHalf = halfW * (params.hemWidthFactor ?? 1.03);
+        const planarU = clamp(0.5 + x / (2 * planarHalf), 0, 1);
+        const uTex = features.fabric === "woven" ? planarU : u;
+        pushVertex(x, y, z, front ? uTex : 1 - uTex, vTex);
       }
     }
     for (let r = 0; r < ROWS; r += 1) {
@@ -1012,6 +1019,20 @@ function buildTopGeometry(
     seamTangents: THREE.Vector3[],
   ) => {
     const loopCount = loop.length;
+    // Woven stripes are cut on the garment grain, so they stay vertical in
+    // the front view even while the shoulder surface turns from the neckline
+    // into the hanging sleeve. Ring-local UVs made the stripes follow that
+    // turn and fan outward like a raglan print. Project the repeating fabric
+    // swatch in world X/Y instead; one tile covers roughly 13.5 cm, matching
+    // the stripe density in the extracted front panel.
+    const wovenTile = 13.5 * SCALE;
+    const sleeveUv = (p: THREE.Vector3, u: number, v: number) =>
+      features.fabric === "woven"
+        ? ([
+            0.5 + p.x / wovenTile,
+            clamp(0.5 + (0.7 * p.y) / length, 0.05, 0.95),
+          ] as const)
+        : ([u, v] as const);
     // One constant hanging direction: down, angled slightly outward.
     const hang = slopeRad + (profile.endOffsetDeg * Math.PI) / 180;
     const axis = new THREE.Vector3(
@@ -1178,7 +1199,8 @@ function buildTopGeometry(
       const ring: number[] = [];
       for (let j = 0; j < loopCount; j += 1) {
         const p = sleevePointAt(t, scale, withFolds, j);
-        ring.push(pushVertex(p.x, p.y, p.z, j / loopCount, t));
+        const [u, v] = sleeveUv(p, j / loopCount, t);
+        ring.push(pushVertex(p.x, p.y, p.z, u, v));
       }
       return ring;
     };
@@ -1202,7 +1224,10 @@ function buildTopGeometry(
     // then enter the hanging tube with the same tangent as its axis. A direct
     // one-strip stitch made the raglan panel meet the round tube as a sharp
     // folded triangle even though their normals were averaged.
-    const seam = loop.map((p, j) => pushVertex(p.x, p.y, p.z, j / loopCount, 0));
+    const seam = loop.map((p, j) => {
+      const [u, v] = sleeveUv(p, j / loopCount, 0);
+      return pushVertex(p.x, p.y, p.z, u, v);
+    });
     const normalRows: number[][] = [seam];
     // First continue the torso's final grid step exactly. This strip is
     // coplanar with the panel at the boundary, so the attachment cannot fold
@@ -1215,9 +1240,10 @@ function buildTopGeometry(
       leadPoint.z = p.z;
       return leadPoint;
     });
-    const lead = leadPositions.map((p, j) =>
-      pushVertex(p.x, p.y, p.z, j / loopCount, 0.005),
-    );
+    const lead = leadPositions.map((p, j) => {
+      const [u, v] = sleeveUv(p, j / loopCount, 0.005);
+      return pushVertex(p.x, p.y, p.z, u, v);
+    });
     stitch(seam, lead);
     normalRows.push(lead);
     let previous = lead;
@@ -1263,7 +1289,8 @@ function buildTopGeometry(
         // in side view. X/Y retain the tangent-matched Hermite shoulder curve.
         const depthU = clamp(u / 0.3, 0, 1);
         p.z = p0.z + (p1.z - p0.z) * smoothstep(depthU);
-        ring.push(pushVertex(p.x, p.y, p.z, j / loopCount, u * 0.08));
+        const [texU, texV] = sleeveUv(p, j / loopCount, u * 0.08);
+        ring.push(pushVertex(p.x, p.y, p.z, texU, texV));
       }
       stitch(previous, ring);
       previous = ring;

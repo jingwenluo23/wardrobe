@@ -34,7 +34,7 @@ function loadTexture(url?: string) {
   return loaded;
 }
 
-type FabricKind = "jersey" | "fleece" | "knit";
+type FabricKind = "jersey" | "woven" | "fleece" | "knit";
 type FabricSurface = "panel" | "trim" | "sleeve";
 
 function fabricMaterial(
@@ -54,6 +54,8 @@ function fabricMaterial(
       ? { roughness: 0.96, sheen: 0.3, sheenRoughness: 0.96, specular: 0.16 }
       : kind === "knit"
         ? { roughness: 0.91, sheen: 0.26, sheenRoughness: 0.9, specular: 0.2 }
+        : kind === "woven"
+          ? { roughness: 0.92, sheen: 0.12, sheenRoughness: 0.94, specular: 0.17 }
         : { roughness: 0.84, sheen: 0.2, sheenRoughness: 0.82, specular: 0.24 };
   return new THREE.MeshPhysicalMaterial({
     // three.js multiplies the map by the material colour, so textured
@@ -120,6 +122,33 @@ function makeFabricBump(kind: FabricKind, surface: FabricSurface) {
       const radius = 0.7 + rand() * 1.8;
       g.fillRect(rand() * size, rand() * size, radius, radius);
     }
+  } else if (kind === "woven") {
+    // Fine warp/weft yarns with occasional deterministic linen slubs. The
+    // photographed pinstripes remain the visible pattern; this map only makes
+    // the pale surface react like woven fabric rather than knitted loops.
+    g.globalAlpha = 0.16;
+    g.strokeStyle = "#9a9a9a";
+    g.lineWidth = 1;
+    for (let x = 0; x < size; x += 4) {
+      g.beginPath();
+      g.moveTo(x, 0);
+      g.lineTo(x, size);
+      g.stroke();
+    }
+    g.globalAlpha = 0.11;
+    for (let y = 0; y < size; y += 5) {
+      g.beginPath();
+      g.moveTo(0, y);
+      g.lineTo(size, y);
+      g.stroke();
+    }
+    g.globalAlpha = 0.12;
+    g.fillStyle = "#666666";
+    for (let y = 19; y < size; y += 47) {
+      const offset = (y * 17) % 61;
+      g.fillRect(offset, y, size * 0.34, 1);
+    }
+    g.globalAlpha = 1;
   } else {
     // Fine single-jersey loops: crossed diagonal yarns with a faint vertical
     // wale. Kept low-contrast so logos and photographed prints remain clean.
@@ -290,8 +319,14 @@ function TeeModel({ mesh }: { mesh: DraftMesh }) {
     // single-colour patch, which is what rendered printed sleeves as flat
     // brown next to a fully patterned body. Only the small trims (neckband,
     // cuffs, plackets) keep the plain swatch, where a solid colour is right.
+    // Woven checks/stripes must keep the fabric grain vertical across the
+    // shoulder. Their sleeve UVs use a repeating world-space projection, so
+    // pair them with the repeating fabric swatch instead of stretching the
+    // one-off torso photograph around the sleeve tube.
     const sleeveTexture =
-      loadTexture(mesh.sleeveTextureUrl) ?? frontTexture ?? trimTexture;
+      mesh.features?.fabric === "woven" && fabricTexture
+        ? fabricTexture
+        : loadTexture(mesh.sleeveTextureUrl) ?? frontTexture ?? trimTexture;
     const hoodTexture =
       loadTexture(mesh.hoodTextureUrl) ?? frontTexture ?? trimTexture;
     const fabricKind: FabricKind = mesh.features?.fabric ?? "jersey";
@@ -378,10 +413,22 @@ function TeeModel({ mesh }: { mesh: DraftMesh }) {
 export default function GarmentMeshViewer({
   mesh,
   className,
-  background = "#f1ece0",
+  background,
   autoRotate = false,
   height = 560,
 }: GarmentMeshViewerProps) {
+  const garmentColor = new THREE.Color(mesh.color);
+  const brightFabric =
+    garmentColor.r * 0.2126 +
+      garmentColor.g * 0.7152 +
+      garmentColor.b * 0.0722 >=
+    0.7;
+  // An ivory garment against the normal cream stage has almost no silhouette,
+  // and full studio exposure clips its low-contrast pinstripes. Darken the
+  // neutral stage and lights only for bright garments. An explicit background
+  // supplied by a caller still wins.
+  const stageBackground =
+    background ?? (brightFabric ? "#c9c6bd" : "#f1ece0");
   return (
     <div
       className={className}
@@ -399,25 +446,25 @@ export default function GarmentMeshViewer({
           // contrast. Neutral tone mapping keeps the fabric reading as it does
           // in the photograph.
           toneMapping: THREE.NeutralToneMapping,
-          toneMappingExposure: 1.0,
+          toneMappingExposure: brightFabric ? 0.9 : 1.0,
         }}
         onCreated={({ gl }) => {
           gl.shadowMap.type = THREE.PCFSoftShadowMap;
         }}
-        style={{ position: "absolute", inset: 0, background }}
+        style={{ position: "absolute", inset: 0, background: stageBackground }}
       >
-        <color attach="background" args={[background]} />
+        <color attach="background" args={[stageBackground]} />
         <Environment resolution={128}>
           <Lightformer
             form="rect"
-            intensity={2.8}
+            intensity={brightFabric ? 2.25 : 2.8}
             color="#fff9ef"
             position={[0, 4, 5]}
             scale={[5, 5, 1]}
           />
           <Lightformer
             form="rect"
-            intensity={1.8}
+            intensity={brightFabric ? 1.45 : 1.8}
             color="#dce8ff"
             position={[-5, 1, 1]}
             rotation={[0, Math.PI / 2, 0]}
@@ -425,7 +472,7 @@ export default function GarmentMeshViewer({
           />
           <Lightformer
             form="rect"
-            intensity={1.2}
+            intensity={brightFabric ? 1.0 : 1.2}
             color="#ffe8d2"
             position={[4, 0, -3]}
             rotation={[0, -Math.PI / 3, 0]}

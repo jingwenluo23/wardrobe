@@ -106,15 +106,13 @@ export function fitGarmentToShape(
   // phone photo has: a garment shot from above foreshortens, one on a hanger
   // stretches, a hood or collar adds height the mesh's bodyLength does not
   // include. Multiplying bodyWidth by an unbounded ratio let a 70cm tee fit
-  // out to 124cm, and because sleeveLength is almost always kept from the
-  // template (see sleevesExtendSideways below), the torso ran away from the
-  // sleeves instead of growing with them. Keep the fitted length in a band
+  // out to 124cm. Keep the fitted length in a band
   // around the template, which already encodes the right length for the
   // garment type the user picked.
   const targetLength = clamp(
     bodyWidth * clamp(shape.bodyAspectRatio, 0.75, 2.25),
-    templateParams.bodyLength * 0.86,
-    templateParams.bodyLength * 1.18,
+    templateParams.bodyLength * 0.9,
+    templateParams.bodyLength * 1.12,
   );
   const chest = Math.max(0.55, shape.chestRatio);
   const targetShoulder = clamp(
@@ -124,24 +122,38 @@ export function fitGarmentToShape(
   );
   const targetHem = clamp(shape.hemRatio / chest, 0.76, 1.38);
   const targetPinch = clamp(1 - shape.waistRatio / chest, 0, 0.2);
+  const fittedLength = mix(templateParams.bodyLength, targetLength, weight);
+  // The sleeve belongs to the same garment as the body.
+  //
+  // bodyLength and sleeveLength were fitted independently and could move in
+  // OPPOSITE directions. On the striped dress shirt that is exactly what
+  // happened: the body fitted out from 74cm to 82cm while the sideways sleeve
+  // estimate pulled the other way, 61cm down to about 52cm — a 26% swing
+  // between them — and the cuff finished roughly 18cm above the hem. A longer
+  // body is a larger garment, and a larger garment has longer sleeves, so the
+  // sleeve now follows the body by default.
+  const lengthScale = fittedLength / templateParams.bodyLength;
+  const scaledSleeve = templateParams.sleeveLength * lengthScale;
+  // spanRatio only measures how far the silhouette reaches SIDEWAYS, so it can
+  // only see a sleeve's LENGTH when the sleeves are held out. Straight out, the
+  // span is body + two sleeves and a shirt reads about 3.3; at 45 degrees it is
+  // still about 2.6. On a hanger with the sleeves hanging down it reads about
+  // 1.3, and the sideways reach there is a small fraction of the real sleeve.
+  // The old 1.45 threshold fired on those ordinary hanger and flat-lay shots
+  // and shortened the sleeve to that fraction.
+  const sleevesExtendSideways = shape.spanRatio > 2.1;
+  // Even when the sleeves are out, perspective and a soft mask make this a
+  // rough read, so keep it near the body's own proportion.
   const targetSleeve = clamp(
     (bodyWidth * Math.max(0, shape.spanRatio - 1)) / 2,
-    4,
-    bodyWidth * 0.85,
+    scaledSleeve * 0.8,
+    scaledSleeve * 1.2,
   );
-  // spanRatio only measures how far the silhouette reaches SIDEWAYS. A sleeve
-  // photographed on a body with the arms hanging down runs vertically and adds
-  // almost nothing to the span, so this estimate collapses a 56cm hoodie sleeve
-  // to a ~4cm stub. Only trust it when the sleeves clearly extend to the sides
-  // (arms out, or a flat lay); otherwise keep the template's length, which
-  // already encodes long vs short from the garment type the user chose.
-  const sleevesExtendSideways = shape.spanRatio > 1.45;
   const targetNeckWidth = clamp(
     bodyWidth * shape.neckWidthRatio,
     bodyWidth * 0.16,
     bodyWidth * 0.52,
   );
-  const fittedLength = mix(templateParams.bodyLength, targetLength, weight);
   const targetNeckDrop = clamp(
     fittedLength * shape.neckDepthRatio,
     1.5,
@@ -151,7 +163,7 @@ export function fitGarmentToShape(
   return {
     params: {
       ...templateParams,
-      bodyLength: mix(templateParams.bodyLength, targetLength, weight),
+      bodyLength: fittedLength,
       shoulderWidthFactor: mix(
         templateParams.shoulderWidthFactor ?? 0.8,
         targetShoulder,
@@ -163,9 +175,11 @@ export function fitGarmentToShape(
         weight,
       ),
       sleeveLength:
-        templateFeatures.sleeves === false || !sleevesExtendSideways
+        templateFeatures.sleeves === false
           ? templateParams.sleeveLength
-          : mix(templateParams.sleeveLength, targetSleeve, weight),
+          : sleevesExtendSideways
+            ? mix(scaledSleeve, targetSleeve, weight)
+            : scaledSleeve,
       neckWidthFront: mix(
         templateParams.neckWidthFront,
         targetNeckWidth,

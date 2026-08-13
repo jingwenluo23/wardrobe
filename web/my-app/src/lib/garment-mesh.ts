@@ -47,9 +47,9 @@ export type GarmentFeatures = {
    *  0.6 = full A-line flare). */
   skirtFlare?: number;
   /** Fabric weight/structure: scales trims and adds surface texture.
-   *  jersey = light knit (default), fleece = thick sweatshirt fabric,
-   *  knit = chunky visible-rib sweater knit. */
-  fabric?: "jersey" | "fleece" | "knit";
+   *  jersey = light knit (default), woven = shirts/linen/poplin,
+   *  fleece = thick sweatshirt fabric, knit = chunky sweater knit. */
+  fabric?: "jersey" | "woven" | "fleece" | "knit";
   /** Fitted silhouette: pinch the torso at the waist (0 = straight cut,
    *  ~0.12 = women's fitted shirt) so chest and hip read fuller. */
   waistPinch?: number;

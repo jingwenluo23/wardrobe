@@ -965,12 +965,23 @@ export function inpaintTile(
 export function pickFabricSwatch(
   tileRaw: Buffer,
   size: number,
+  preservePattern = false,
 ): { swatch: Buffer; swatchSize: number; mean: [number, number, number] } {
-  const block = 64;
+  // A repeating weave or stripe belongs on the collar, placket and cuffs too.
+  // The lowest-variance patch can land between pale pinstripes and turn those
+  // pieces into blank cloth. Preserve several real repeats from the left chest
+  // when the caller has identified an all-over pattern.
+  const block = preservePattern
+    ? Math.max(64, Math.min(size, Math.round(size * 0.19)))
+    : 64;
   const stride = 32;
   let best = { score: Infinity, x: 0, y: 0 };
-  for (let by = size * 0.1; by + block <= size * 0.9; by += stride) {
-    for (let bx = size * 0.1; bx + block <= size * 0.9; bx += stride) {
+  const xStart = preservePattern ? size * 0.24 : size * 0.1;
+  const xEnd = preservePattern ? size * 0.5 : size * 0.9;
+  const yStart = preservePattern ? size * 0.44 : size * 0.1;
+  const yEnd = preservePattern ? size * 0.8 : size * 0.9;
+  for (let by = yStart; by + block <= yEnd; by += preservePattern ? 24 : stride) {
+    for (let bx = xStart; bx + block <= xEnd; bx += preservePattern ? 16 : stride) {
       const sum = [0, 0, 0];
       const sumSq = [0, 0, 0];
       for (let y = 0; y < block; y += 4) {
@@ -1475,7 +1486,16 @@ const TILE = 512;
 // hand — studio lighting and JPEG both push colour. Pull the saturation back
 // and lift the tone a touch so the print looks paler and more natural on the
 // mesh, rather than a vivid version of itself.
-const FABRIC_TONE = { saturation: 0.78, brightness: 1.03 };
+function fabricTone(base: readonly number[]) {
+  const luminance =
+    base[0] * 0.2126 + base[1] * 0.7152 + base[2] * 0.0722;
+  // Lifting an already ivory/white texture clips its highlights and erases the
+  // few RGB levels that describe a pale linen weave. Leave darker garments on
+  // the existing gentle lift, but retain highlight headroom for bright cloth.
+  return luminance >= 218
+    ? { saturation: 0.9, brightness: 0.98 }
+    : { saturation: 0.78, brightness: 1.03 };
+}
 
 /**
  * Chromaticity histogram of the masked pixels in a column range.
@@ -1768,7 +1788,12 @@ export async function segmentGarment(
 
     // Plain fabric swatch for the sleeves/collar; the base colour IS the
     // fabric colour now, so trims match the panels exactly.
-    const { swatch, swatchSize, mean } = pickFabricSwatch(tileRaw, TILE);
+    const patternedFabric = !flat.applied;
+    const { swatch, swatchSize, mean } = pickFabricSwatch(
+      tileRaw,
+      TILE,
+      patternedFabric,
+    );
     // The swatch patch can land in a shadowed corner of the photo, which
     // renders trims (turtleneck collar, cuffs) visibly darker than the body.
     // Scale it channel-by-channel so its mean matches the garment's median.
@@ -1828,7 +1853,7 @@ export async function segmentGarment(
       // heuristic; and local contrast enhancement is the opposite of what a
       // garment photo needs — it is what made the print read harsher than the
       // fabric. FABRIC_TONE alone keeps the tile close to the photograph.
-      pipeline = pipeline.modulate(FABRIC_TONE);
+      pipeline = pipeline.modulate(fabricTone(baseColor));
       const jpg = await pipeline.jpeg({ quality: 86 }).toBuffer();
       return "data:image/jpeg;base64," + jpg.toString("base64");
     };
@@ -1962,15 +1987,17 @@ export async function segmentGarment(
     let mainPipeline = sharp(tileRaw, {
       raw: { width: TILE, height: TILE, channels: 3 },
     });
-    mainPipeline = mainPipeline.modulate(FABRIC_TONE);
+    mainPipeline = mainPipeline.modulate(fabricTone(baseColor));
+    let fabricPipeline = sharp(swatch, {
+      raw: { width: swatchSize, height: swatchSize, channels: 3 },
+    }).resize(256, 256, { fit: "fill" });
+    if (!patternedFabric) {
+      fabricPipeline = fabricPipeline.blur(1.2);
+    }
     const [tile, fabricTile] = await Promise.all([
       mainPipeline.jpeg({ quality: 86 }).toBuffer(),
-      sharp(swatch, {
-        raw: { width: swatchSize, height: swatchSize, channels: 3 },
-      })
-        .resize(256, 256, { fit: "fill" })
-        .blur(1.2)
-        .jpeg({ quality: 75 })
+      fabricPipeline
+        .jpeg({ quality: patternedFabric ? 88 : 75 })
         .toBuffer(),
     ]);
 

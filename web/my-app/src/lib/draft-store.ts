@@ -9,6 +9,7 @@ import Database from "better-sqlite3";
 import sharp from "sharp";
 
 import {
+  flattenTile,
   inpaintTile,
   isSkinTone,
   pickFabricSwatch,
@@ -420,7 +421,25 @@ async function analyzePhoto(buffer: Buffer): Promise<{
 
   // Plain fabric swatch for the sleeves/collar; its mean becomes the base
   // colour so untextured parts match the torso's real shading.
-  const { swatch, swatchSize, mean } = pickFabricSwatch(tileRaw, TILE);
+  // A bright flat-lay can be almost the same colour as its background, so the
+  // colour mask may cover the whole frame. Pattern detection is independent of
+  // that colour distance: when the photo contains a repeating weave or stripe,
+  // preserve a real chest patch for collars/plackets/cuffs instead of choosing
+  // the smooth studio background as the "plain" swatch.
+  const patternProbe = flattenTile(Buffer.from(tileRaw), TILE);
+  const patternedFabric = !patternProbe.applied;
+  const { swatch, swatchSize, mean } = pickFabricSwatch(
+    tileRaw,
+    TILE,
+    patternedFabric,
+  );
+
+  let fabricPipeline = sharp(swatch, {
+    raw: { width: swatchSize, height: swatchSize, channels: 3 },
+  }).resize(256, 256, { fit: "fill" });
+  if (!patternedFabric) {
+    fabricPipeline = fabricPipeline.blur(1.2);
+  }
 
   const [tile, fabricTile] = await Promise.all([
     sharp(tileRaw, { raw: { width: TILE, height: TILE, channels: 3 } })
@@ -428,12 +447,8 @@ async function analyzePhoto(buffer: Buffer): Promise<{
       .clahe({ width: 128, height: 128, maxSlope: 2 })
       .jpeg({ quality: 78 })
       .toBuffer(),
-    sharp(swatch, {
-      raw: { width: swatchSize, height: swatchSize, channels: 3 },
-    })
-      .resize(256, 256, { fit: "fill" })
-      .blur(1.2)
-      .jpeg({ quality: 75 })
+    fabricPipeline
+      .jpeg({ quality: patternedFabric ? 88 : 75 })
       .toBuffer(),
   ]);
 

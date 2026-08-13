@@ -15,7 +15,7 @@ import {
 } from "./garment-mesh";
 
 /** Bump when geometry/param semantics change so stored drafts can migrate. */
-export const GARMENT_TEMPLATE_VERSION = 6;
+export const GARMENT_TEMPLATE_VERSION = 8;
 
 export type Gender = "male" | "female";
 
@@ -32,8 +32,22 @@ export type GarmentTemplateDef = {
 
 const CATEGORY_ORDER = ["Tops", "Bottoms", "Dresses", "Outerwear", "Shoes"];
 
+// Long-sleeve base: the woven shirt family (74 cm body, no hem band).
+//
+// Where the cuff lands is a relationship, not a constant. The raglan sleeve
+// hangs from the shoulder line, which rises with bodyLength, while the hem
+// falls with it — so one shared sleeveLength cannot serve bodies of different
+// lengths. Measured on the built geometry, the cuff finishes roughly
+//
+//     bodyLength - sleeveLength - 13 cm     above the hem
+//
+// and a hem band lifts the hem about 5 cm further, so banded garments need a
+// correspondingly shorter sleeve. 61 cm puts the shirt cuff 2.2 cm above its
+// hem; every preset below that has a shorter body or a hem band carries its
+// own sleeveLength for the same 2-3 cm finish. Left at a shared 61 the hoodie
+// and sweatshirt cuffs hung 7.3 cm PAST the hem.
 const longSleeve: Partial<GarmentParams> = {
-  sleeveLength: 56,
+  sleeveLength: 61,
   // Deep armhole. The sleeve is lofted from the armhole loop, so the armhole
   // IS the sleeve's girth — at 21 the tube came out noticeably skinny beside
   // the torso, where a relaxed long-sleeve top drops from a roomy armhole.
@@ -71,6 +85,14 @@ function wovenShirtPresets(): GarmentTemplateDef[] {
       cuff: "barrel",
       sleeveTaper: 0.6,
       placket: "full",
+      // A button shirt is woven cloth, not jersey. The renderer and the
+      // geometry both key the fabric-grain handling off this flag: panel UVs
+      // are projected from the vertex's real X so a pinstripe stays vertical
+      // over the narrowing upper panel instead of fanning out, and the sleeve
+      // takes a repeating world-space projection instead of the torso
+      // photograph wrapped round the tube. Without it every shirt rendered as
+      // jersey and those paths never ran.
+      fabric: "woven",
     },
   });
   // Women's cut: same construction (collar, placket, barrel cuffs), fitted
@@ -84,6 +106,9 @@ function wovenShirtPresets(): GarmentTemplateDef[] {
       ...base.params,
       bodyWidth: base.params.bodyWidth - 4,
       bodyLength: base.params.bodyLength - 4,
+      // Shorter body, shorter sleeve — the cuff has to keep its place
+      // relative to the hem.
+      sleeveLength: base.params.sleeveLength - 4,
       shoulderWidthFactor: 0.76,
     },
     features: {
@@ -339,7 +364,8 @@ export const garmentTemplates: GarmentTemplateDef[] = [
     id: "top-long-sleeve-tee",
     label: "Long-sleeve T-shirt",
     category: "Tops",
-    params: { ...defaultTeeParams, ...longSleeve },
+    // 70 cm body, no hem band.
+    params: { ...defaultTeeParams, ...longSleeve, sleeveLength: 56 },
     features: { ...defaultTeeFeatures, sleeveTaper: 0.72 },
   },
   {
@@ -349,6 +375,8 @@ export const garmentTemplates: GarmentTemplateDef[] = [
     params: {
       ...defaultTeeParams,
       ...longSleeve,
+      // 70 cm body + hem band.
+      sleeveLength: 51,
       bodyWidth: 58,
       bodyDepth: 26,
       neckWidthFront: 19,
@@ -369,6 +397,8 @@ export const garmentTemplates: GarmentTemplateDef[] = [
     params: {
       ...defaultTeeParams,
       ...longSleeve,
+      // 70 cm body + hem band.
+      sleeveLength: 51,
       bodyWidth: 59,
       bodyDepth: 27,
       neckWidthFront: 21,
@@ -403,6 +433,8 @@ export const garmentTemplates: GarmentTemplateDef[] = [
     params: {
       ...defaultTeeParams,
       ...longSleeve,
+      // 70 cm body + hem band.
+      sleeveLength: 52,
       bodyWidth: 56,
       bodyDepth: 25,
       neckWidthFront: 18,
@@ -424,6 +456,8 @@ export const garmentTemplates: GarmentTemplateDef[] = [
     params: {
       ...defaultTeeParams,
       ...longSleeve,
+      // 70 cm body, no hem band.
+      sleeveLength: 57,
       bodyWidth: 50,
       bodyDepth: 22,
       neckWidthFront: 15,
@@ -451,6 +485,8 @@ export const garmentTemplates: GarmentTemplateDef[] = [
     params: {
       ...defaultTeeParams,
       ...longSleeve,
+      // 62 cm body, no hem band.
+      sleeveLength: 50,
       bodyWidth: 43,
       bodyDepth: 18,
       bodyLength: 62,
@@ -475,6 +511,8 @@ export const garmentTemplates: GarmentTemplateDef[] = [
     params: {
       ...defaultTeeParams,
       ...longSleeve,
+      // 70 cm body + hem band.
+      sleeveLength: 52,
       bodyWidth: 55,
       bodyDepth: 24,
       neckWidthFront: 17,
@@ -527,6 +565,8 @@ export const garmentTemplates: GarmentTemplateDef[] = [
     params: {
       ...defaultTeeParams,
       ...longSleeve,
+      // 70 cm body, no hem band.
+      sleeveLength: 58,
       bodyWidth: 44,
       bodyDepth: 17,
       neckWidthFront: 16,
@@ -585,6 +625,7 @@ export const garmentTemplates: GarmentTemplateDef[] = [
       cuff: "raw",
       sleeveTaper: 0.9,
       placket: "full",
+      fabric: "woven",
     },
   },
   // Sports tops
@@ -605,7 +646,8 @@ export const garmentTemplates: GarmentTemplateDef[] = [
       ...defaultTeeParams,
       bodyWidth: 62,
       bodyDepth: 24,
-      sleeveLength: 56,
+      // 70 cm body, no hem band.
+      sleeveLength: 55,
       armholeDepth: 26,
     },
     features: { ...defaultTeeFeatures, sleeveTaper: 0.75 },
