@@ -1062,7 +1062,12 @@ export function warpGarmentTile(input: {
    * ticking. See the note on straightGrain below.
    */
   straightGrain?: boolean;
-}): { tileRaw: Buffer; keep: Uint8Array } {
+}): {
+  tileRaw: Buffer;
+  keep: Uint8Array;
+  /** The source rectangle sampled, so callers can reuse it for a plain crop. */
+  window: { x0: number; x1: number; y0: number; y1: number };
+} {
   const { data, mask, width, height, minX, maxX, tileSize, exclude } = input;
   const hiData = input.hiData ?? data;
   const hiWidth = input.hiWidth ?? width;
@@ -1181,8 +1186,11 @@ export function warpGarmentTile(input: {
   };
   let rectX0 = minX;
   let rectX1 = maxX;
-  let rectY0 = 0;
-  let rectY1 = height - 1;
+  let rectY0 = medianOf([a.top, b.top].filter((y) => y !== -1), 0);
+  let rectY1 = medianOf(
+    [a.bottom, b.bottom].filter((y) => y !== -1),
+    height - 1,
+  );
   if (input.straightGrain) {
     // Find the torso by its own run of cloth, not by column height.
     //
@@ -1211,8 +1219,8 @@ export function warpGarmentTile(input: {
       colBottom === -1
         ? medianOf([a.bottom, b.bottom].filter((y) => y !== -1), height - 1)
         : colBottom;
-    const lefts: number[] = [];
-    const rights: number[] = [];
+    const centres: number[] = [];
+    const widths: number[] = [];
     const from = Math.round(rectY0 + (rectY1 - rectY0) * 0.45);
     const to = Math.round(rectY0 + (rectY1 - rectY0) * 0.85);
     for (let y = from; y <= to; y += 1) {
@@ -1222,12 +1230,29 @@ export function warpGarmentTile(input: {
       while (lo > 0 && mask[y * width + lo - 1]) lo -= 1;
       while (hi < width - 1 && mask[y * width + hi + 1]) hi += 1;
       if (hi - lo >= 4) {
-        lefts.push(lo);
-        rights.push(hi);
+        centres.push((lo + hi) / 2);
+        widths.push(hi - lo);
       }
     }
-    rectX0 = medianOf(lefts, minX);
-    rectX1 = medianOf(rights, maxX);
+    // Take the NARROWEST consistent run, not the average one. Where a sleeve
+    // has swung clear of the body the run is the torso; where it still
+    // overlaps — high up, or on a flat-lay with the arms laid against the
+    // sides — the run merges body and sleeve into one much wider span.
+    // Averaging those mixes the two, and the window creeps out over the
+    // sleeves again. The lower quartile is the torso's own width, and it
+    // survives a few merged rows.
+    if (widths.length > 0) {
+      const sortedW = widths.slice().sort((p, q) => p - q);
+      const torsoWidth = sortedW[Math.floor(sortedW.length * 0.25)];
+      const centre = medianOf(centres, (minX + maxX) / 2);
+      rectX0 = Math.round(centre - torsoWidth / 2);
+      rectX1 = Math.round(centre + torsoWidth / 2);
+    } else {
+      rectX0 = minX;
+      rectX1 = maxX;
+    }
+    rectX0 = clampInt(rectX0, 0, width - 1);
+    rectX1 = clampInt(rectX1, 0, width - 1);
     if (rectX1 - rectX0 < 4) {
       rectX0 = minX;
       rectX1 = maxX;
@@ -1309,7 +1334,11 @@ export function warpGarmentTile(input: {
     }
   }
 
-  return { tileRaw, keep };
+  return {
+    tileRaw,
+    keep,
+    window: { x0: rectX0, x1: rectX1, y0: rectY0, y1: rectY1 },
+  };
 }
 
 function clampInt(value: number, min: number, max: number) {
@@ -1807,7 +1836,7 @@ export async function segmentGarment(
     // Build the texture tile through the dense pose/perspective warp, then
     // inpaint non-garment pixels (neck opening, seams, skin) from the
     // surrounding fabric so no ghost collar or flat patches appear.
-    const { tileRaw, keep } = warpGarmentTile({
+    const { tileRaw, keep, window: warpWindow } = warpGarmentTile({
       data,
       mask,
       width,
@@ -1830,18 +1859,40 @@ export async function segmentGarment(
     // print stays continuous, and the only cost is a little background near the
     // edges. The warp still wins when it covers the tile, because it undoes the
     // body's perspective.
+    let coverage = 0;
+    let usedCrop = false;
     {
       let covered = 0;
       for (let i = 0; i < TILE * TILE; i += 1) {
         covered += keep[i];
       }
-      if (covered < TILE * TILE * 0.62) {
+      coverage = covered;
+      // Straight-grain sampling takes a rigid rectangle, so a curved shirttail
+      // or a collar notch legitimately leaves corners outside the mask —
+      // exactly the pixels the inpainter exists to fill. The row-following
+      // warp interpolates between the garment's own edges and so lands inside
+      // the mask by construction, which is why it effectively never trips this
+      // guard. Measured on a striped flat-lay, the rigid window returns 87-91%.
+      // Hold it to the same standard and it drops to the crop below for normal
+      // garments, and that crop is the WHOLE bounding box: torso, both sleeves,
+      // and the background between them, squashed into one tile. A fine
+      // pinstripe at that scale averages out to plain cloth.
+      const floor = options?.straightGrain ? 0.42 : 0.62;
+      if (covered < TILE * TILE * floor) {
+        usedCrop = true;
         const sx = hiInfo.width / width;
         const sy = hiInfo.height / height;
-        const x0 = clampInt(Math.floor(minX * sx), 0, hiInfo.width - 1);
-        const x1 = clampInt(Math.ceil((maxX + 1) * sx), x0 + 1, hiInfo.width);
-        const y0 = clampInt(Math.floor(minY * sy), 0, hiInfo.height - 1);
-        const y1 = clampInt(Math.ceil((maxY + 1) * sy), y0 + 1, hiInfo.height);
+        // Crop the window the warp already chose. For straight grain that is
+        // the torso; falling back to minX/maxX would reintroduce the sleeves
+        // the window was computed to exclude.
+        const cropMinX = options?.straightGrain ? warpWindow.x0 : minX;
+        const cropMaxX = options?.straightGrain ? warpWindow.x1 : maxX;
+        const cropMinY = options?.straightGrain ? warpWindow.y0 : minY;
+        const cropMaxY = options?.straightGrain ? warpWindow.y1 : maxY;
+        const x0 = clampInt(Math.floor(cropMinX * sx), 0, hiInfo.width - 1);
+        const x1 = clampInt(Math.ceil((cropMaxX + 1) * sx), x0 + 1, hiInfo.width);
+        const y0 = clampInt(Math.floor(cropMinY * sy), 0, hiInfo.height - 1);
+        const y1 = clampInt(Math.ceil((cropMaxY + 1) * sy), y0 + 1, hiInfo.height);
         const cw = x1 - x0;
         const ch = y1 - y0;
         for (let ty = 0; ty < TILE; ty += 1) {
@@ -1883,6 +1934,43 @@ export async function segmentGarment(
     // flattening would erase the pattern; those keep the photo tile.
     const flat = flattenTile(tileRaw, TILE);
     const baseColor = flat.base;
+
+    // One line per extraction describing how the texture was built. A tile
+    // that comes back featureless renders as blank cloth, and the cause is
+    // always one of these numbers — the window landing off the garment, the
+    // coverage guard dropping to the crop, or the flatten step deciding the
+    // fabric was plain. Cheap to compute, and it turns "it reads blank" into
+    // a specific step.
+    {
+      let lo = 255;
+      let hi = 0;
+      let energy = 0;
+      for (let y = 0; y < TILE; y += 1) {
+        for (let x = 0; x < TILE - 1; x += 1) {
+          const i = (y * TILE + x) * 3;
+          const l0 = (tileRaw[i] + tileRaw[i + 1] + tileRaw[i + 2]) / 3;
+          const j = i + 3;
+          const l1 = (tileRaw[j] + tileRaw[j + 1] + tileRaw[j + 2]) / 3;
+          energy += Math.abs(l0 - l1);
+          if (l0 < lo) lo = l0;
+          if (l0 > hi) hi = l0;
+        }
+      }
+      const detail = energy / (TILE * (TILE - 1));
+      console.log(
+        "[garment-segmentation] tile" +
+          " straightGrain=" + Boolean(options?.straightGrain) +
+          " window=" + warpWindow.x0 + "," + warpWindow.y0 +
+          ".." + warpWindow.x1 + "," + warpWindow.y1 +
+          " of " + width + "x" + height +
+          " torsoCols=" + minX + ".." + maxX +
+          " coverage=" + (coverage / (TILE * TILE)).toFixed(3) +
+          " usedCrop=" + usedCrop +
+          " flattened=" + flat.applied +
+          " luma=" + Math.round(lo) + ".." + Math.round(hi) +
+          " detail=" + detail.toFixed(2),
+      );
+    }
 
     // Plain fabric swatch for the sleeves/collar; the base colour IS the
     // fabric colour now, so trims match the panels exactly.
