@@ -15,7 +15,7 @@ import {
 } from "./garment-mesh";
 
 /** Bump when geometry/param semantics change so stored drafts can migrate. */
-export const GARMENT_TEMPLATE_VERSION = 8;
+export const GARMENT_TEMPLATE_VERSION = 9;
 
 export type Gender = "male" | "female";
 
@@ -32,7 +32,7 @@ export type GarmentTemplateDef = {
 
 const CATEGORY_ORDER = ["Tops", "Bottoms", "Dresses", "Outerwear", "Shoes"];
 
-// Long-sleeve base: the woven shirt family (74 cm body, no hem band).
+// Long-sleeve base: the woven shirt family (82 cm body, no hem band).
 //
 // Where the cuff lands is a relationship, not a constant. The raglan sleeve
 // hangs from the shoulder line, which rises with bodyLength, while the hem
@@ -42,10 +42,11 @@ const CATEGORY_ORDER = ["Tops", "Bottoms", "Dresses", "Outerwear", "Shoes"];
 //     bodyLength - sleeveLength - 13 cm     above the hem
 //
 // and a hem band lifts the hem about 5 cm further, so banded garments need a
-// correspondingly shorter sleeve. 61 cm puts the shirt cuff 2.2 cm above its
-// hem; every preset below that has a shorter body or a hem band carries its
-// own sleeveLength for the same 2-3 cm finish. Left at a shared 61 the hoodie
-// and sweatshirt cuffs hung 7.3 cm PAST the hem.
+// correspondingly shorter sleeve. On the 82 cm shirt body, 61 cm puts the cuff
+// about 8 cm above the hem, where a dress shirt's cuff sits. Every preset below
+// has a shorter body or a hem band and carries its own sleeveLength so its cuff
+// finishes 2-3 cm above its own hem; left at a shared 61 the hoodie and
+// sweatshirt cuffs hung 7.3 cm PAST it.
 const longSleeve: Partial<GarmentParams> = {
   sleeveLength: 61,
   // Deep armhole. The sleeve is lofted from the armhole loop, so the armhole
@@ -73,7 +74,12 @@ function wovenShirtPresets(): GarmentTemplateDef[] {
       ...longSleeve,
       bodyWidth: 54,
       bodyDepth: 23,
-      bodyLength: 74,
+      bodyLength: 82,
+      // Straight side seam: hemWidthFactor 1 makes widthAt() return the same
+      // half-width from the underarm all the way to the hem, so the body is a
+      // clean vertical line rather than the slight A-line the 1.03 default
+      // gives every other block.
+      hemWidthFactor: 1,
       neckWidthFront: 15.5,
       neckDropFront: 6,
       neckDropBack: 2,

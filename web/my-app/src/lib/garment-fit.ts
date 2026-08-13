@@ -120,7 +120,16 @@ export function fitGarmentToShape(
     0.5,
     0.98,
   );
-  const targetHem = clamp(shape.hemRatio / chest, 0.76, 1.38);
+  // Keep the side seam straight.
+  //
+  // hemRatio/chest is measured off a photograph, and a shirt on a hanger always
+  // reads narrower at the hem than at the chest: the cloth falls inward, the
+  // camera is above the hem, and the mask softens the bottom corners. Feeding
+  // that straight through pulled the mesh's hem in by up to 24% and the body
+  // curved inward toward the bottom instead of dropping as a straight line.
+  // Allow only the small deviation that a genuinely tapered or A-line cut
+  // shows; anything past that is the photograph, not the garment.
+  const targetHem = clamp(shape.hemRatio / chest, 0.98, 1.05);
   const targetPinch = clamp(1 - shape.waistRatio / chest, 0, 0.2);
   const fittedLength = mix(templateParams.bodyLength, targetLength, weight);
   // The sleeve belongs to the same garment as the body.
@@ -193,11 +202,15 @@ export function fitGarmentToShape(
     },
     features: {
       ...templateFeatures,
-      waistPinch: mix(
-        templateFeatures.waistPinch ?? 0,
-        targetPinch,
-        weight,
-      ),
+      // Waist shaping is a property of the CUT, not of the photo. A men's
+      // shirt is a straight block; a hanger shot of one still reads narrower
+      // at the waist than at the chest, and fitting that turned the straight
+      // side seam into an hourglass. Only refine a pinch the template already
+      // declares (the women's fitted cuts) — never introduce one.
+      waistPinch:
+        (templateFeatures.waistPinch ?? 0) > 0
+          ? mix(templateFeatures.waistPinch ?? 0, targetPinch, weight)
+          : 0,
     },
     confidence: shape.confidence,
   };
