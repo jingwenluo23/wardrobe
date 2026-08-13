@@ -1056,6 +1056,12 @@ export function warpGarmentTile(input: {
   hiData?: Buffer | Uint8Array;
   hiWidth?: number;
   hiHeight?: number;
+  /**
+   * Sample a rigid rectangle instead of following the silhouette row by row.
+   * Set for fabrics whose pattern is cut on the grain — stripes, checks,
+   * ticking. See the note on straightGrain below.
+   */
+  straightGrain?: boolean;
 }): { tileRaw: Buffer; keep: Uint8Array } {
   const { data, mask, width, height, minX, maxX, tileSize, exclude } = input;
   const hiData = input.hiData ?? data;
@@ -1152,26 +1158,117 @@ export function warpGarmentTile(input: {
   const tileRaw = Buffer.alloc(tileSize * tileSize * 3);
   const keep = new Uint8Array(tileSize * tileSize);
 
+  // Straight-grain sampling window.
+  //
+  // The row-following warp below maps each tile column to a fraction of that
+  // ROW's width, which is right for a graphic that has to follow the body but
+  // wrong for a pattern woven on the grain. A pinstripe sits at a fixed x in
+  // the photo; as the silhouette narrows toward the shoulders and swings in
+  // and out along a curved shirttail, that fixed x maps to a drifting u, and
+  // the stripe comes out of the warp bent and splayed. Measured on a synthetic
+  // flat-lay of a straight-striped shirt, every stripe left the warp curving
+  // outward at the hem.
+  //
+  // For those fabrics take a rigid rectangle instead: one scale, one offset,
+  // no per-row correction, so a straight line in the photo stays a straight
+  // line in the tile. The rectangle uses median edges rather than extremes so
+  // one ragged mask row cannot shift it, and pixels outside the mask are still
+  // excluded from `keep` for the inpainter to fill.
+  const medianOf = (values: number[], fallback: number) => {
+    if (values.length === 0) return fallback;
+    const sorted = values.slice().sort((p, q) => p - q);
+    return sorted[Math.floor(sorted.length / 2)];
+  };
+  let rectX0 = minX;
+  let rectX1 = maxX;
+  let rectY0 = 0;
+  let rectY1 = height - 1;
+  if (input.straightGrain) {
+    // Find the torso by its own run of cloth, not by column height.
+    //
+    // The caller picks minX..maxX by keeping columns at least 55% as tall as
+    // the tallest one. On a flat-lay with the sleeves lying close to the body
+    // — the way a shirt is usually photographed — a column through a sleeve
+    // crosses it for most of the frame's height and clears that bar too, so
+    // the range opens out to the full span and the sampling window fills with
+    // sleeve and with the background wedge between sleeve and body.
+    //
+    // Below the armhole a sleeve is a SEPARATE run of mask on its row, split
+    // from the body by that wedge. So walk out from the centre column while
+    // the mask stays continuous and the run that ends at the side seams is
+    // the torso. Median over those rows, so a ragged row cannot move it.
+    const centreX = clampInt(Math.round((minX + maxX) / 2), 0, width - 1);
+    let colTop = -1;
+    let colBottom = -1;
+    for (let y = 0; y < height; y += 1) {
+      if (mask[y * width + centreX]) {
+        if (colTop === -1) colTop = y;
+        colBottom = y;
+      }
+    }
+    rectY0 = colTop === -1 ? medianOf([a.top, b.top].filter((y) => y !== -1), 0) : colTop;
+    rectY1 =
+      colBottom === -1
+        ? medianOf([a.bottom, b.bottom].filter((y) => y !== -1), height - 1)
+        : colBottom;
+    const lefts: number[] = [];
+    const rights: number[] = [];
+    const from = Math.round(rectY0 + (rectY1 - rectY0) * 0.45);
+    const to = Math.round(rectY0 + (rectY1 - rectY0) * 0.85);
+    for (let y = from; y <= to; y += 1) {
+      if (y < 0 || y >= height || !mask[y * width + centreX]) continue;
+      let lo = centreX;
+      let hi = centreX;
+      while (lo > 0 && mask[y * width + lo - 1]) lo -= 1;
+      while (hi < width - 1 && mask[y * width + hi + 1]) hi += 1;
+      if (hi - lo >= 4) {
+        lefts.push(lo);
+        rights.push(hi);
+      }
+    }
+    rectX0 = medianOf(lefts, minX);
+    rectX1 = medianOf(rights, maxX);
+    if (rectX1 - rectX0 < 4) {
+      rectX0 = minX;
+      rectX1 = maxX;
+    }
+    if (rectY1 - rectY0 < 4) {
+      rectY0 = 0;
+      rectY1 = height - 1;
+    }
+  }
+
   for (let ty = 0; ty < tileSize; ty += 1) {
     const v = ty / (tileSize - 1);
     for (let tx = 0; tx < tileSize; tx += 1) {
       const u = tx / (tileSize - 1);
 
-      // First estimate of the source column, refined once through the
-      // row-edge mapping (the two are mutually dependent).
-      let sx = minX + u * (maxX - minX);
-      let sy = 0;
-      for (let iter = 0; iter < 2; iter += 1) {
-        const yTop = lineAt(sx, a.top, b.top);
-        const yBottom = lineAt(sx, a.bottom, b.bottom);
-        if (yTop === -1 || yBottom === -1 || yBottom - yTop < 4) {
-          break;
-        }
-        sy = clampInt(Math.round(yTop + v * (yBottom - yTop)), 0, height - 1);
-        const left = rowLeft[sy];
-        const right = rowRight[sy];
-        if (left !== -1 && right - left >= 4) {
-          sx = left + u * (right - left);
+      let sx: number;
+      let sy: number;
+      if (input.straightGrain) {
+        sx = rectX0 + u * (rectX1 - rectX0);
+        sy = clampInt(
+          Math.round(rectY0 + v * (rectY1 - rectY0)),
+          0,
+          height - 1,
+        );
+      } else {
+        // First estimate of the source column, refined once through the
+        // row-edge mapping (the two are mutually dependent).
+        sx = minX + u * (maxX - minX);
+        sy = 0;
+        for (let iter = 0; iter < 2; iter += 1) {
+          const yTop = lineAt(sx, a.top, b.top);
+          const yBottom = lineAt(sx, a.bottom, b.bottom);
+          if (yTop === -1 || yBottom === -1 || yBottom - yTop < 4) {
+            break;
+          }
+          sy = clampInt(Math.round(yTop + v * (yBottom - yTop)), 0, height - 1);
+          const left = rowLeft[sy];
+          const right = rowRight[sy];
+          if (left !== -1 && right - left >= 4) {
+            sx = left + u * (right - left);
+          }
         }
       }
       const sxi = clampInt(Math.round(sx), 0, width - 1);
@@ -1561,7 +1658,7 @@ function histogramIntersection(a: Float64Array, b: Float64Array): number {
 export async function segmentGarment(
   buffer: Buffer,
   category: string,
-  options?: { hood?: boolean },
+  options?: { hood?: boolean; straightGrain?: boolean },
 ): Promise<ExtractionResult | null> {
   const segmenter = await getSegmenter();
   if (!segmenter) {
@@ -1722,6 +1819,7 @@ export async function segmentGarment(
       hiData,
       hiWidth: hiInfo.width,
       hiHeight: hiInfo.height,
+      straightGrain: options?.straightGrain,
     });
 
     // Fidelity guard: if the warp only covered part of the tile, the rest has
@@ -1828,6 +1926,7 @@ export async function segmentGarment(
         hiData,
         hiWidth: hiInfo.width,
         hiHeight: hiInfo.height,
+        straightGrain: options?.straightGrain,
       });
       // A narrow region (a sleeve seen edge-on with the arm hanging down) warps
       // into a tile with almost no real garment in it. Inpainting that fills

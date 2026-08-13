@@ -599,7 +599,14 @@ export async function createDraft(input: {
       // whole thing races a timeout so a hung model download or wedged
       // decode can never leave the draft "Building..." forever.
       const wantsHood = features.neckFinish === "hood";
-      const segOptions = { hood: wantsHood };
+      // Woven cloth is patterned on the grain. The default warp follows the
+      // silhouette row by row, which bends a stripe or a check as the outline
+      // narrows and curves; a rigid rectangle keeps it straight. See
+      // warpGarmentTile's straightGrain note.
+      const segOptions = {
+        hood: wantsHood,
+        straightGrain: features.fabric === "woven",
+      };
       const extract = async () => {
         const frontSeg = await segmentGarment(front.buffer, input.category, segOptions);
         const backSeg = await segmentGarment(back.buffer, input.category, segOptions);
