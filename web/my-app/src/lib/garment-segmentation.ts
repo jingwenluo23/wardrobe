@@ -1206,19 +1206,26 @@ export function warpGarmentTile(input: {
     // the mask stays continuous and the run that ends at the side seams is
     // the torso. Median over those rows, so a ragged row cannot move it.
     const centreX = clampInt(Math.round((minX + maxX) / 2), 0, width - 1);
-    let colTop = -1;
-    let colBottom = -1;
+    // Vertical extent from every row that holds cloth, not from one column.
+    // A single column is one bad mask away from useless: where segmentation
+    // drops out over a placket, a pocket or a shadow, that column's span
+    // collapses and the whole sampling window collapses with it. Measured with
+    // the real model on a striped flat-lay, the window came back 190x90 out of
+    // 628x768 and the panel stretched that scrap 5.7x — which renders as blank
+    // cloth. Rows are a far larger sample and degrade gently.
+    let gTop = -1;
+    let gBottom = -1;
     for (let y = 0; y < height; y += 1) {
-      if (mask[y * width + centreX]) {
-        if (colTop === -1) colTop = y;
-        colBottom = y;
+      if (rowLeft[y] !== -1) {
+        if (gTop === -1) gTop = y;
+        gBottom = y;
       }
     }
-    rectY0 = colTop === -1 ? medianOf([a.top, b.top].filter((y) => y !== -1), 0) : colTop;
+    rectY0 = gTop === -1 ? medianOf([a.top, b.top].filter((y) => y !== -1), 0) : gTop;
     rectY1 =
-      colBottom === -1
+      gBottom === -1
         ? medianOf([a.bottom, b.bottom].filter((y) => y !== -1), height - 1)
-        : colBottom;
+        : gBottom;
     const centres: number[] = [];
     const widths: number[] = [];
     const from = Math.round(rectY0 + (rectY1 - rectY0) * 0.45);
@@ -1253,6 +1260,21 @@ export function warpGarmentTile(input: {
     }
     rectX0 = clampInt(rectX0, 0, width - 1);
     rectX1 = clampInt(rectX1, 0, width - 1);
+    // Last guard: whatever the mask did, a torso window is a large fraction of
+    // the garment. Anything much smaller is not a torso and must not be
+    // stretched across the panel — take the plain torso-column box instead,
+    // which is coarser but never a scrap.
+    // A shirt's body is roughly 54cm across against an 84cm span with the
+    // sleeves included, so even when the torso range is fully polluted the
+    // torso is still around 0.6 of it. 0.45 is a floor no real torso reaches
+    // from above, and the height floor is looser because a hem can curve.
+    const garmentH = (gBottom === -1 ? height - 1 : gBottom) - (gTop === -1 ? 0 : gTop);
+    if (rectY1 - rectY0 < garmentH * 0.5 || rectX1 - rectX0 < (maxX - minX) * 0.45) {
+      rectX0 = minX;
+      rectX1 = maxX;
+      rectY0 = gTop === -1 ? 0 : gTop;
+      rectY1 = gBottom === -1 ? height - 1 : gBottom;
+    }
     if (rectX1 - rectX0 < 4) {
       rectX0 = minX;
       rectX1 = maxX;

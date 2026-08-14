@@ -20,6 +20,28 @@ import { dirname, join, resolve } from "node:path";
 import { pipeline as streamPipeline } from "node:stream/promises";
 import { Readable } from "node:stream";
 
+// Node's built-in fetch ignores HTTPS_PROXY unless NODE_USE_ENV_PROXY is set,
+// so on a host that only reaches the internet through a proxy — corporate
+// networks, CI runners, sandboxed build agents — every download here fails with
+// a proxy error while curl on the same box succeeds.
+//
+// The flag is read when fetch's HTTP stack first initialises, which has already
+// happened by the time this module runs, so assigning process.env here has no
+// effect. Re-exec once with it set instead. Portable, needs no dependency, and
+// costs one extra process only on proxied hosts.
+if (
+  (process.env.HTTPS_PROXY || process.env.https_proxy) &&
+  !process.env.NODE_USE_ENV_PROXY
+) {
+  const { spawnSync } = await import("node:child_process");
+  const { status } = spawnSync(
+    process.execPath,
+    [process.argv[1], ...process.argv.slice(2)],
+    { stdio: "inherit", env: { ...process.env, NODE_USE_ENV_PROXY: "1" } },
+  );
+  process.exit(status ?? 0);
+}
+
 const REPO = "Xenova/segformer_b2_clothes";
 const REVISION = "main";
 
