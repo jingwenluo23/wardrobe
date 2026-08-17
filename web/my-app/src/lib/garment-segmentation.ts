@@ -1406,6 +1406,51 @@ function erodeMask(
 }
 
 /** Keep only the largest 4-connected component of the mask, in place. */
+/**
+ * Add pixels of `extra` that are connected to the existing `mask`, and report
+ * the new mask count. Flood fill over the union, seeded from the current mask,
+ * so only cloth that touches what we already have is absorbed.
+ */
+function absorbConnected(
+  mask: Uint8Array,
+  extra: Uint8Array,
+  width: number,
+  height: number,
+  maskCount: number,
+): number {
+  const queue: number[] = [];
+  for (let i = 0; i < mask.length; i += 1) {
+    if (mask[i]) {
+      queue.push(i);
+    }
+  }
+  let count = maskCount;
+  for (let head = 0; head < queue.length; head += 1) {
+    const i = queue[head];
+    const x = i % width;
+    const y = (i / width) | 0;
+    for (const [dx, dy] of [
+      [1, 0],
+      [-1, 0],
+      [0, 1],
+      [0, -1],
+    ] as const) {
+      const nx = x + dx;
+      const ny = y + dy;
+      if (nx < 0 || nx >= width || ny < 0 || ny >= height) {
+        continue;
+      }
+      const n = ny * width + nx;
+      if (!mask[n] && extra[n]) {
+        mask[n] = 1;
+        count += 1;
+        queue.push(n);
+      }
+    }
+  }
+  return count;
+}
+
 function keepLargestComponent(mask: Uint8Array, width: number, height: number) {
   const labels = new Int32Array(width * height).fill(-1);
   const sizes: number[] = [];
@@ -1764,6 +1809,27 @@ export async function segmentGarment(
     let { mask, maskCount } = collect(wanted.primary);
     if (maskCount < width * height * 0.02 && wanted.fallback.size > 0) {
       ({ mask, maskCount } = collect(wanted.fallback));
+    } else if (wanted.fallback.size > 0) {
+      // Heal a garment the model split across two labels.
+      //
+      // SegFormer does not always commit. On a long shirt it labels part of
+      // the body Upper-clothes and part of it Dress, and the split runs right
+      // through the middle of the chest rather than along any edge. Measured
+      // on a striped linen shirt: Upper-clothes 176831 px, Dress 102351 px —
+      // over a third of the garment. Treating Dress purely as a fallback (used
+      // only when the primary covers almost nothing) left that third out of
+      // the mask, so the texture pipeline saw a hole through the chest, the
+      // inpainter filled it from the surrounding fabric, and half the panel
+      // came back as smooth featureless cloth.
+      //
+      // Take the fallback pixels that are CONNECTED to the primary ones. Those
+      // are the same piece of cloth by definition. A separate garment in the
+      // frame — an undershirt below the hem, a skirt — is its own region and
+      // stays out, which is what keeping the sets narrow was protecting.
+      const extra = collect(wanted.fallback);
+      if (extra.maskCount > 0) {
+        maskCount = absorbConnected(mask, extra.mask, width, height, maskCount);
+      }
     }
     // Require a meaningful garment area (>2% of the frame).
     if (maskCount < width * height * 0.02) {

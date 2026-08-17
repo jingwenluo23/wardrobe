@@ -327,6 +327,45 @@ function TeeModel({ mesh }: { mesh: DraftMesh }) {
       mesh.features?.fabric === "woven" && fabricTexture
         ? fabricTexture
         : loadTexture(mesh.sleeveTextureUrl) ?? frontTexture ?? trimTexture;
+    // Woven panels take the repeating swatch too, not the garment photograph.
+    //
+    // The photo tile is an unwrap of the whole garment, and on a flat-lay with
+    // the sleeves lying against the body there is no way to find the side seams
+    // in the mask — measured on a striped linen shirt, the mask run through the
+    // centre spans 449-559px of a 561px garment at every height from 45% to 85%,
+    // so body and sleeves are one region. Mapping that tile onto the front panel
+    // paints a small picture of the entire shirt, sleeves and collar included,
+    // across the chest.
+    //
+    // Cloth cut on the grain does not need registering. It needs the right
+    // direction and the right pitch, which a patch of real interior fabric has
+    // by construction: pickFabricSwatch already takes several stripe repeats
+    // from the chest, clear of every edge, shadow and inpainted region. Tile it
+    // at the garment's own scale. The cost is the chest pocket, which the mesh
+    // does not model anyway.
+    const panelFabric = (() => {
+      if (mesh.features?.fabric !== "woven" || !fabricTexture) {
+        return null;
+      }
+      // Clone so the repeat below cannot reach the sleeves, which project the
+      // same swatch through world space and already carry their own scale.
+      const tiled = fabricTexture.clone();
+      // Mirror rather than wrap. The swatch is a photographed crop, so its left
+      // and right edges do not match and every plain repeat boundary shows as a
+      // hard vertical seam. Mirroring makes each join a reflection, which for a
+      // vertical stripe is continuous.
+      tiled.wrapS = THREE.MirroredRepeatWrapping;
+      tiled.wrapT = THREE.ClampToEdgeWrapping;
+      tiled.needsUpdate = true;
+      // Across the body: one swatch per this much cloth, matching the
+      // world-space period the sleeves use so the grain lines up at the seam.
+      // Down the body: no repeat at all. A stripe has no vertical structure to
+      // reproduce, and tiling vertically only adds horizontal seams — visible
+      // as brick courses across the chest.
+      const periodCm = 13.5;
+      tiled.repeat.set(Math.max(1, mesh.params.bodyWidth / periodCm), 1);
+      return tiled;
+    })();
     const hoodTexture =
       loadTexture(mesh.hoodTextureUrl) ?? frontTexture ?? trimTexture;
     const fabricKind: FabricKind = mesh.features?.fabric ?? "jersey";
@@ -350,8 +389,8 @@ function TeeModel({ mesh }: { mesh: DraftMesh }) {
       ? { texture: seamTexture, scale: fabricKind === "fleece" ? 0.9 : 0.65 }
       : trimBump;
     return [
-      fabricMaterial(mesh.color, frontTexture, fabricKind, frontBump),
-      fabricMaterial(mesh.color, backTexture, fabricKind, backBump),
+      fabricMaterial(mesh.color, panelFabric ?? frontTexture, fabricKind, frontBump),
+      fabricMaterial(mesh.color, panelFabric ?? backTexture, fabricKind, backBump),
       fabricMaterial(mesh.color, trimTexture, fabricKind, trimBump),
       fabricMaterial(mesh.color, hoodTexture, fabricKind, hoodBump),
       fabricMaterial(mesh.color, sleeveTexture, fabricKind, sleeveBump),
@@ -365,6 +404,7 @@ function TeeModel({ mesh }: { mesh: DraftMesh }) {
     mesh.hoodTextureUrl,
     mesh.features?.fabric,
     mesh.features?.neckFinish,
+    mesh.params.bodyWidth,
   ]);
 
   const innerMaterial = useMemo(
