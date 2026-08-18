@@ -827,6 +827,104 @@ export function inpaintTile(
           }
         }
       }
+      // Put fabric grain back over the pyramid's colour.
+      //
+      // The pyramid deliberately carries colour and no detail, which keeps the
+      // fill seamless but leaves a large hole reading as a smooth smear in the
+      // middle of patterned cloth — the blurred patch across the chest of a
+      // camouflage hoodie.
+      //
+      // What it cannot do is recover the pattern: nothing was ever photographed
+      // there. Copying real fabric in was tried twice and fails twice over. At
+      // blob scale the transferred signal swings +-80 levels, pushing filled
+      // colour outside the garment's palette and bringing the patch's own
+      // shapes back as an obvious mirrored repeat — measured, it produced a
+      // pink diamond across the hole. Cut down to fine detail and capped, the
+      // colours behave, but the hard edge where one blob meets another still
+      // comes through as thin lines tracing the patch's mirror seams.
+      //
+      // So synthesise instead of copy. Measure how much the real fabric varies
+      // pixel to pixel, and lay down band-limited noise of that amplitude. It
+      // has no shapes to duplicate, no seams and no symmetry, and it is enough
+      // to stop the fill reading as a lens blur: the region becomes flat-toned
+      // cloth with the garment's own grain, which is an honest depiction of an
+      // area the photograph never covered.
+      {
+        // Fabric's own fine-scale variation, from real pixels only.
+        let noiseSum = 0;
+        let noiseCount = 0;
+        for (let y = 1; y < size - 1; y += 2) {
+          for (let x = 1; x < size - 1; x += 2) {
+            const i = y * size + x;
+            if (!keep[i] || wrote[i]) {
+              continue;
+            }
+            const lum = (p: number) =>
+              (tileRaw[p * 3] + tileRaw[p * 3 + 1] + tileRaw[p * 3 + 2]) / 3;
+            const mean =
+              (lum(i - 1) + lum(i + 1) + lum(i - size) + lum(i + size)) / 4;
+            const d = lum(i) - mean;
+            noiseSum += d * d;
+            noiseCount += 1;
+          }
+        }
+        // Cap it: a big value here is not grain but real pattern detail near
+        // the sample points, and laying that much noise down looks like sensor
+        // noise rather than cloth.
+        const sigma = noiseCount > 0
+          ? Math.min(9, Math.sqrt(noiseSum / noiseCount))
+          : 0;
+        if (sigma > 0.5) {
+          // Seeded, so goldens stay reproducible.
+          let seed = 0x9e3779b9;
+          const rnd = () => {
+            seed = (seed * 1664525 + 1013904223) >>> 0;
+            return seed / 0xffffffff;
+          };
+          // Generated at half resolution and interpolated up, so the grain has
+          // the soft spatial correlation of a weave rather than the per-pixel
+          // fizz of white noise.
+          const half = (size >> 1) + 1;
+          const field = new Float32Array(half * half);
+          for (let i = 0; i < field.length; i += 1) {
+            field[i] = rnd() * 2 - 1;
+          }
+          for (let i = 0; i < n; i += 1) {
+            if (!wrote[i]) {
+              continue;
+            }
+            // Ease in past the pyramid's threshold so the grain does not
+            // switch on against the interpolated ring around it.
+            const amp = Math.min(1, (dist[i] - FAR) / 8);
+            if (amp <= 0) {
+              continue;
+            }
+            const x = i % size;
+            const y = (i / size) | 0;
+            const hx = x / 2;
+            const hy = y / 2;
+            const x0 = hx | 0;
+            const y0 = hy | 0;
+            const fx = hx - x0;
+            const fy = hy - y0;
+            const top =
+              field[y0 * half + x0] * (1 - fx) + field[y0 * half + x0 + 1] * fx;
+            const bottom =
+              field[(y0 + 1) * half + x0] * (1 - fx) +
+              field[(y0 + 1) * half + x0 + 1] * fx;
+            // One offset for all three channels: fabric grain is a change in
+            // shading, not in hue, so per-channel noise would speckle colour.
+            const g = (top * (1 - fy) + bottom * fy) * sigma * amp * 1.6;
+            for (let ch = 0; ch < 3; ch += 1) {
+              tileRaw[i * 3 + ch] = clampInt(
+                Math.round(tileRaw[i * 3 + ch] + g),
+                0,
+                255,
+              );
+            }
+          }
+        }
+      }
       for (let i = 0; i < n; i += 1) {
         if (wrote[i]) {
           keep[i] = 1;
