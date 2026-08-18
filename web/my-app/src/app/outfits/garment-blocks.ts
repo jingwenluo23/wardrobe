@@ -1392,24 +1392,56 @@ function buildTopGeometry(
       // it survives being seen from behind on a thin sleeve.
       const br = 0.62 * SCALE; // ~1.2cm across, a shirt button
       const BUTTON_SEGMENTS = 12;
+      // A cuff fastens on the OUTER side of the wrist, not across the front of
+      // it — the placket runs up the little-finger side of the forearm and the
+      // buttons sit on that edge, which is where they appear on a flat lay.
+      // Sitting them at the tube's front-most point put them in the middle of
+      // the cuff facing the viewer, which is not where a shirt buttons.
+      //
+      // e1 points along +x for BOTH sleeves (it is built from the hang axis and
+      // world Z), so multiplying by `side` is what turns it into "away from the
+      // body". Tilt a little toward the front from there, or the disc is edge
+      // on to the camera and disappears.
+      // 0 puts the button exactly on the silhouette edge, seen edge on, where
+      // it reads as a nick in the outline rather than a button; pi/2 puts it
+      // back in the middle of the cuff, which is not how a shirt fastens.
+      // Measured on the built mesh at 0.7 the disc's outer rim landed 0.6cm
+      // from an edge 11.7cm away — still grazing it. 0.9 sits the button about
+      // 60% of the way out: plainly off to the side, and turned far enough
+      // toward the viewer to catch light and read as round.
+      const buttonTilt = 0.9; // radians toward the front, ~52 degrees
+      const buttonTheta = side > 0 ? buttonTilt : Math.PI - buttonTilt;
+      const cosT = Math.cos(buttonTheta);
+      const sinT = Math.sin(buttonTheta);
+      // Outward normal of the elliptical cross-section (semi-axes r and
+      // r*sleeveDepthScale) at that angle: (b·cos, a·sin), which reduces to
+      // this once the common r drops out.
+      const outward = new THREE.Vector3()
+        .addScaledVector(e1, sleeveDepthScale * cosT)
+        .addScaledVector(e2, sinT)
+        .normalize();
+      // Around the cuff, perpendicular to both the sleeve and that normal.
+      const around = new THREE.Vector3()
+        .crossVectors(outward, axis)
+        .normalize();
       const mkButton = (dist: number, scale: number) => {
-        const front = rEff * scale * sleeveDepthScale + 0.26 * SCALE;
+        const r = rEff * scale;
         const centre = sleeveCenterAt(1)
           .addScaledVector(axis, dist)
-          .addScaledVector(e2, front);
+          .addScaledVector(e1, cosT * r)
+          .addScaledVector(e2, sinT * r * sleeveDepthScale)
+          .addScaledVector(outward, 0.32 * SCALE);
         // One UV for the whole disc, so the fabric's stripes cannot run across
         // the button face.
         const hub = pushVertex(centre.x, centre.y, centre.z, 0.5, 0.5);
         const rim: number[] = [];
         for (let k = 0; k < BUTTON_SEGMENTS; k += 1) {
-          const theta = (2 * Math.PI * k) / BUTTON_SEGMENTS;
-          const u = Math.cos(theta) * br;
-          const v = Math.sin(theta) * br;
+          const phi = (2 * Math.PI * k) / BUTTON_SEGMENTS;
           const p = centre
             .clone()
-            .addScaledVector(e1, u)
-            .addScaledVector(axis, v)
-            .addScaledVector(e2, -0.08 * SCALE);
+            .addScaledVector(around, Math.cos(phi) * br)
+            .addScaledVector(axis, Math.sin(phi) * br)
+            .addScaledVector(outward, -0.08 * SCALE);
           rim.push(pushVertex(p.x, p.y, p.z, 0.5, 0.5));
         }
         for (let k = 0; k < BUTTON_SEGMENTS; k += 1) {
