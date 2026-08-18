@@ -53,6 +53,11 @@ export type GarmentFeatures = {
   /** Fitted silhouette: pinch the torso at the waist (0 = straight cut,
    *  ~0.12 = women's fitted shirt) so chest and hip read fuller. */
   waistPinch?: number;
+  /** Button shirts: patch pockets at chest height. 1 sits on the wearer's
+   *  left, 2 is the pair a flannel or denim shirt carries. */
+  chestPockets?: number;
+  /** Button-down collar: the collar points button to the body (oxford). */
+  collarButtons?: boolean;
 };
 
 export const defaultTeeFeatures: GarmentFeatures = {
