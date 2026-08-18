@@ -1505,45 +1505,82 @@ function erodeMask(
 
 /** Keep only the largest 4-connected component of the mask, in place. */
 /**
- * Add pixels of `extra` that are connected to the existing `mask`, and report
- * the new mask count. Flood fill over the union, seeded from the current mask,
- * so only cloth that touches what we already have is absorbed.
+ * Absorb regions of `extra` that are HOLES in `mask` — bounded mostly by it —
+ * and report the new mask count. Returns the count so callers can keep their
+ * own running total.
+ *
+ * Connectivity alone is not enough. On a photo of someone wearing a camouflage
+ * hoodie over matching trousers, the model labels both garments Dress, and the
+ * trousers touch the hoodie's hem: a flood fill seeded from the hoodie runs
+ * straight down into them and the "top" ends up reaching the bottom of the
+ * frame. What separates the two is that the chest region is enclosed by the
+ * hoodie, while the trousers merely brush against it — so test each region's
+ * border rather than whether it touches at all.
  */
-function absorbConnected(
+function absorbEnclosed(
   mask: Uint8Array,
   extra: Uint8Array,
   width: number,
   height: number,
   maskCount: number,
 ): number {
-  const queue: number[] = [];
-  for (let i = 0; i < mask.length; i += 1) {
-    if (mask[i]) {
-      queue.push(i);
-    }
-  }
+  const seen = new Uint8Array(extra.length);
   let count = maskCount;
-  for (let head = 0; head < queue.length; head += 1) {
-    const i = queue[head];
-    const x = i % width;
-    const y = (i / width) | 0;
-    for (const [dx, dy] of [
-      [1, 0],
-      [-1, 0],
-      [0, 1],
-      [0, -1],
-    ] as const) {
-      const nx = x + dx;
-      const ny = y + dy;
-      if (nx < 0 || nx >= width || ny < 0 || ny >= height) {
-        continue;
+  for (let start = 0; start < extra.length; start += 1) {
+    if (!extra[start] || seen[start] || mask[start]) {
+      continue;
+    }
+    const region: number[] = [start];
+    seen[start] = 1;
+    let border = 0;
+    let borderOnMask = 0;
+    for (let head = 0; head < region.length; head += 1) {
+      const i = region[head];
+      const x = i % width;
+      const y = (i / width) | 0;
+      for (const [dx, dy] of [
+        [1, 0],
+        [-1, 0],
+        [0, 1],
+        [0, -1],
+      ] as const) {
+        const nx = x + dx;
+        const ny = y + dy;
+        if (nx < 0 || nx >= width || ny < 0 || ny >= height) {
+          // The frame edge is not the garment; a region running off it is not
+          // a hole in anything.
+          border += 1;
+          continue;
+        }
+        const n = ny * width + nx;
+        if (extra[n] && !mask[n]) {
+          if (!seen[n]) {
+            seen[n] = 1;
+            region.push(n);
+          }
+          continue;
+        }
+        border += 1;
+        if (mask[n]) {
+          borderOnMask += 1;
+        }
       }
-      const n = ny * width + nx;
-      if (!mask[n] && extra[n]) {
-        mask[n] = 1;
+    }
+    const enclosure = border > 0 ? borderOnMask / border : 0;
+    // A hole in the garment is ringed by it. Anything under this is a
+    // neighbouring object that happens to touch.
+    if (enclosure >= 0.75) {
+      for (const i of region) {
+        mask[i] = 1;
         count += 1;
-        queue.push(n);
       }
+    }
+    if (region.length > width * height * 0.01) {
+      console.log(
+        "[garment-segmentation] fallback region " + region.length +
+          "px enclosure=" + enclosure.toFixed(3) +
+          (enclosure >= 0.75 ? " ABSORBED" : " rejected"),
+      );
     }
   }
   return count;
@@ -1920,13 +1957,14 @@ export async function segmentGarment(
       // inpainter filled it from the surrounding fabric, and half the panel
       // came back as smooth featureless cloth.
       //
-      // Take the fallback pixels that are CONNECTED to the primary ones. Those
-      // are the same piece of cloth by definition. A separate garment in the
-      // frame — an undershirt below the hem, a skirt — is its own region and
-      // stays out, which is what keeping the sets narrow was protecting.
+      // Take the fallback regions ENCLOSED by the primary mask. Those are the
+      // same piece of cloth by definition. A separate garment that merely
+      // touches — camouflage trousers under a camouflage hoodie, both labelled
+      // Dress — is not ringed by the top and stays out, which is what keeping
+      // the sets narrow was protecting.
       const extra = collect(wanted.fallback);
       if (extra.maskCount > 0) {
-        maskCount = absorbConnected(mask, extra.mask, width, height, maskCount);
+        maskCount = absorbEnclosed(mask, extra.mask, width, height, maskCount);
       }
     }
     // Require a meaningful garment area (>2% of the frame).
