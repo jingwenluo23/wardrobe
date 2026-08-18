@@ -1402,14 +1402,17 @@ function buildTopGeometry(
       // world Z), so multiplying by `side` is what turns it into "away from the
       // body". Tilt a little toward the front from there, or the disc is edge
       // on to the camera and disappears.
-      // 0 puts the button exactly on the silhouette edge, seen edge on, where
-      // it reads as a nick in the outline rather than a button; pi/2 puts it
-      // back in the middle of the cuff, which is not how a shirt fastens.
-      // Measured on the built mesh at 0.7 the disc's outer rim landed 0.6cm
-      // from an edge 11.7cm away — still grazing it. 0.9 sits the button about
-      // 60% of the way out: plainly off to the side, and turned far enough
-      // toward the viewer to catch light and read as round.
-      const buttonTilt = 0.9; // radians toward the front, ~52 degrees
+      // Dead on the lateral side. A cuff fastens on the outer edge of the
+      // wrist, so from a side view of the garment the buttons sit square in
+      // the middle of the sleeve's visible face — which is where they belong,
+      // and where you look to check them.
+      //
+      // Tilting toward the front makes them easier to see in the default
+      // head-on view, but it puts them somewhere no shirt buttons, and from
+      // the side they slide off toward the front edge. Head-on, a genuinely
+      // side-mounted button IS near the silhouette; that is true of a real
+      // shirt too.
+      const buttonTilt = 0; // radians toward the front: none, straight out
       const buttonTheta = side > 0 ? buttonTilt : Math.PI - buttonTilt;
       const cosT = Math.cos(buttonTheta);
       const sinT = Math.sin(buttonTheta);
