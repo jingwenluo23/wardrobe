@@ -997,49 +997,6 @@ function buildTopGeometry(
     }
   };
 
-  // --- Block: chest patch pockets (button shirts) --------------------------
-  // A shirt's chest pocket sits just below the armhole, square across the top
-  // and softened at the lower corners. Separate from buildPatchPockets above,
-  // which places a low pair at hip height for cardigans and camp shirts.
-  const buildChestPockets = (count: number) => {
-    const pocketW = 12.5 * SCALE;
-    const pocketH = 13.5 * SCALE;
-    const cy = underarmY - pocketH * 0.85;
-    const raise = 0.4 * SCALE;
-    // One pocket goes on the wearer's LEFT, which faces the viewer's right in
-    // a front view — where it sits on the reference photograph.
-    const sides = count >= 2 ? ([-1, 1] as const) : ([1] as const);
-    for (const side of sides) {
-      const cx = side * halfW * 0.44;
-      const surfZ = depth * 1.05 * depthTaper(cy) + raise;
-      const x0 = cx - pocketW / 2;
-      const x1 = cx + pocketW / 2;
-      const yTop = cy + pocketH / 2;
-      const yBot = cy - pocketH / 2;
-      const ch = 2.2 * SCALE;
-      const face = [
-        pushVertex(x0, yTop, surfZ, 0, 1),
-        pushVertex(x1, yTop, surfZ, 1, 1),
-        pushVertex(x1, yBot + ch, surfZ, 1, 0.12),
-        pushVertex(x1 - ch, yBot, surfZ, 0.88, 0),
-        pushVertex(x0 + ch, yBot, surfZ, 0.12, 0),
-        pushVertex(x0, yBot + ch, surfZ, 0, 0.12),
-      ];
-      for (let i = 1; i < face.length - 1; i += 1) {
-        indices.push(face[0], face[i], face[i + 1]);
-      }
-      const bodyZ = surfZ - raise;
-      const back = face.map((_, i) => {
-        const idx = face[i] * 3;
-        return pushVertex(positions[idx], positions[idx + 1], bodyZ, 0, 0);
-      });
-      for (let i = 0; i < face.length; i += 1) {
-        const j = (i + 1) % face.length;
-        indices.push(face[i], back[i], face[j], face[j], back[i], back[j]);
-      }
-    }
-  };
-
   // --- Block: sleeves lofted from the armhole boundary ---------------------
   // The armhole boundary is the panels' side-edge column above the underarm:
   // front edge going up, back edge coming down — a closed oval loop. The
@@ -2322,9 +2279,6 @@ function buildTopGeometry(
   }
   if (features.hemBand) {
     buildHemBand();
-  }
-  if (features.chestPockets && features.chestPockets > 0) {
-    buildChestPockets(features.chestPockets);
   }
   if (features.patchPockets) {
     buildPatchPockets();

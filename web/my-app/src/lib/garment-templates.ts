@@ -15,7 +15,7 @@ import {
 } from "./garment-mesh";
 
 /** Bump when geometry/param semantics change so stored drafts can migrate. */
-export const GARMENT_TEMPLATE_VERSION = 10;
+export const GARMENT_TEMPLATE_VERSION = 11;
 
 export type Gender = "male" | "female";
 
@@ -129,11 +129,11 @@ function wovenShirtPresets(): GarmentTemplateDef[] {
   // identical to casual and button-down identical to oxford, so the app
   // offered six names for two meshes. Each now carries the things that
   // actually distinguish it on the rail: how full it is cut, how long it
-  // hangs, whether it has a chest pocket, and whether the collar buttons down.
+  // hangs, and whether the collar buttons down.
   // sleeveLength moves with bodyLength (see the note on `longSleeve`) so every
   // cuff still finishes a few centimetres above its own hem.
   const straight = [
-    // Slim, cut long to stay tucked, no pocket — the plainest of the six.
+    // Slim, cut long to stay tucked, the narrowest of the six.
     make("top-dress-shirt", "Dress shirt", {
       bodyWidth: 50,
       bodyLength: 86,
@@ -141,30 +141,30 @@ function wovenShirtPresets(): GarmentTemplateDef[] {
       sleeveLength: 65,
       shoulderWidthFactor: 0.78,
     }, { sleeveTaper: 0.55 }),
-    // The reference cut: regular fit, one chest pocket.
-    make("top-casual-shirt", "Casual shirt", {}, { chestPockets: 1 }),
-    // Heavy brushed cotton: the fullest body and the two flap pockets.
+    // The reference cut: regular fit, the base of the family.
+    make("top-casual-shirt", "Casual shirt"),
+    // Heavy brushed cotton: the fullest body and shoulder of the six.
     make("top-flannel-shirt", "Flannel shirt", {
       bodyWidth: 59,
       bodyLength: 84,
       bodyDepth: 25,
       sleeveLength: 63,
       shoulderWidthFactor: 0.88,
-    }, { chestPockets: 2, sleeveTaper: 0.68 }),
-    // Also heavy, also twin-pocketed, but cut closer than a flannel.
+    }, { sleeveTaper: 0.68 }),
+    // Also heavy, but cut closer than a flannel.
     make("top-denim-shirt", "Denim shirt", {
       bodyWidth: 56,
       bodyDepth: 24,
       shoulderWidthFactor: 0.85,
-    }, { chestPockets: 2, sleeveTaper: 0.64 }),
-    // Oxford cloth button-down: boxy, pocketed, collar points fastened.
+    }, { sleeveTaper: 0.64 }),
+    // Oxford cloth button-down: boxy, collar points fastened.
     make("top-oxford-shirt", "Oxford shirt", {
       bodyWidth: 55,
       bodyLength: 80,
       bodyDepth: 24,
       sleeveLength: 59,
       shoulderWidthFactor: 0.86,
-    }, { chestPockets: 1, collarButtons: true }),
+    }, { collarButtons: true }),
     // The same collar on a trimmer, plainer body.
     make("top-button-down-shirt", "Button-down shirt", {
       bodyWidth: 53,
