@@ -15,7 +15,7 @@ import {
 } from "./garment-mesh";
 
 /** Bump when geometry/param semantics change so stored drafts can migrate. */
-export const GARMENT_TEMPLATE_VERSION = 11;
+export const GARMENT_TEMPLATE_VERSION = 12;
 
 export type Gender = "male" | "female";
 
@@ -121,7 +121,7 @@ function wovenShirtPresets(): GarmentTemplateDef[] {
     },
     features: {
       ...base.features,
-      waistPinch: 0.15,
+      waistPinch: 0.18,
     },
   });
   // The six types are one construction, but they are not one garment. Before
@@ -536,8 +536,12 @@ export const garmentTemplates: GarmentTemplateDef[] = [
       ...longSleeve,
       // 62 cm body, no hem band.
       sleeveLength: 50,
-      bodyWidth: 43,
-      bodyDepth: 18,
+      // A fitted rib knit is cut narrow and stretches to fit. The width also
+      // sets how far the sleeves seat outboard — the shoulder span works out
+      // near 2.7x the half width — so 43 gave this a 57cm shoulder, wider than
+      // the garment reads in the reference.
+      bodyWidth: 39,
+      bodyDepth: 17,
       bodyLength: 62,
       neckWidthFront: 14,
       neckDropFront: 3.5,
@@ -550,7 +554,7 @@ export const garmentTemplates: GarmentTemplateDef[] = [
       cuff: "raw",
       sleeveTaper: 0.5,
       fabric: "knit",
-      waistPinch: 0.14,
+      waistPinch: 0.2,
     },
   },
   {

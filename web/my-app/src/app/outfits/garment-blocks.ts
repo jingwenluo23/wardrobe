@@ -364,13 +364,18 @@ function buildTopGeometry(
       return 1;
     }
     const t = (y - hemY) / (underarmY - hemY); // 0 = hem, 1 = underarm
-    // Subtle shaping, per the reference flats: one wide, gentle waist curve
-    // with a whisper of hip/bust fullness — aggressive bells turn the side
-    // seam into an unnatural S-wave.
+    // One wide, gentle waist curve with fullness above and below it —
+    // aggressive bells turn the side seam into an unnatural S-wave.
     const waist = Math.exp(-Math.pow((t - 0.6) / 0.3, 2)); // nip at the waist
     const hip = Math.exp(-Math.pow(t / 0.32, 2)); // slight ease at the hem
-    const bust = Math.exp(-Math.pow((t - 0.85) / 0.2, 2)); // slight bust ease
-    const dev = -waistPinch * waist + 0.18 * waistPinch * (0.6 * hip + bust);
+    const bust = Math.exp(-Math.pow((t - 0.85) / 0.2, 2)); // bust ease
+    // The bust carries the shape. At 0.18 x waistPinch it came to 2.5% on a
+    // fitted knit — below the threshold of visibility, so the garment nipped
+    // at the waist and then ran straight, reading as a tapered tube rather
+    // than a women's cut. The hip stays modest: it is the chest and waist
+    // together that make the line, and a strong hip flare reads as an A-line.
+    const dev =
+      -waistPinch * waist + waistPinch * (0.11 * hip + 0.42 * bust);
     // Fade the whole deviation to 0 right at the underarm so the torso meets
     // the chest with no step/crease, and taper it in gently at the hem.
     const fade =
@@ -1919,14 +1924,21 @@ function buildTopGeometry(
     // the crest, then the fabric folds over and comes back DOWN the outside,
     // so a doubled band sits folded around the neck (visible fold at the top,
     // free hem hanging down the outside).
+    // The fold has to be VISIBLE to read as a roll neck. At 1.07 the outer
+    // layer stood 7% proud of the inner wall — about half a centimetre on a
+    // 7cm radius — so the doubled band vanished and the collar rendered as a
+    // plain flat-topped pipe stuck on the neckline. The inner wall now draws
+    // in to hug the neck and the outer layer stands well clear of it, with the
+    // crest rounded over two rings instead of turning in one step.
     const stages: Array<[number, number, number, number]> = [
       [0, 1, 0, 0], // rim, welded to the neckline seam
-      [1.5, 0.97, 0.85, 0.55], // eases round and part-way level
-      [4, 0.95, 1, 1], // fully round and level — inner wall
-      [6.5, 0.95, 1, 1], // upper inner wall
-      [7.6, 1.0, 1, 1], // rounded crest where it folds over
-      [5, 1.07, 1, 1], // outer layer folds back down outside the wall
-      [2.4, 1.07, 1, 1], // free hem of the fold hangs down the neck
+      [1.6, 0.96, 0.85, 0.6], // eases round and part-way level
+      [4.5, 0.9, 1, 1], // fully round and level — inner wall, snug
+      [8.4, 0.9, 1, 1], // upper inner wall
+      [10.2, 0.96, 1, 1], // crest starts to turn outward
+      [10.9, 1.06, 1, 1], // over the top of the roll
+      [9.2, 1.15, 1, 1], // outer layer, clearly proud of the inner wall
+      [4.2, 1.13, 1, 1], // free hem of the fold hangs down the neck
     ];
     // The loop only samples the front and back necklines — the SIDES of the
     // opening have no points, so lofting per loop column stretches one giant
