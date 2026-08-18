@@ -1346,6 +1346,83 @@ function buildTopGeometry(
         );
       }
     }
+
+    // Barrel cuff (woven button shirts): the sleeve gathers into a crisp,
+    // slightly snugger straight band at the wrist, finished with two buttons
+    // on the band and a gauntlet button up the sleeve placket.
+    //
+    // buildSleeve has carried this since the button-shirt presets landed, but
+    // it only builds cap sleeves — every LONG sleeve is built here, and this
+    // function had a ribbed branch and nothing else. So a long-sleeve woven
+    // shirt came out with a raw sleeve end and no buttons anywhere on it.
+    if (features.cuff === "barrel") {
+      const cuffLen = 6 * SCALE;
+      const sleeveEndScale = girth(1);
+      // A real barrel cuff is only slightly snugger than the sleeve it gathers
+      // out of; a drastic step reads as two mismatched tubes.
+      const cuffScale = 0.92 * sleeveEndScale;
+      const ringAtDistance = (d: number, scale: number) => {
+        const center = sleeveCenterAt(1).addScaledVector(axis, d);
+        const ring: number[] = [];
+        for (let j = 0; j < loopCount; j += 1) {
+          const theta = a0 + dir * ((2 * Math.PI * j) / loopCount);
+          const p = center
+            .clone()
+            .addScaledVector(e1, Math.cos(theta) * rEff * scale)
+            .addScaledVector(
+              e2,
+              Math.sin(theta) * rEff * scale * sleeveDepthScale,
+            );
+          ring.push(pushVertex(p.x, p.y, p.z, j / loopCount, 1));
+        }
+        return ring;
+      };
+      const gather = ringAtDistance(cuffLen * 0.06, sleeveEndScale);
+      stitch(previous, gather);
+      const band1 = ringAtDistance(cuffLen * 0.22, cuffScale);
+      stitch(gather, band1);
+      const band2 = ringAtDistance(cuffLen, cuffScale);
+      stitch(band1, band2);
+
+      // Buttons: shallow round discs standing just proud of the cuff's front
+      // face. A shirt button is round, and at the zoom someone inspects a cuff
+      // at, the flat square quad used elsewhere reads as a square. The rim is
+      // dropped slightly behind the centre so the disc catches a gradient and
+      // reads as a domed button rather than a flat sticker. Double-sided, so
+      // it survives being seen from behind on a thin sleeve.
+      const br = 0.62 * SCALE; // ~1.2cm across, a shirt button
+      const BUTTON_SEGMENTS = 12;
+      const mkButton = (dist: number, scale: number) => {
+        const front = rEff * scale * sleeveDepthScale + 0.26 * SCALE;
+        const centre = sleeveCenterAt(1)
+          .addScaledVector(axis, dist)
+          .addScaledVector(e2, front);
+        // One UV for the whole disc, so the fabric's stripes cannot run across
+        // the button face.
+        const hub = pushVertex(centre.x, centre.y, centre.z, 0.5, 0.5);
+        const rim: number[] = [];
+        for (let k = 0; k < BUTTON_SEGMENTS; k += 1) {
+          const theta = (2 * Math.PI * k) / BUTTON_SEGMENTS;
+          const u = Math.cos(theta) * br;
+          const v = Math.sin(theta) * br;
+          const p = centre
+            .clone()
+            .addScaledVector(e1, u)
+            .addScaledVector(axis, v)
+            .addScaledVector(e2, -0.08 * SCALE);
+          rim.push(pushVertex(p.x, p.y, p.z, 0.5, 0.5));
+        }
+        for (let k = 0; k < BUTTON_SEGMENTS; k += 1) {
+          const a3 = rim[k];
+          const b3 = rim[(k + 1) % BUTTON_SEGMENTS];
+          indices.push(hub, a3, b3);
+          indices.push(hub, b3, a3);
+        }
+      };
+      mkButton(cuffLen * 0.42, cuffScale); // cuff button
+      mkButton(cuffLen * 0.82, cuffScale); // second cuff button
+      mkButton(-3.5 * SCALE, sleeveEndScale); // gauntlet, up the placket
+    }
   };
 
   const buildSleeve = (side: 1 | -1) => {
